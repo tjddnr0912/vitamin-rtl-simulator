@@ -455,10 +455,11 @@ ShownCtx	Vec<diag::Frame>
 == SURF_E
 # E: the Elaborator-taking fns, OUT-F / OUT-C / OUT-M by (fn, name, count) ; FLOW (hand) in /
 # payload / text:<sink> (BODY moved to SURF_BODY: BODY-ALL, DELTA11 R2)
+# §5.2 Q-DECLKEY DK1-6 (2026-11-25): E3 checks every `text:` flow, per `+` part: `LEAVE-<id>` must be a SURF_LEAVE id (a dangling tag FAILS FLOW ; any non-empty tag passed before) ; any other part is `error`, a SURF_OUT_TYPES entry or a SURF_VOCAB name an entry spells (`DeclKey` in `Option<DeclKey>`)
 # §5.2 Q-DECLKEY DK1-4a (2026-11-24): the 7 moved Elaborator fns' rows (is_gen_scope_segment takes no Elaborator) ; flow text:LEAVE-L10 = an op that forms or hands the key text leaving through L10 ; walk_hits_decl_pos' `.walk_scopes_key` is a module call now (row gone)
 # §5.2 Q-DECLKEY DK1-4b-1 (2026-11-24): the walk's candidate is an AtKey — `AtKey` OUT-C rows (scoped_key_at_or_above: formed from the text that leaves through L10 RET ; _from / _inner: the empty scratch, as String::new) ; the store probes `.contains_at` ; `hit` is handed an AtKey, no text: its three rows' flow text:LEAVE-L10 -> in
 # §5.2 Q-DECLKEY DK1-4b-2 (2026-11-24): the walk returns a DeclKey — `DeclKey` OUT-C rows (scoped_key_at_or_above, walk_out_from, walk_scopes_key_inner: the scratch moved into the found key) ; walk_hits_decl_pos reads the found key through found_text (`.as_ref` + `.map` for `.as_deref`) ; L10 is deleted: the nine flows text:LEAVE-L10 -> text:DeclKey (the text these ops form leaves in the found key, whose text leaves the module only through L11)
-# §5.2 Q-DECLKEY DK1-5a (2026-11-25): the five moved fns' rows (lexscope/hier.rs ; is_hier_scope private, its own rows, R-J7 d: a call to an in-module fn is no OUT-C row, so no `.is_hier_scope` row exists) ; flow `in` but hier_resolve's `.cloned` (payload: the table's value) and indexed_gen_singleton's label key (text:LEAVE-L12) ; `Self::gen_seg_label = 1` (indexed_gen_singleton) is the ONE call from these bodies to a fn outside the module with a text argument: its own IN `seg` passed through, flow `in` (R-J7 a) — NOT pinned by class until DK1-6 (SURF_OUTCALL, R-J7 c): this row is change detection only
+# §5.2 Q-DECLKEY DK1-5a (2026-11-25): the five moved fns' rows (lexscope/hier.rs ; is_hier_scope private, its own rows, R-J7 d: a call to an in-module fn is no OUT-C row, so no `.is_hier_scope` row exists) ; flow `in` but hier_resolve's `.cloned` (payload: the table's value) and indexed_gen_singleton's label key (text:LEAVE-L12) ; `Self::gen_seg_label = 1` (indexed_gen_singleton) is the ONE call from these bodies to a fn outside the module with a text argument: its own IN `seg` passed through, flow `in` (R-J7 a) — NOT pinned by class until DK1-6 (SURF_OUTCALL, R-J7 c): this row is change detection only ; §5.2 Q-DECLKEY DK1-6 (2026-11-25): the class pin is SURF_OUTCALL's row `Elaborator::indexed_gen_singleton · Elaborator::gen_seg_label · 1 · in` (E2: gen_seg_label takes `&str`, so `none` is refused ; the row's `in` is hand, NOT-PROMISED: no data flow) ; this OUT-C row stays change detection
 # §5.2 Q-DECLKEY DK1-5b (2026-11-25): names_with_pkg_var_aliases' rows (moved to lexscope/elab.rs): flow text:LEAVE-L13 where the op forms or hands the text of the set it returns (the two `.clone`s of `names`, the alias keys' `.keys`, the `.rsplit_once` / `.as_str` that cut the bare name, `.to_string`, `.insert`), `in` for the bool tests and the store read ; it calls no fn outside the module (move_census calls_outside=0)
 item	kind	name	count	flow
 Elaborator::assert_block_local_inits_drained	FN	-	-	-
@@ -751,6 +752,82 @@ Elaborator::with_scope	FN	-	-	-
 Elaborator::with_scope	OUT-C	.scope_enter	1	in
 Elaborator::with_scope	OUT-C	.scope_restore	1	in
 Elaborator::with_scope	OUT-C	f	1	payload
+== SURF_OUTCALL
+# OUTCALL (§5.2 Q-DECLKEY DK1-6, 2026-11-25 ; DELTA18 G2.4 E1-E3, R-J3, as corrected by R-J7 (a)): every call from a fn of the module's
+# file set to a fn of the crate defined OUTSIDE it, by (item, callee) with a count ; a call with no row or a moved count FAILS OUTCALL,
+# a row with no call is STALE. Styles: SELF `self.f` / `(*self).f` / `Self::f` / `<Self>::f` in impl Elaborator, `Elaborator::f` /
+# `<Elaborator<'_>>::f` (callee `Elaborator::f`) ; RECV `<expr>.f(..)` on another receiver, resolved by the NAME f against every method
+# with a receiver defined outside the file set (callee `.f` ; every definition by that name is read for the class) ; FREE `f(..)` /
+# `crate::..::f` / `super::..::f` out of the module / `T::f` of a crate type or trait, `<T as Tr>::f` (callee `f` / `T::f`).
+# §5.2 Q-DECLKEY DK1-6 round 2 (2026-11-25, W/scopebind/dk1_6/r2/claims.tsv): a fn named as a value (`.map(Self::f)`, `let g = f;`,
+# `(Self::f)(..)`) counts as a call ; a path's first segment that a `use` of the file binds into the crate is read through it
+# (`use crate::m; m::f`, `use crate::Elaborator as El; El::f`, a crate module named like a module of the file set, a bare `f` imported
+# over the file set's own private `f`) ; `crate::..::T::f` is outside even when the file set has a type T ; `matches!(e, pat if g)`'s
+# e and g and `vec![e; n]` are read (FIX NO17-NO23 ; NO28 shows a closure's body was read already).
+# class (E2), computed-constrained from the callee's signature: a parameter spelling a text type (`&str`, `String`, `&String`, `&[&str]`,
+# `Vec<String>`, `Option<String>`, `Cow<str>`, `Box<str>`, `impl AsRef<str>`, `impl Into<String>`, a String-keyed map ..), a byte sequence
+# (`&[u8]`, `Vec<u8>`), `impl Display` / `impl ToString`, a type parameter so bound (`S: AsRef<str>`, `where S: Into<String>`), or the
+# receiver of an impl for str / String (`impl StrExt for str`) takes text (FIX NO24-NO27, NO29) ; none -> `none` ; one or more -> `in` (an
+# entered parameter passed through), `error` (the callee is on SURF_OUTCALL_SINKS) or `text:<Lid>` (E3: a SURF_LEAVE row of the
+# calling item at position `OUT:<callee>`, type = the callee's text parameters, closes = this row's closes) — never `none`.
+# closes: `-` = no closing unit dated (a standing call) ; a text:<Lid> row's is its LEAVE row's.
+# On this tree (c5d985ca re-measured, W/scopebind/dk1_6/outcalls.tsv ; round 2's wider reading re-measured: the same 8 rows): SELF 7,
+# RECV 1, FREE 2 = 10 calls, 8 rows ; no `text:<Lid>` row.
+# gen_seg_label's row is the class pin DK1-5a's OUT-C comment named for DK1-6 (`in`: indexed_gen_singleton's own IN `seg` passed through).
+# NOT-PROMISED (what OUTCALL cannot see ; one shape a line, each measured in W/scopebind/dk1_6/r2/claims.tsv):
+#  N1  `Self::f(&format!("{k}.x"))` pinned `in`: whether an `in` argument is the entered text or text formed in the module (a syn reader has no data flow).
+#  N2  `in` on a calling item with no entered text parameter (`fn outward(&mut self)` passing a literal): `in` is not checked against the caller's parameters.
+#  N3  `(w.on_key)(k)`, `f(k)` with `f: impl Fn(&str)`: a fn held in a field or passed in as a parameter — no fn item of the crate is named in the module.
+#  N4  `x.get(k)` / `x.is_empty()` on another receiver with the name on SURF_OUTCALL_BLIND (why `std`: on this tree 1 name, is_empty, 41 calls ; why
+#      `module`: a method name the file set defines, 0 rows on this tree): the name is not resolved.
+#  N5  `*self.hier_params` / `self.hier_params.contains_key(..)` through `Deref for Bound<..>` (hier.rs x4) and `a != DeclPhase::Win` (`PartialEq::ne`,
+#      walk.rs x1): operator and auto-deref trait calls have no call syntax (none takes text on this tree).
+#  N6  `x.clone()` / `a == b` on an outside type whose impl is `#[derive(..)]`: a derived method is no fn of the source ; a RECV call reaching a
+#      hand-written impl is read by NAME (every outside method so named), never as the one impl the receiver's type picks.
+#  N7  `zn! { fn x() { crate::f(k) } }`: a macro's tokens that are no expression list, no `matches!` form, no `vec![e; n]` and begin with no
+#      expression (a macro body ; a `macro_rules!` definition's body).
+#  N8  `crate::f(k)` with f made by an item macro (`mk_fn!(f)`) or defined in an impl inside `const _: () = { .. }`: the index reads items, not
+#      macro output nor items inside a body.
+#  N9  `type A = crate::Win; A::f(w, k)` (a `type` alias of an outside type) and `self::super::f(k)` (`self::` is read as the module): an alias
+#      or a path spelling the reader does not follow.
+#  N10 `crate::f(Holder { s })`, `crate::f(ident)` with `dep::Ident`: a parameter whose struct type HOLDS text is no text parameter (fields are
+#      not followed) — the row's class reads `none`.
+#  N11 `crate::Wrap(k.to_string())`: a tuple-struct or variant constructor of an outside type is no fn.
+#  N12 `self.sink.m(k)`, `hdl_ast::Span::new(..)`, `diag::..`: a call into another crate (the index is this crate's src).
+#  N13 a deliberate wrapper that hides the callee: a module fn that forwards to the outside fn (its own call is the row, in the wrapper).
+#  N14 `type StrMap = BTreeMap<String, u32>; crate::f(m)` with `m: &StrMap`, or `&Keyed<V>`: a parameter whose text type sits behind a
+#      `type` alias or a wrapper type is no text parameter (aliases are not followed) — the row's class reads `none`.
+item	callee	count	class	closes
+Elaborator::assert_block_local_inits_drained	Elaborator::error	1	error	-
+Elaborator::decl_probe_key	.declares	1	in	-
+Elaborator::flush_block_local_inits	Elaborator::flush_ranked	2	none	-
+Elaborator::frame_path	Elaborator::rtn_key_bare	1	in	-
+Elaborator::indexed_gen_singleton	Elaborator::gen_seg_label	1	in	-
+Elaborator::report_at	Elaborator::error	1	error	-
+Elaborator::report_at	Elaborator::error_at	1	error	-
+Scopes::gen_binding_encloses	span_holds	2	none	-
+== SURF_OUTCALL_BLIND
+# OUTCALL's blind list (§5.2 Q-DECLKEY DK1-6): a method name both a std type and a fn defined outside the file set carry — a call
+# `<expr>.<name>(..)` on a receiver other than the Elaborator's `self` is NOT resolved (syntax does not know the receiver's type) ;
+# why `std` (the name is on scope_surface.rs's STD_METHODS) or `module` (the file set defines a method by that name) ; a row no call
+# uses is STALE (it blinds no call: no method call on another receiver names it while an outside method has that name). On this tree:
+# 1 name, `is_empty` why `std` (41 calls ; ConstFrame::is_empty bound/frame.rs, ReadMark::is_empty read_set.rs are the outside
+# definitions) ; 0 rows why `module`. Each row is a NOT-PROMISED shape of SURF_OUTCALL (N4): a call by that name on another receiver
+# is not resolved, whatever its receiver's type (round 2: `(*self).name(..)` is the Elaborator's self, SELF, not blinded: FIX NO18). S7-J2's census (modcalls.py, any `fn` name) printed 66 / 69 std-name calls over is_empty, push, contains,
+# join: push / contains / join are FREE fns outside (decl_collide.rs, block_local_class.rs, da/expr_effect.rs), which no method call
+# can reach, so OUTCALL does not list them.
+name	why
+is_empty	std
+== SURF_OUTCALL_SINKS
+# OUTCALL's error sinks (§5.2 Q-DECLKEY DK1-6): the closed list of callees whose text parameter is a diagnostic's display text, not a
+# key (driver.rs Elaborator::error, Elaborator::error_at) — class `error` is admitted only for these ; a row naming no Elaborator fn
+# outside the file set with a text parameter is STALE.
+callee
+Elaborator::error
+Elaborator::error_at
+== SURF_OUTCALL_COUNTS
+# calls by style (SELF / RECV / FREE), (item, callee) rows, the blind list's names used and their calls
+self=7 recv=1 free=2 rows=8 blind_names=1 blind_calls=41
 == SURF_CARD
 # CARD (DELTA11 R2): an OUT position holding Option / Vec / a slice / an array / two or more
 # `bool`, with MEANS (hand): caller | hit:<question> | list:<what> ; a missing row FAILS CARD,
@@ -1026,6 +1103,7 @@ id	item	position	type	closes
 L0	scope_out	RET	T::Plain	permanent
 L0	Outgoing::plain	RET	Self::Plain	permanent
 L5	Elaborator::key_under	RET	String	DK1
+L6	Elaborator::outward	OUT:Elaborator::note_key	&str	DK9
 == FIX_ENTER
 item	param	role	holds
 Elaborator::with_scope	seg	to-scope	TEXT str
@@ -1070,6 +1148,16 @@ Elaborator::mark_is	OUT-M	matches	1	in
 Elaborator::names_are_empty	FN	-	-	-
 Elaborator::names_are_empty	OUT-C	.is_empty	1	in
 Elaborator::names_are_empty	OUT-F	names	1	in
+Elaborator::outward	FN	-	-	-
+Elaborator::outward	OUT-C	.declares	1	in
+Elaborator::outward	OUT-C	.error	1	in
+Elaborator::outward	OUT-C	.flush_slot	1	in
+Elaborator::outward	OUT-C	.get	1	in
+Elaborator::outward	OUT-C	.is_some	2	in
+Elaborator::outward	OUT-C	.note_key	1	text:LEAVE-L6
+Elaborator::outward	OUT-C	Self::seg_label	1	in
+Elaborator::outward	OUT-C	span_holds	1	in
+Elaborator::outward	OUT-F	names	1	in
 Elaborator::scope_carry	FN	-	-	-
 Elaborator::scope_hold	FN	-	-	-
 Elaborator::scope_hold	OUT-C	.enter	1	in
@@ -1077,6 +1165,70 @@ Elaborator::with_scope	FN	-	-	-
 Elaborator::with_scope	OUT-C	.enter	1	in
 Elaborator::with_scope	OUT-C	.restore	1	in
 Elaborator::with_scope	OUT-C	f	1	payload
+Elaborator::outward2	FN	-	-	-
+Elaborator::outward2	OUT-C	(expr)	3	in
+Elaborator::outward2	OUT-C	.collect	1	in
+Elaborator::outward2	OUT-C	.count	1	in
+Elaborator::outward2	OUT-C	.declares	1	in
+Elaborator::outward2	OUT-C	.filter	1	in
+Elaborator::outward2	OUT-C	.flag_slot	1	in
+Elaborator::outward2	OUT-C	.for_each	1	in
+Elaborator::outward2	OUT-C	.into_iter	1	in
+Elaborator::outward2	OUT-C	.iter	2	in
+Elaborator::outward2	OUT-C	.len	1	in
+Elaborator::outward2	OUT-C	.map	1	in
+Elaborator::outward2	OUT-C	.get	1	in
+Elaborator::outward2	OUT-C	Some	1	in
+== FIX_OUTCALL
+# the CLEAN module's OUTCALL rows (the positive control of OUTCALL, §5.2 Q-DECLKEY DK1-6): its one fn `outward` calls each style ;
+# round 2: `outward2` (SELF shapes: `<Self>::f`, `<crate::Elaborator<'_>>::f`, `(Self::f)(..)`, `(*self).get`, `.map(Self::f)`, a SELF and a
+# RECV call in closures), `reach_out` (FREE / use / alias / trait / `<T as Tr>::f` / macro shapes and one callee per text spelling) and inner.rs `reach`
+# (`use crate::inner; inner::probe`) — each row a fixture NO17-NO29 removes or re-classes
+item	callee	count	class	closes
+Elaborator::outward	.declares	1	in	-
+Elaborator::outward	Elaborator::error	1	error	-
+Elaborator::outward	Elaborator::flush_slot	1	none	-
+Elaborator::outward	Elaborator::note_key	1	text:L6	DK9
+Elaborator::outward	Elaborator::seg_label	1	in	-
+Elaborator::outward	span_holds	1	none	-
+Elaborator::outward2	.declares	1	in	-
+Elaborator::outward2	Elaborator::drop_slot	1	none	-
+Elaborator::outward2	Elaborator::flag_slot	1	none	-
+Elaborator::outward2	Elaborator::keep_slot	1	none	-
+Elaborator::outward2	Elaborator::get	1	none	-
+Elaborator::outward2	Elaborator::note_paren	1	in	-
+Elaborator::outward2	Elaborator::tidy_seg	1	in	-
+reach	probe	1	none	-
+reach_out	.dotted	1	in	-
+reach_out	Elaborator::lab2	1	in	-
+reach_out	Elaborator::seg_label	1	in	-
+reach_out	Note::note	1	in	-
+reach_out	Saved::mk	1	none	-
+reach_out	Win::note	1	in	-
+reach_out	byte_len	1	in	-
+reach_out	hold	1	in	-
+reach_out	name_len	1	in	-
+reach_out	shown	1	in	-
+reach_out	span_holds	1	none	-
+reach_out	span_len	1	none	-
+reach_out	t_box	1	in	-
+reach_out	t_cow	1	in	-
+reach_out	t_impl_asref	1	in	-
+reach_out	t_impl_into	1	in	-
+reach_out	t_opt	1	in	-
+reach_out	t_string_ref	1	in	-
+reach_out	t_strings	1	in	-
+reach_out	t_strs	1	in	-
+reach_out	tidy	1	in	-
+reach_out	wlen	1	in	-
+== FIX_OUTCALL_BLIND
+name	why
+get	std
+== FIX_OUTCALL_SINKS
+callee
+Elaborator::error
+== FIX_OUTCALL_COUNTS
+self=12 recv=3 free=21 rows=36 blind_names=1 blind_calls=1
 == FIX_INTERIOR
 # the CLEAN module's INTERIOR rows (the positive control of the exemption)
 item	position	reaches	why
@@ -1103,6 +1255,7 @@ lexscope/mod.rs	Elaborator::disp_here_text	7dfb7600b808f8f2f145ffc131fbc639b073e
 lexscope/mod.rs	Elaborator::key_under	6d8092a3df723f98d444dd0243dd1cb338a3bc4779699db670483eb6b9d83dc8
 lexscope/mod.rs	Elaborator::mark_is	97c7c933c035c64c924925be7e0371332f7c73bd9e78d0b9e528d1aec07e19c0
 lexscope/mod.rs	Elaborator::names_are_empty	96ef4088596115c4064a98f84afd13894db86eeb6aa91e768ed2a163f8b192cc
+lexscope/mod.rs	Elaborator::outward	05ee00fdfc92b1fcb8a67978c1203eb24c7a213eb4ba80255f8169e5b3ed9bb0
 lexscope/mod.rs	Elaborator::scope_carry	39d1e0ab2636465f3d7e378e8e020254ef1fb5bb05e731ba81c9cecca6e694ed
 lexscope/mod.rs	Elaborator::scope_hold	77b7a6f5322bf0f091751cda38c9924d4ff6f190ef86a2a2ec2bad1eca01fa0a
 lexscope/mod.rs	Elaborator::with_scope	2b4b446c76c5bd6f94aea7356f59b69e3168cd805c62798e8f90363c72773afe
@@ -1119,6 +1272,10 @@ lexscope/mod.rs	scope_out	c52b656b6bfdb5ea06a9d9f3a445e2a407c16f88e5853f7fa2a290
 lexscope/mod.rs	shown_from_spelling	540bc990dd416b3323a7b9a2a681705625eced002fe6975882e5e18ce51038a0
 lexscope/mod.rs	tally_is_empty	d7bdda7eae7fc8b8f54ba6a84e11a5dd80de898f0b52a4b4c04ce8a006e13212
 lexscope/mod.rs	wrap_shown	540bc990dd416b3323a7b9a2a681705625eced002fe6975882e5e18ce51038a0
+lexscope/inner.rs	hold	a9c155a4ac31b873d959eb65a556b4a827bf5bd8f91f3c518c7e0cb4e29f2ab4
+lexscope/inner.rs	reach	1ee172e85b2ba0508c08da45d13bc004037c1e4405ba03c7670ae3a4a540510f
+lexscope/mod.rs	Elaborator::outward2	24efd07c007675549f2aae12f6594b3c3b02277b12914dd7b7a81309c1634561
+lexscope/mod.rs	reach_out	e1db3b014b1da8bc496766c68044781bd1326f209ac7f797c7f125c3738e36ec
 == FIX_MACROS
 # MACRO-BODY on the CLEAN module
 name	sha256
@@ -1186,6 +1343,12 @@ bool
 # the form (or `CALL:<entry>`, `CALLS`, the unwind name) as the position ; NI1-NI7 and NI9 gain
 # IN-TOTAL's ENTER / IN-UNKNOWN (a carrier's text or number, and a cell name no list holds),
 # NI10 gains ADDR (its `*mut u8` is an s1 site outside a fn)
+# §5.2 Q-DECLKEY DK1-6 (2026-11-25): NO1-NO16, OUTCALL (E1 OUTCALL / STALE, E2 CLASS, E3 CLASS / FLOW) and the blind list (STALE) ; a
+# fixture that plants a call also fails BODY for its fn, and one in a tier-E fn OUT-C
+# §5.2 Q-DECLKEY DK1-6 round 2: NO17-NO27 one closed shape each (CLEAN's rows of that shape removed or re-classed: with that one check
+# off the fixture PASSES, run_negctl.sh E_SELFTEST_R2_*), NO28 / NO29 controls of claims found FALSE (closure bodies ; eight text
+# spellings), NO30-NO35 one failing branch of outcall_check each (BLIND WHY, SINK STALE, text:<Lid> on no text, LEAVE no closing
+# unit, closes mismatch, unknown class) ; NO17 also holds `<crate::Win as crate::Note>::note(w, ..)` (FREE `Win::note`, the same qself arm)
 fixture	item	position	rule
 NA1	na1	CALL:entry_under_cur	ADDR-FN
 NA1	na1	s1:*mut	ADDR
@@ -1417,3 +1580,62 @@ NT8	Scopes::park	IN:lhs	WHOLE
 NT9	nt9	BODY	BODY
 NT9	nt9	IN:seg	ROLE
 NU1	nu1	catch_unwind	UNWIND
+NO1	Elaborator::outward	OUT:Elaborator::flush_slot	OUTCALL
+NO2	Elaborator::outward	OUT:.declares	OUTCALL
+NO3	Elaborator::outward	OUT:span_holds	OUTCALL
+NO4	Scopes::is_top	BODY	BODY
+NO4	Scopes::is_top	OUT:span_holds	OUTCALL
+NO5	tally_is_empty	BODY	BODY
+NO5	tally_is_empty	OUT:.declares	OUTCALL
+NO6	Scopes::restore	BODY	BODY
+NO6	Scopes::restore	OUT:Elaborator::seg_label	OUTCALL
+NO7	Elaborator::outward	OUT:Elaborator::seg_label	CLASS
+NO8	Elaborator::outward	OUT:Elaborator::flush_slot	CLASS
+NO9	Elaborator::outward	OUT:Elaborator::seg_label	CLASS
+NO10	Elaborator::outward	OUT-C	FLOW
+NO11	Elaborator::outward	OUT:Elaborator::note_key	CLASS
+NO11	Elaborator::outward	OUT:Elaborator::note_key	STALE
+NO12	Elaborator::outward	OUT:.declares_zz	STALE
+NO13	Elaborator::outward	BODY	BODY
+NO13	Elaborator::outward	OUT-C	OUT-C
+NO13	Elaborator::outward	OUT:Elaborator::flush_slot	OUTCALL
+NO14	Elaborator::outward	OUT-C	FLOW
+NO15	len	BLIND	STALE
+NO16	Elaborator::outward	OUT:Elaborator::note_key	CLASS
+NO17	Elaborator::outward2	OUT:Elaborator::drop_slot	OUTCALL
+NO17	Elaborator::outward2	OUT:Elaborator::keep_slot	OUTCALL
+NO17	reach_out	OUT:Win::note	OUTCALL
+NO18	Elaborator::outward2	OUT:Elaborator::get	OUTCALL
+NO19	Elaborator::outward2	OUT:Elaborator::note_paren	OUTCALL
+NO19	Elaborator::outward2	OUT:Elaborator::tidy_seg	OUTCALL
+NO19	reach_out	OUT:span_holds	OUTCALL
+NO20	reach	OUT:probe	OUTCALL
+NO20	reach_out	OUT:Elaborator::seg_label	OUTCALL
+NO20	reach_out	OUT:hold	OUTCALL
+NO20	reach_out	OUT:tidy	OUTCALL
+NO21	reach_out	OUT:Saved::mk	OUTCALL
+NO22	reach_out	OUT:Note::note	OUTCALL
+NO22	reach_out	OUT:Saved::mk	OUTCALL
+NO23	reach_out	OUT:Elaborator::lab2	OUTCALL
+NO23	reach_out	OUT:span_len	OUTCALL
+NO24	reach_out	OUT:name_len	CLASS
+NO24	reach_out	OUT:wlen	CLASS
+NO25	reach_out	OUT:shown	CLASS
+NO26	reach_out	OUT:byte_len	CLASS
+NO27	reach_out	OUT:.dotted	CLASS
+NO28	Elaborator::outward2	OUT:.declares	OUTCALL
+NO28	Elaborator::outward2	OUT:Elaborator::flag_slot	OUTCALL
+NO29	reach_out	OUT:t_box	CLASS
+NO29	reach_out	OUT:t_cow	CLASS
+NO29	reach_out	OUT:t_impl_asref	CLASS
+NO29	reach_out	OUT:t_impl_into	CLASS
+NO29	reach_out	OUT:t_opt	CLASS
+NO29	reach_out	OUT:t_string_ref	CLASS
+NO29	reach_out	OUT:t_strings	CLASS
+NO29	reach_out	OUT:t_strs	CLASS
+NO30	get	BLIND	WHY
+NO31	Elaborator::flush_slot	SINK	STALE
+NO32	Elaborator::outward	OUT:Elaborator::flush_slot	CLASS
+NO33	Elaborator::outward	OUT:Elaborator::note_key	CLASS
+NO34	Elaborator::outward	OUT:Elaborator::note_key	CLASS
+NO35	Elaborator::outward	OUT:Elaborator::flush_slot	CLASS

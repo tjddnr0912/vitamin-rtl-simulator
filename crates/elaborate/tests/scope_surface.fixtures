@@ -72,6 +72,167 @@ pub(crate) struct Elaborator<'s> {
     names: Vec<String>,
     const_call_fn: std::cell::RefCell<Option<String>>,
 }
+
+impl Elaborator<'_> {
+    fn error(&mut self, msg: &str) {
+        self.names.push(msg.to_string());
+    }
+
+    fn flush_slot(&mut self, slot: u32) {
+        self.names.truncate(slot as usize);
+    }
+
+    fn seg_label(seg: &str) -> Option<&str> {
+        seg.strip_suffix(']')
+    }
+
+    fn note_key(&mut self, key: &str) {
+        self.names.push(key.to_string());
+    }
+}
+
+pub(crate) struct Win {
+    n: u32,
+}
+
+impl Win {
+    pub(crate) fn declares(&self, name: &str) -> bool {
+        name.len() as u32 == self.n
+    }
+
+    pub(crate) fn get(&self) -> u32 {
+        self.n
+    }
+}
+
+pub(crate) fn span_holds(a: u32, b: u32) -> bool {
+    a <= b
+}
+
+impl Elaborator<'_> {
+    fn tidy_seg(seg: &str) -> &str {
+        seg
+    }
+
+    fn lab2(seg: &str) -> Option<&str> {
+        seg.strip_prefix('g')
+    }
+
+    fn get(&self, i: usize) -> Option<&String> {
+        self.names.get(i)
+    }
+
+    fn drop_slot(&mut self, slot: u32) {
+        self.names.truncate(slot as usize);
+    }
+
+    fn keep_slot(&mut self, slot: u32) {
+        self.names.truncate(slot as usize);
+    }
+
+    fn note_paren(&mut self, k: &str) {
+        self.names.push(k.to_string());
+    }
+
+    fn flag_slot(&mut self, slot: u32) {
+        self.names.truncate(slot as usize);
+    }
+}
+
+pub(crate) trait Note {
+    fn note(&self, s: &str) -> bool;
+}
+
+impl Note for Win {
+    fn note(&self, s: &str) -> bool {
+        s.len() as u32 == self.n
+    }
+}
+
+pub(crate) trait StrExt {
+    fn dotted(&self) -> bool;
+}
+
+impl StrExt for str {
+    fn dotted(&self) -> bool {
+        self.contains('.')
+    }
+}
+
+pub(crate) fn name_len<S: AsRef<str>>(s: S) -> usize {
+    s.as_ref().len()
+}
+
+pub(crate) fn wlen<S>(s: S) -> usize
+where
+    S: Into<String>,
+{
+    s.into().len()
+}
+
+pub(crate) fn shown(x: impl std::fmt::Display) -> usize {
+    x.to_string().len()
+}
+
+pub(crate) fn byte_len(b: &[u8]) -> usize {
+    b.len()
+}
+
+pub(crate) fn span_len(a: u32) -> u32 {
+    a
+}
+
+pub(crate) fn t_string_ref(s: &String) -> usize {
+    s.len()
+}
+
+pub(crate) fn t_cow(s: std::borrow::Cow<'_, str>) -> usize {
+    s.len()
+}
+
+pub(crate) fn t_box(s: Box<str>) -> usize {
+    s.len()
+}
+
+pub(crate) fn t_strs(s: &[&str]) -> usize {
+    s.len()
+}
+
+pub(crate) fn t_strings(s: Vec<String>) -> usize {
+    s.len()
+}
+
+pub(crate) fn t_opt(s: Option<String>) -> usize {
+    s.map_or(0, |x| x.len())
+}
+
+pub(crate) fn t_impl_asref(s: impl AsRef<str>) -> usize {
+    s.as_ref().len()
+}
+
+pub(crate) fn t_impl_into(s: impl Into<String>) -> usize {
+    s.into().len()
+}
+
+pub(crate) mod util {
+    pub(crate) fn tidy(s: &str) -> bool {
+        s.is_empty()
+    }
+
+    pub(crate) fn hold(s: &str) -> bool {
+        s.is_empty()
+    }
+
+    pub(crate) trait Saved {
+        fn mk(n: u32) -> u32;
+    }
+}
+
+pub(crate) mod inner {
+    pub(crate) fn probe(n: u32) -> bool {
+        n == 0
+    }
+}
 --- lexscope/mod.rs
 //! a clean lexscope surface
 mod inner;
@@ -169,6 +330,37 @@ fn wrap_shown(s: String) -> Shown {
     Shown(s)
 }
 
+fn reach_out(name: &str, w: &crate::Win) -> bool {
+    use crate::util;
+    use crate::util::hold;
+    use crate::Elaborator as El;
+    use crate::Note;
+    let g = span_holds;
+    let class = name_len(name)
+        + wlen(name)
+        + shown(name)
+        + byte_len(name.as_bytes())
+        + t_string_ref(&name.to_string())
+        + t_cow(name.into())
+        + t_box(name.into())
+        + t_strs(&[name])
+        + t_strings(vec![name.to_string()])
+        + t_opt(Some(name.to_string()))
+        + t_impl_asref(name)
+        + t_impl_into(name);
+    util::tidy(name)
+        && crate::util::Saved::mk(1) == 1
+        && Note::note(w, name)
+        && <crate::Win as crate::Note>::note(w, name)
+        && hold(name)
+        && El::seg_label(name).is_some()
+        && matches!(crate::Elaborator::lab2(name), Some(s) if !s.is_empty())
+        && vec![span_len(1); 2].len() == 2
+        && name.dotted()
+        && g(1, 2)
+        && class > 0
+}
+
 impl Scopes {
     pub(crate) fn is_top(&self) -> bool {
         self.cur.is_empty()
@@ -244,6 +436,26 @@ impl crate::Elaborator<'_> {
     pub(crate) fn mark_is(&self, m: Mark) -> bool {
         matches!(m, Mark::Inst) && self.lex.marks.is_empty()
     }
+
+    fn outward(&mut self) -> bool {
+        self.flush_slot(0);
+        self.error("internal");
+        let lab = Self::seg_label("g[0]").is_some();
+        self.note_key("k");
+        let w = crate::Win { n: 0 };
+        lab && w.declares("x") && span_holds(1, 2) && self.names.get(0).is_some()
+    }
+
+    fn outward2(&mut self, name: &str) -> usize {
+        <Self>::drop_slot(self, 0);
+        <crate::Elaborator<'_>>::keep_slot(self, 1);
+        (Self::note_paren)(self, name);
+        let _ = (*self).get(0);
+        let t: Vec<&str> = Some(name).map(Self::tidy_seg).into_iter().collect();
+        let w = crate::Win { n: 0 };
+        [0u32].iter().for_each(|s| self.flag_slot(*s));
+        t.len() + [name].iter().filter(|s| w.declares(s)).count()
+    }
 }
 --- lexscope/inner.rs
 pub(crate) struct ScopeRef {
@@ -254,6 +466,15 @@ pub(super) fn carry(lex: &super::Scopes) -> ScopeRef {
     ScopeRef {
         id: lex.marks.len() as u32,
     }
+}
+
+fn hold(n: u32) -> bool {
+    n == 0
+}
+
+fn reach() -> bool {
+    use crate::inner;
+    inner::probe(1) && hold(0)
 }
 == NS1
 @@ lexscope/mod.rs
@@ -871,3 +1092,203 @@ pub(super) fn carry(lex: &super::Scopes) -> ScopeRef {
 +         let _ = (late, err);
 +     }
 + }
+== NO1
+# OUTCALL (§5.2 Q-DECLKEY DK1-6, DELTA18 G2.4 E1-E4 ; NO1-NO16): CLEAN's SELF call `self.flush_slot(0)` with its OUTCALL row
+# removed — the call has no row: OUTCALL (the SELFTEST's fixture: with E1 commented out it passes)
+@@ table:FIX_OUTCALL
+- Elaborator::outward	Elaborator::flush_slot	1	none	-
+== NO2
+# OUTCALL: CLEAN's RECV call `w.declares("x")` with its row removed (RECV: a receiver other than self, resolved by name)
+@@ table:FIX_OUTCALL
+- Elaborator::outward	.declares	1	in	-
+== NO3
+# OUTCALL: CLEAN's FREE call `span_holds(1, 2)` with its row removed
+@@ table:FIX_OUTCALL
+- Elaborator::outward	span_holds	1	none	-
+== NO4
+# OUTCALL: a FREE call through `crate::` planted in a tier-K fn (no E row exists for it: OUT-C does not see it)
+@@ lexscope/mod.rs
+-         self.cur.is_empty()
++         self.cur.is_empty() && crate::span_holds(0, 1)
+== NO5
+# OUTCALL: a RECV call planted in a free fn of the module (a receiver that is no self)
+@@ lexscope/mod.rs
+-     t.seen.is_empty() && t.inner.0.is_empty()
++     t.seen.is_empty() && t.inner.0.is_empty() && crate::Win { n: 0 }.declares("t")
+== NO6
+# OUTCALL: a SELF call by the path `crate::Elaborator::f`, planted in a tier-K fn
+@@ lexscope/mod.rs
+-         self.cur = s.text;
++         self.cur = s.text;
++         let _ = crate::Elaborator::seg_label("g[1]");
+== NO7
+# OUTCALL E2: class `none` on a callee with a `&str` parameter
+@@ table:FIX_OUTCALL
+- Elaborator::outward	Elaborator::seg_label	1	in	-
++ Elaborator::outward	Elaborator::seg_label	1	none	-
+== NO8
+# OUTCALL E2: class `in` on a callee with no text parameter
+@@ table:FIX_OUTCALL
+- Elaborator::outward	Elaborator::flush_slot	1	none	-
++ Elaborator::outward	Elaborator::flush_slot	1	in	-
+== NO9
+# OUTCALL E2: class `error` on a callee that takes text but is not on OUTCALL_SINKS
+@@ table:FIX_OUTCALL
+- Elaborator::outward	Elaborator::seg_label	1	in	-
++ Elaborator::outward	Elaborator::seg_label	1	error	-
+== NO10
+# E3: a FLOW tag `text:LEAVE-<id>` of E naming an id LEAVE does not hold (a dangling tag)
+@@ table:FIX_E
+- Elaborator::outward	OUT-C	.note_key	1	text:LEAVE-L6
++ Elaborator::outward	OUT-C	.note_key	1	text:LEAVE-L99
+== NO11
+# OUTCALL E3: a class `text:<Lid>` naming an id LEAVE does not hold (and the LEAVE row it should name is left STALE)
+@@ table:FIX_OUTCALL
+- Elaborator::outward	Elaborator::note_key	1	text:L6	DK9
++ Elaborator::outward	Elaborator::note_key	1	text:L99	DK9
+== NO12
+# OUTCALL: a row with no call is STALE
+@@ table:FIX_OUTCALL
++ Elaborator::outward	.declares_zz	1	none	-
+== NO13
+# OUTCALL: a second call of a pinned callee moves its count (and OUT-C's, and the fn's BODY)
+@@ lexscope/mod.rs
+-         self.flush_slot(0);
++         self.flush_slot(0);
++         self.flush_slot(1);
+== NO14
+# E3: a FLOW tag `text:<sink>` that is no LEAVE id, no `error`, no OUT type and no vocabulary name an OUT type spells
+@@ table:FIX_E
+- Elaborator::outward	OUT-C	.error	1	in
++ Elaborator::outward	OUT-C	.error	1	text:Bogus
+== NO15
+# OUTCALL: a blind-list row no call on another receiver uses is STALE
+@@ table:FIX_OUTCALL_BLIND
++ len	std
+== NO16
+# OUTCALL E3: the LEAVE row a `text:<Lid>` names spells a type that is not the callee's text parameters
+@@ table:FIX_LEAVE
+- L6	Elaborator::outward	OUT:Elaborator::note_key	&str	DK9
++ L6	Elaborator::outward	OUT:Elaborator::note_key	String	DK9
+== NO17
+# OUTCALL round 2 (§5.2 Q-DECLKEY DK1-6 r2 ; NO17-NO27 one closed shape each, its CLEAN rows removed: with that check off the
+# shape is not seen and the fixture PASSES — run_negctl.sh E_SELFTEST_R2_*): a qualified self type `<Self>::f(self, ..)` and
+# `<crate::Elaborator<'_>>::f(self, ..)` (SELF, read as `Self::f` / `Elaborator::f`) and a qualified self type with its trait
+# `<crate::Win as crate::Note>::note(w, name)` in reach_out (FREE, read as `Win::note`) — one fixture: the three are the one qself arm
+@@ table:FIX_OUTCALL
+- Elaborator::outward2	Elaborator::drop_slot	1	none	-
+- Elaborator::outward2	Elaborator::keep_slot	1	none	-
+- reach_out	Win::note	1	in	-
+== NO18
+# OUTCALL round 2: `(*self).f(..)` is the receiver `self` (SELF ; before, RECV, and a blind-list name was not resolved: `get`)
+@@ table:FIX_OUTCALL
+- Elaborator::outward2	Elaborator::get	1	none	-
+== NO19
+# OUTCALL round 2: a fn of the crate named as a value — `.map(Self::tidy_seg)`, `let g = span_holds;`, the parenthesised callee
+# `(Self::note_paren)(self, name)` — counts as a call of that callee
+@@ table:FIX_OUTCALL
+- Elaborator::outward2	Elaborator::note_paren	1	in	-
+- Elaborator::outward2	Elaborator::tidy_seg	1	in	-
+- reach_out	span_holds	1	none	-
+== NO20
+# OUTCALL round 2: a path read through the file's `use` into the crate — `use crate::util; util::tidy(..)`, `use crate::inner;
+# inner::probe(..)` (a crate module named as a module of the file set), `use crate::util::hold; hold(..)` (the file set has its own
+# private `hold`), `use crate::Elaborator as El; El::seg_label(..)`
+@@ table:FIX_OUTCALL
+- reach	probe	1	none	-
+- reach_out	Elaborator::seg_label	1	in	-
+- reach_out	hold	1	in	-
+- reach_out	tidy	1	in	-
+== NO21
+# OUTCALL round 2: `crate::util::Saved::mk(..)` — a path out of the module whose type shares a name with a type of the file set
+@@ table:FIX_OUTCALL
+- reach_out	Saved::mk	1	none	-
+== NO22
+# OUTCALL round 2: a trait's fn by its path (`Note::note(w, ..)`, `crate::util::Saved::mk(..)`: the trait index)
+@@ table:FIX_OUTCALL
+- reach_out	Note::note	1	in	-
+- reach_out	Saved::mk	1	none	-
+== NO23
+# OUTCALL round 2: a macro whose arguments are no comma list — `matches!(e, pat if guard)` and `vec![e; n]`
+@@ table:FIX_OUTCALL
+- reach_out	Elaborator::lab2	1	in	-
+- reach_out	span_len	1	none	-
+== NO24
+# OUTCALL round 2 E2: a text parameter spelled through a type parameter's bound (`S: AsRef<str>`, `where S: Into<String>`):
+# class `none` refused
+@@ table:FIX_OUTCALL
+- reach_out	name_len	1	in	-
++ reach_out	name_len	1	none	-
+- reach_out	wlen	1	in	-
++ reach_out	wlen	1	none	-
+== NO25
+# OUTCALL round 2 E2: `impl std::fmt::Display` takes text: class `none` refused
+@@ table:FIX_OUTCALL
+- reach_out	shown	1	in	-
++ reach_out	shown	1	none	-
+== NO26
+# OUTCALL round 2 E2: a byte slice `&[u8]` takes text (I-SURF's reading): class `none` refused
+@@ table:FIX_OUTCALL
+- reach_out	byte_len	1	in	-
++ reach_out	byte_len	1	none	-
+== NO27
+# OUTCALL round 2 E2: a method of an impl for a text type (`impl StrExt for str`) takes text in its receiver: class `none` refused
+@@ table:FIX_OUTCALL
+- reach_out	.dotted	1	in	-
++ reach_out	.dotted	1	none	-
+== NO28
+# OUTCALL round 2, a control (claim FALSE): a closure's body is walked — a SELF call `|s| self.flag_slot(*s)` and a RECV call
+# `|s| w.declares(s)` in closures, their rows removed
+@@ table:FIX_OUTCALL
+- Elaborator::outward2	.declares	1	in	-
+- Elaborator::outward2	Elaborator::flag_slot	1	none	-
+== NO29
+# OUTCALL round 2, a control (claim FALSE): `&String`, `Cow<'_, str>`, `Box<str>`, `&[&str]`, `Vec<String>`, `Option<String>`,
+# `impl AsRef<str>`, `impl Into<String>` each take text: class `none` refused on each
+@@ table:FIX_OUTCALL
+- reach_out	t_box	1	in	-
++ reach_out	t_box	1	none	-
+- reach_out	t_cow	1	in	-
++ reach_out	t_cow	1	none	-
+- reach_out	t_impl_asref	1	in	-
++ reach_out	t_impl_asref	1	none	-
+- reach_out	t_impl_into	1	in	-
++ reach_out	t_impl_into	1	none	-
+- reach_out	t_opt	1	in	-
++ reach_out	t_opt	1	none	-
+- reach_out	t_string_ref	1	in	-
++ reach_out	t_string_ref	1	none	-
+- reach_out	t_strings	1	in	-
++ reach_out	t_strings	1	none	-
+- reach_out	t_strs	1	in	-
++ reach_out	t_strs	1	none	-
+== NO30
+# OUTCALL round 2, item 4 (a fixture per failing branch of outcall_check): a blind-list row whose why is no `std` STD_METHODS
+# name nor a `module` method of the file set — BLIND WHY
+@@ table:FIX_OUTCALL_BLIND
+- get	std
++ get	module
+== NO31
+# OUTCALL round 2, item 4: an error-sink row naming an Elaborator fn with no text parameter — SINK STALE
+@@ table:FIX_OUTCALL_SINKS
++ Elaborator::flush_slot
+== NO32
+# OUTCALL round 2, item 4: class `text:<Lid>` on a callee with no text parameter — CLASS
+@@ table:FIX_OUTCALL
+- Elaborator::outward	Elaborator::flush_slot	1	none	-
++ Elaborator::outward	Elaborator::flush_slot	1	text:L6	-
+== NO33
+# OUTCALL round 2, item 4: the LEAVE row a `text:<Lid>` names has no closing unit (`-`) — CLASS
+@@ table:FIX_LEAVE
+- L6	Elaborator::outward	OUT:Elaborator::note_key	&str	DK9
++ L6	Elaborator::outward	OUT:Elaborator::note_key	&str	-
+== NO34
+# OUTCALL round 2, item 4: a `text:<Lid>` row's closes is not its LEAVE row's closing unit — CLASS
+@@ table:FIX_OUTCALL
+- Elaborator::outward	Elaborator::note_key	1	text:L6	DK9
++ Elaborator::outward	Elaborator::note_key	1	text:L6	DK8
+== NO35
+# OUTCALL round 2, item 4: a class off none / in / error / text:<Lid> — CLASS
+@@ table:FIX_OUTCALL
+- Elaborator::outward	Elaborator::flush_slot	1	none	-
++ Elaborator::outward	Elaborator::flush_slot	1	bogus	-

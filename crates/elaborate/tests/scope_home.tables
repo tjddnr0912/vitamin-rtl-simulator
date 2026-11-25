@@ -112,6 +112,12 @@ sites 26 {"CONSTRUCTOR": 1, "DEFINITION": 1, "DIAGNOSTIC": 7, "LOOKUP": 2, "PARE
 # §5.2 Q-DECLKEY DK1-4a (2026-11-24): the walk moves into lexscope/walk.rs (MOVE 8, R-G15) — its 5 INTERNAL / PROBE rows re-homed, hand columns kept
 # §5.2 Q-DECLKEY DK1-4b-1 (2026-11-24): the walk hands its candidate as an AtKey (DELTA16 E1.3, E1.4) — the two closure pairs: edge_gate.rs binding_encloses' second walk probes through `other_kind_at` (the typed twin ; `other_kind` stays for the found text key), held.rs clk_refused_at through `refused_at` (at_same: the candidate against a refused alias ; `refused` / at_text stays for the found key) ; both pairs' candidate halves leave at DK2. walk_scopes' INTERNAL `table` row holds by PROBE_METHODS + `contains_at` (R-H8 (b)).
 # §5.2 Q-DECLKEY DK1-4b-2 (2026-11-24): FOUND rows (R-H8 (g), engine edit: `found_key_closure`) — a closure that reads a walk's found key (a DeclKey) is no walk hit, so no SITE row held its stores: the found-key copy of each E1.4 pair gets its own row (edge_gate.rs binding_encloses `other_kind()`, held.rs clk_refused_at `refused()` ; their candidate copies stay the SITE rows' `other_kind_at()` / `refused_at()`)
+# §5.2 Q-DECLKEY DK1-6 (2026-11-25, DELTA17 F6 (3)): two found-key closures bound to ONE name in one fn (a shadowing `let`) FAIL the test (`H6 DUP FOUND`)
+# in place of the silent collapse to one FOUND row ; on this tree there is none.
+# §5.2 Q-DECLKEY DK1-6 round 2 (W/scopebind/dk1_6/r2/claims.tsv): a closure bound through `&`, a paren or a block's tail (`let c = { let p = ..;
+# move |k: &DeclKey| .. };`) is a local / found-key closure ; an untyped closure whose parameter goes to found_text / key_same /
+# gen_binding_encloses or a `_found` entry reads a FOUND key (FOUND_FNS / FOUND_METHODS ; every lexscope fn with a DeclKey parameter must be
+# one: `H6 FOUND TAKER`) ; two local closures bound to ONE name in one fn while a probe calls `name()` FAIL (`H6 DUP LOCAL`) ; none on this tree.
 file	fn	entry	hit_text	class	hit_set	calls
 array_geom.rs	shape_bits	walk_scopes_key	hit_value	SITE	params	1
 block_local/hoist.rs	hoist_one_block_local	walk_scopes_key	pkg_var_aliases	SITE	pkg_var_aliases	1
@@ -308,7 +314,7 @@ rows 102 {"COPY": 15, "FRAME": 3, "OWN": 36, "PLACE": 5, "R5": 1, "R5TAIL": 2, "
 # `Option<String>`), and the two `bind_params` UNTYPED bindings (iface_inst.rs `sp=`, instance_array.rs `saved=`) left H7.
 # §5.2 Q-DECLKEY DK1-4b-2 (2026-11-24): frames_static_init.rs emit_frame_static_prologue's `formals` (folded into `nonh`) and `admitted_keys` are KeyedSets of the walk's found keys (`extend_found`, N11-3 / C2) — no String collection: 3 -> 1 (cands)
 # §5.2 Q-DECLKEY DK1-5a (2026-11-25): the hierarchical resolver moves into lexscope/hier.rs (MOVE 5, R-J2) — hier_resolve's `segs` re-homed
-# §5.2 Q-DECLKEY DK1-5b (2026-11-25): decl_keep_snapshot STAYS in decl_scope.rs (R-J1) and hands its key list to lexscope: the `keys` collection it built (BTreeSet<&str>) is keys_under_cur's now (BTreeMap<&str, &NewKey>, lexscope/mod.rs)
+# §5.2 Q-DECLKEY DK1-5b (2026-11-25): decl_keep_snapshot STAYS in decl_scope.rs (R-J1) and hands its key list to lexscope: the `keys` collection it built (BTreeSet<&str>) is keys_under_cur's now (BTreeMap<&str, &NewKey>, lexscope/mod.rs) [DK1-6 (2026-11-25): ROUND 1's form, never built — the round-2 line below is the built state (newreads N9 (b))]
 # §5.2 Q-DECLKEY DK1-5b round 2 (2026-11-25, the cost trip on the package path): keys_under_cur builds no collection of its own: it takes the caller's Vec<&NewKey> BY VALUE and sorts, dedups and filters it in place (no BTreeMap, no second Vec) ; its H7 row `keys_under_cur 1 keys` is gone
 file	fn	lets	bindings
 block_local/gate.rs	deny_static_init_reading_per_entry	1	hits
@@ -482,7 +488,7 @@ lets 155 fns 85 untyped 30 readers 26
 # a planted call is a NEW ROW) ; fmt: scope.rs fq's `{}.{}` -> lexscope/key.rs at_cur's (key) and show_miss's (display)
 # §5.2 Q-DECLKEY DK1-4a (2026-11-24): the walk moves into lexscope/walk.rs (MOVE 8, R-G15) — its 9 mint rows re-homed (TAG kept)
 # §5.2 Q-DECLKEY DK1-5a (2026-11-25): the five movers' 11 mint rows re-homed to lexscope/hier.rs (kind, count, TAG kept) ; key_in (key.rs) `<k>.<member>` NEW, key ; ports.rs elaborate_virtual_iface fmt 2 -> 1: the src glue is key_in's, the dst `format!("{vif}.{m}")` is handed to new_key (the 4th composite mint, DELTA17 F4: vif = the handle's declared name, m = a member name of the interface declaration) — totals unchanged
-# §5.2 Q-DECLKEY DK1-5b (2026-11-25): decl_keep_snapshot's `format!("{prefix}.")` (the package scope's text and its dot) is keys_under_cur's (lexscope/mod.rs ; TAG scope kept) — every mint of the snapshot is inside the module
+# §5.2 Q-DECLKEY DK1-5b (2026-11-25): decl_keep_snapshot's `format!("{prefix}.")` (the package scope's text and its dot) is keys_under_cur's (lexscope/mod.rs ; TAG scope kept) — every mint of the snapshot is inside the module [DK1-6 (2026-11-25): ROUND 1's form, never built — the round-2 line below is the built state (newreads N9 (b))]
 # §5.2 Q-DECLKEY DK1-5b round 2 (2026-11-25, the cost trip on the package path): that `format!` is gone: the prefix test reads the current text and the byte after it (`k.starts_with(prefix)` and `as_bytes()[prefix.len()] == b'.'`), no `<prefix>.` text is formed ; its HM row `keys_under_cur fmt format 1` is gone
 file	fn	kind	name	count	TAG
 array_geom.rs	shape_bits	call	walk_scopes_key	1	key
@@ -788,7 +794,7 @@ reads 39 roles {"composite": 4, "whole": 35} stores {"array_param_overrides": 1,
 # enter_frame_scope_root, stmt_loc_instance DK4 -> `-` (they drop the `%m` absolute marker: no scope kind or parent read).
 # §5.2 Q-DECLKEY DK1-4a (2026-11-24): the walk moves into lexscope/walk.rs (MOVE 8, R-G15) — its 7 segment tests re-homed (TAG scope, UNIT walk kept)
 # §5.2 Q-DECLKEY DK1-5a (2026-11-25): hier_resolve's `split '.'` and is_hier_scope's `starts_with <probe>` re-homed to lexscope/hier.rs (TAG / UNIT kept)
-# §5.2 Q-DECLKEY DK1-5b (2026-11-25): names_with_pkg_var_aliases' `rsplit_once '.'` (moved to lexscope/elab.rs) and decl_keep_snapshot's two `starts_with <mine>` (keys_under_cur's, lexscope/mod.rs) re-homed (TAG / UNIT kept)
+# §5.2 Q-DECLKEY DK1-5b (2026-11-25): names_with_pkg_var_aliases' `rsplit_once '.'` (moved to lexscope/elab.rs) and decl_keep_snapshot's two `starts_with <mine>` (keys_under_cur's, lexscope/mod.rs) re-homed (TAG / UNIT kept) [DK1-6 (2026-11-25): ROUND 1's form, never built — the round-2 line below is the built state (newreads N9 (b))]
 # §5.2 Q-DECLKEY DK1-5b round 2 (2026-11-25, the cost trip on the package path): the two `starts_with <mine>` are one `starts_with <prefix>`, in the closure `mine` the debug_assert and the retain both call (TAG / UNIT kept)
 file	fn	method	arg	count	TAG	UNIT
 block_local/gate.rs	actual_is_record_of	starts_with	'$'	1	spelling	-
@@ -1393,7 +1399,7 @@ systask.rs	lower_systask	scope_out	self.lex.show_miss(&joined)	MAC:format>LOCAL:
 # `debug_assertions` occurs 0 times in lexscope's files (every file of the directory, any spelling: cfg,
 # cfg!, cfg_attr, not / any) ; the `debug_assert*!` calls by (file, fn, macro) with a count — an ARGUMENT
 # with a side effect is the delta judge's reading (no test sees it).
-# §5.2 Q-DECLKEY DK1-5b (2026-11-25): keys_under_cur's `debug_assert!` (decl_keep_snapshot's, moved with the prefix test): its argument `keys.keys().all(|k| k.starts_with(&mine))` reads the local map only, no side effect
+# §5.2 Q-DECLKEY DK1-5b (2026-11-25): keys_under_cur's `debug_assert!` (decl_keep_snapshot's, moved with the prefix test): its argument `keys.keys().all(|k| k.starts_with(&mine))` reads the local map only, no side effect [DK1-6 (2026-11-25): ROUND 1's form, never built — the round-2 line below is the built state (newreads N9 (b))]
 # §5.2 Q-DECLKEY DK1-5b round 2 (2026-11-25, the cost trip on the package path): its argument is `keys.iter().all(|k| mine(k))` (the closure reads the key and the current text only, no side effect) ; count 1 unchanged
 file	fn	macro	count
 lexscope/mod.rs	c_path	debug_assert_eq	1
@@ -1615,6 +1621,21 @@ file	fn	entry	count
 frames_static_init.rs	emit_frame_static_prologue	extend_found	3
 == HXF_COUNTS
 entries=1 sites=3
+== HKI
+# HKI (§5.2 Q-DECLKEY DK1-6 (2026-11-25), DELTA18 R-J9 NOTE-2 ; engine test hki_the_key_in_callers_are_pinned): every call of lexscope's
+# `key_in(k, member)` outside lexscope, by (file, fn, entry) with a count — key_in forms the member key `<k>.<member>` with no empty-key
+# guard (its doc), so a second caller is a new row whose key must be read. §5.2 Q-DECLKEY DK1-6 round 2 (W/scopebind/dk1_6/r2/claims.tsv):
+# key_in named as a value (`let mk = key_in;`, `.map(lexscope::key_in)`) is a caller too (args `fn-value`) ; a closure's body, a `matches!`
+# guard's scrutinee and `vec![e; n]`'s element are read (mac_exprs: a comma list, else the first expression).
+# NOT-PROMISED (one shape a line):
+#  K1 `use crate::lexscope::key_in as member_key; member_key(&k, m)`: a `use .. as` rename is no watched name.
+#  K2 a `#[cfg(test)]` fn's call outside lexscope: test code is no caller of the program (watched_calls reads no cfg(test) fn).
+#  K3 `zz! { .. key_in(&k, m) .. }`: a macro's tokens after its first expression, or tokens that begin with no expression (a macro body).
+#  K4 a call inside lexscope: not this table's (the module's own calls are its fns' bodies, SURF BODY-ALL).
+file	fn	entry	count
+ports.rs	elaborate_virtual_iface	key_in	1
+== HKI_COUNTS
+entries=1 sites=1
 == HSTAY
 # HSTAY (§5.2 Q-DECLKEY DK1-5b (2026-11-25), DELTA18 G1 / R-J1 STAYOUT ; engine test hstay_the_stayout_snapshot_is_pinned): a fn that STAYS outside lexscope and
 # asks it one scope question is read whole — every call in its body by callee name (`.m` a method call, `f(` a path call, `m!` a
@@ -1770,6 +1791,18 @@ sva_prop.rs	PendingSva.scope	FIELD	crate::ScopeRef	1
 # through a binding the fn types as the key ; the walk's scratch writes are pinned (walk.rs AtKey write 5: `key.0.clear()` x2,
 # `push_str` x1, `write!(key.0, ..)` x2) ; DeclKey's constructions: walk.rs 3 (the three returns), tests.rs 1 (the cfg(test) helper).
 # §5.2 Q-DECLKEY DK1-5a (2026-11-25): key_in forms `<k>.<member>` from a read key (key.rs AtKey ctor 2 -> 3) ; Scopes::key_under returns an AtKey (mod.rs AtKey ctor 2: its two returns, the text the carried scope's interner holds + the name)
+# §5.2 Q-DECLKEY DK1-6 (2026-11-25, DELTA17 F6 (3)): `Self` inside a key type's own impl, inherent or trait, counts as that type (`Self(s)` ctor,
+# `Self { .. }` ctor, `let Self(t)` ctor, `.map(Self)` value ; `Self::new()` not) — on this tree it adds 0 (no key impl in lexscope names `Self` so).
+# §5.2 Q-DECLKEY DK1-6 round 2 (W/scopebind/dk1_6/r2/claims.tsv): a `.0` write through a `Self`-typed binding of a key type's impl (`let mut k =
+# Self(..)`, `k: &mut Self`), through `&mut self` of a key type's TRAIT impl, and `Self(..)` as `matches!`'s pattern are counted ; 0 on this tree.
+# NOT-PROMISED (one shape a line):
+#  C1 `type Me = Self; Me(s)` / `use super::AtKey as Hk` inside a fn body naming `Self`: an alias of `Self` (a module-level `type`/`use .. as` of
+#     a key type IS the alias row).  (Any new or edited lexscope fn is still a new SURF BODY row: r2/neg M_HKC_ALIAS_SELF failed
+#     ht_surf_the_lexscope_surface_is_pinned only.)
+#  C2 a `.0` write through a binding whose type is not spelled where HKC reads it: an untyped `let` of a returned key, a struct field holding a
+#     key, a `&mut String` taken by a method HKC_MUT does not list.
+#  C3 a key formed in a macro body or a `macro_rules!` definition (tokens no expression list nor `matches!` form).
+#  C4 a whole-key move (`mem::swap` of two keys moves a key, not its text).
 file	type	form	count
 lexscope/key.rs	AtKey	ctor	3
 lexscope/key.rs	NewKey	ctor	2

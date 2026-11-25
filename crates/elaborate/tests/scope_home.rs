@@ -711,6 +711,14 @@ struct FnRec {
     /// H6 (§5.2 Q-DECLKEY DK1-4b-2): the local closures that read a walk's FOUND key (a
     /// DeclKey) -> their probes ; each is its own FOUND row (`found_key_closure`)
     found_closures: BTreeMap<String, Vec<String>>,
+    /// H6 (§5.2 Q-DECLKEY DK1-6, DELTA17 F6 (3)): a name a second found-key closure is bound to
+    /// in the same fn (a shadowing `let`) — `found_closures` would keep only the later one, so the
+    /// h6 test FAILS on each (the guard in place of the silent collapse)
+    found_dups: Vec<String>,
+    /// H6 (§5.2 Q-DECLKEY DK1-6 round 2): a name a second local closure is bound to in the same
+    /// fn — `local_closures` keeps only the later one's probes, so a hit calling `name()` would
+    /// expand to the later's ; the h6 test FAILS on each such name a probe list calls (H6 DUP LOCAL)
+    local_dups: Vec<String>,
     /// H6: the probes of the fn's own body (read for `hit_*` fns)
     self_probes: Vec<String>,
     // H6c: (kind W / S / F / Fw, entry, reduced first argument)
@@ -1147,15 +1155,40 @@ fn single_path(e: &Expr) -> Option<String> {
     }
 }
 
+/// H6 (§5.2 Q-DECLKEY DK1-6 round 2): the free fns and the methods of the module besides the
+/// `_found` entries that take a found key (a DeclKey parameter): an untyped closure parameter
+/// handed to one reads a FOUND key. h6's census of lexscope's fns with a DeclKey parameter FAILS
+/// on one these lists and the `_found` suffix do not cover (H6 FOUND TAKER).
+const FOUND_FNS: &[&str] = &["key_same", "found_text"];
+const FOUND_METHODS: &[&str] = &["gen_binding_encloses"];
+
+/// H6 (§5.2 Q-DECLKEY DK1-6 round 2): the closure a `let` binds, through a reference, a paren
+/// and a block's tail (`let c = { let p = &self.x; move |k| p.contains_found(k) };`).
+fn closure_of(e: &Expr) -> Option<&Expr> {
+    match e {
+        Expr::Closure(_) => Some(e),
+        Expr::Paren(p) => closure_of(&p.expr),
+        Expr::Group(g) => closure_of(&g.expr),
+        Expr::Reference(r) => closure_of(&r.expr),
+        Expr::Block(b) => match b.block.stmts.last() {
+            Some(syn::Stmt::Expr(t, None)) => closure_of(t),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
 /// H6 (§5.2 Q-DECLKEY DK1-4b-2): a closure reads a walk's FOUND key through its first parameter
 /// when that parameter is typed `DeclKey` (by value or by reference) or, untyped, when the body
 /// hands it to a `_found` entry, to `key_same`, or asks it `is_formed_at` / `is_formed_as` (a
-/// closure typed anything else, e.g. `|me: &Self|` around its own walk, is not one). REVIEW-ONLY:
+/// closure typed anything else, e.g. `|me: &Self|` around its own walk, is not one) ; round 2:
+/// FOUND_FNS / FOUND_METHODS are the other takers, the closure may sit behind `&`, a paren or a
+/// block's tail (closure_of). REVIEW-ONLY:
 /// a found key read by a fn (not a closure), a closure whose parameter is a pattern, or one that
 /// only hands its key on to another closure ; and (§5.2 Q-DECLKEY DK1-5a, DELTA16 R-H12 note 3)
-/// two found-key closures bound to ONE name in one fn (a shadowing `let`) are one FOUND row:
-/// `found_closures` is keyed by the binding name, so the later closure's probes replace the
-/// earlier's and the earlier's stores are pinned by nothing.
+/// two found-key closures bound to ONE name in one fn (a shadowing `let`) would be one FOUND row
+/// (`found_closures` is keyed by the binding name) — since §5.2 Q-DECLKEY DK1-6 (DELTA17 F6 (3))
+/// the h6 test FAILS on it (`FnRec::found_dups`, rule H6 DUP FOUND), so no store goes unpinned.
 fn found_key_closure(e: &Expr) -> bool {
     struct F<'n>(&'n str, bool);
     fn names(e: &Expr, n: &str) -> bool {
@@ -1168,7 +1201,8 @@ fn found_key_closure(e: &Expr) -> bool {
     impl<'ast> Visit<'ast> for F<'_> {
         fn visit_expr_method_call(&mut self, m: &'ast syn::ExprMethodCall) {
             let meth = m.method.to_string();
-            if (meth.ends_with("_found") && m.args.iter().any(|a| names(a, self.0)))
+            if ((meth.ends_with("_found") || FOUND_METHODS.contains(&meth.as_str()))
+                && m.args.iter().any(|a| names(a, self.0)))
                 || ((meth == "is_formed_at" || meth == "is_formed_as")
                     && names(&m.receiver, self.0))
             {
@@ -1177,7 +1211,7 @@ fn found_key_closure(e: &Expr) -> bool {
             visit::visit_expr_method_call(self, m);
         }
         fn visit_expr_call(&mut self, c: &'ast syn::ExprCall) {
-            if single_path(&c.func).is_some_and(|n| n == "key_same")
+            if single_path(&c.func).is_some_and(|n| FOUND_FNS.contains(&n.as_str()))
                 && c.args.iter().any(|a| names(a, self.0))
             {
                 self.1 = true;
@@ -1185,7 +1219,7 @@ fn found_key_closure(e: &Expr) -> bool {
             visit::visit_expr_call(self, c);
         }
     }
-    let Expr::Closure(c) = e else {
+    let Some(Expr::Closure(c)) = closure_of(e) else {
         return false;
     };
     let (pat, ty) = match c.inputs.first() {
@@ -1368,14 +1402,21 @@ impl<'ast> Visit<'ast> for Pass<'_> {
         let first = names.first().cloned().unwrap_or_else(|| "<pat>".into());
         // H6: a local closure, for expanding a hit that calls it
         if let Some(init) = &l.init {
-            if matches!(&*init.expr, Expr::Closure(_)) {
-                let probes = probes_of(&init.expr);
-                let found = found_key_closure(&init.expr);
+            // round 2: a closure through `&`, a paren or a block's tail is one too (closure_of)
+            if let Some(clo) = closure_of(&init.expr) {
+                let probes = probes_of(clo);
+                let found = found_key_closure(clo);
                 if let Some(c) = self.cur() {
-                    if found {
-                        c.found_closures.insert(first.clone(), probes.clone());
+                    if found
+                        && c.found_closures
+                            .insert(first.clone(), probes.clone())
+                            .is_some()
+                    {
+                        c.found_dups.push(first.clone());
                     }
-                    c.local_closures.insert(first.clone(), probes);
+                    if c.local_closures.insert(first.clone(), probes).is_some() {
+                        c.local_dups.push(first.clone());
+                    }
                 }
             }
         }
@@ -2192,6 +2233,41 @@ fn h6_rows(c: &Census) -> Vec<(String, String, String, usize)> {
         .collect()
 }
 
+/// H6 (§5.2 Q-DECLKEY DK1-6 round 2): the fns of lexscope (its `#[cfg(test)]` file left out)
+/// with a parameter whose type names DeclKey, by simple name.
+fn declkey_takers() -> BTreeSet<String> {
+    struct T(BTreeSet<String>);
+    impl T {
+        fn sig(&mut self, s: &syn::Signature) {
+            let takes = s.inputs.iter().any(|a| {
+                matches!(a, syn::FnArg::Typed(pt) if type_idents(&pt.ty).iter().any(|i| i == "DeclKey"))
+            });
+            if takes {
+                self.0.insert(s.ident.to_string());
+            }
+        }
+    }
+    impl<'a> Visit<'a> for T {
+        fn visit_item_fn(&mut self, f: &'a syn::ItemFn) {
+            self.sig(&f.sig);
+            visit::visit_item_fn(self, f);
+        }
+        fn visit_impl_item_fn(&mut self, f: &'a syn::ImplItemFn) {
+            self.sig(&f.sig);
+            visit::visit_impl_item_fn(self, f);
+        }
+    }
+    let mut t = T(BTreeSet::new());
+    for (rel, text) in lexscope_texts() {
+        if rel.ends_with("tests.rs") {
+            continue;
+        }
+        let f = syn::parse_file(&text).unwrap_or_else(|e| panic!("H6 cannot parse {rel}: {e}"));
+        t.visit_file(&f);
+    }
+    t.0
+}
+
 #[test]
 fn h6_the_walk_call_sites_are_pinned() {
     // the hit reader: a field, a `hit_*`, a local closure, a local table, a passed name
@@ -2225,6 +2301,15 @@ fn h6_the_walk_call_sites_are_pinned() {
         ("|k: &str| self.symbols.contains_key(k)", false),
         ("|me: &Self| me.symbols.contains_found(&k)", false),
         ("|k| self.symbols.contains_found(&other)", false),
+        // round 2: the other found-key takers and a closure through a block's tail / a reference
+        ("|k| found_text(k) == name", true),
+        ("|k| self.lex.gen_binding_encloses(k, name, at)", true),
+        (
+            "{ let p = &self.params; move |k: &DeclKey| p.contains_found(k) }",
+            true,
+        ),
+        ("&|k| key_same(k, &key)", true),
+        ("{ let p = 1; p }", false),
     ] {
         assert_eq!(
             found_key_closure(&syn::parse_str::<Expr>(src).expect("found closure")),
@@ -2274,6 +2359,54 @@ fn h6_the_walk_call_sites_are_pinned() {
          `Hit` value for Q-DECLKEY DK2), add the row",
         "a scope-walk call is gone: name the unit, remove the row",
     );
+    // §5.2 Q-DECLKEY DK1-6 round 2: two local closures of one name in one fn when a probe list
+    // of that fn calls `name()` (its expansion would read the later closure only)
+    for r in &c.fns {
+        let called = |n: &str| {
+            let call = format!("{n}()");
+            r.walk_calls.iter().any(|(_, p)| p.contains(&call))
+                || r.found_closures.values().any(|p| p.contains(&call))
+                || r.local_closures.values().any(|p| p.contains(&call))
+        };
+        for name in r.local_dups.iter().filter(|n| called(n)) {
+            msgs.push(format!(
+                "H6 DUP LOCAL  {} · {} · {name}: a second local closure bound to `{name}` in one fn while a probe \
+                 calls `{name}()` — its expansion would read only the later's probes ; rename one",
+                r.file, r.qual
+            ));
+        }
+    }
+    // §5.2 Q-DECLKEY DK1-6 round 2: every fn of lexscope with a DeclKey parameter is a found-key
+    // taker found_key_closure reads (a `_found` entry, FOUND_FNS, FOUND_METHODS)
+    let takers = declkey_takers();
+    for t in FOUND_FNS.iter().chain(FOUND_METHODS) {
+        if !takers.contains(*t) {
+            msgs.push(format!(
+                "H6 FOUND TAKER STALE  {t}: no lexscope fn of that name has a DeclKey parameter — remove it"
+            ));
+        }
+    }
+    for t in takers {
+        if !(t.ends_with("_found")
+            || FOUND_FNS.contains(&t.as_str())
+            || FOUND_METHODS.contains(&t.as_str()))
+        {
+            msgs.push(format!(
+                "H6 FOUND TAKER  {t}: a lexscope fn with a DeclKey parameter that found_key_closure does not read — \
+                 add it to FOUND_FNS (a free fn) or FOUND_METHODS (a method)"
+            ));
+        }
+    }
+    // §5.2 Q-DECLKEY DK1-6 (DELTA17 F6 (3)): two found-key closures of one name in one fn
+    for r in &c.fns {
+        for name in &r.found_dups {
+            msgs.push(format!(
+                "H6 DUP FOUND  {} · {} · {name}: a second found-key closure bound to `{name}` in one fn — \
+                 one FOUND row would hold only the later's probes ; rename one (each is its own FOUND row)",
+                r.file, r.qual
+            ));
+        }
+    }
     let mut by_class: BTreeMap<String, usize> = BTreeMap::new();
     let mut texts: BTreeSet<String> = BTreeSet::new();
     let mut sets: BTreeSet<String> = BTreeSet::new();
@@ -4236,6 +4369,21 @@ fn mac_exprs(mac: &syn::Macro) -> Vec<Expr> {
     first.parse2(mac.tokens.clone()).into_iter().collect()
 }
 
+/// `matches!`'s arguments `e, pat [if guard] [,]` (§5.2 Q-DECLKEY DK1-6 round 2, HKC).
+fn matches_parts(input: ParseStream) -> syn::Result<(Expr, Pat, Option<Expr>)> {
+    let e: Expr = input.parse()?;
+    let _: Token![,] = input.parse()?;
+    let pat = Pat::parse_multi_with_leading_vert(input)?;
+    let guard = if input.peek(Token![if]) {
+        let _: Token![if] = input.parse()?;
+        Some(input.parse()?)
+    } else {
+        None
+    };
+    let _: Option<Token![,]> = input.parse()?;
+    Ok((e, pat, guard))
+}
+
 const DIVERGE_MACROS: &[&str] = &["panic", "unreachable", "todo", "unimplemented"];
 
 /// `std::mem::{replace, take, swap}(&mut <recv>.cur_prefix, ..)`: (form, ARG).
@@ -6061,7 +6209,14 @@ impl HoutW {
                     .map(|x| x.ident.to_string())
                     .unwrap_or_default();
                 if p.path.segments.len() == 1 && last == "scope_out" {
-                    self.rows.push((last, "fn-value".into(), ctx.clone()));
+                    self.rows
+                        .push((last.clone(), "fn-value".into(), ctx.clone()));
+                }
+                // §5.2 Q-DECLKEY DK1-6 round 2: a watched fn named as a value (`let mk =
+                // key_in;`, `.map(lexscope::key_in)`) is a watched call of it (args `fn-value`)
+                if self.watch.contains(&last) {
+                    self.watched
+                        .push((last, vec!["fn-value".into()], ctx.clone()));
                 }
             }
             other => {
@@ -6814,6 +6969,84 @@ fn hxf_the_found_set_fills_are_pinned() {
     finish("HXF", &msgs);
 }
 
+#[test]
+fn hki_the_key_in_callers_are_pinned() {
+    // §5.2 Q-DECLKEY DK1-6 (DELTA18 R-J9 NOTE-2): lexscope's `key_in(k, member)` forms the
+    // member key `<k>.<member>` with no empty-key guard (its doc) ; its callers OUTSIDE lexscope
+    // are pinned by (file, fn, entry) with a count, the HXF form: a second caller is a new row
+    // (read whether its `k` can be the empty key), a moved count a changed row. Round 2: a fn
+    // value of key_in is a caller ; NOT-PROMISED: the HKI table head's K1-K4.
+    // round 2 (§5.2 Q-DECLKEY DK1-6 r2): the walker on blocks — a fn value of key_in is a watched
+    // call (CLOSED) ; a closure's body, a `matches!` guard's scrutinee and `vec![e; n]`'s element are
+    // read already (mac_exprs: a comma list, else the first expression)
+    let watched_in = |src: &str| -> usize {
+        let b: syn::Block = syn::parse_str(src).expect("HKI block");
+        let mut w = HoutW {
+            rows: Vec::new(),
+            watch: vec!["key_in".to_string()],
+            watched: Vec::new(),
+            assigns: Vec::new(),
+            lets: BTreeMap::new(),
+            m_path_idx: None,
+        };
+        w.block(&b, &Sk::Ret);
+        w.watched.len()
+    };
+    for (src, n) in [
+        ("{ let mk = key_in; mk(&k, m) }", 1),
+        ("{ let v: Vec<_> = ms.iter().map(|m| lexscope::key_in(&k, m)).collect(); }", 1),
+        ("{ if matches!(self.symbols.get_at(&key_in(&k, m)), Some(&id) if id != 0) { 1 } else { 0 } }", 1),
+        ("{ let v = vec![key_in(&k, m); 2]; }", 1),
+        ("{ let v = key_inside(&k, m); }", 0),
+    ] {
+        assert_eq!(watched_in(src), n, "{src}");
+    }
+    let entries = vec!["key_in".to_string()];
+    let mut rows: BTreeMap<String, usize> = BTreeMap::new();
+    for (file, qual, callee, _, _) in watched_calls(&entries) {
+        if in_lexscope(&file) {
+            continue;
+        }
+        *rows.entry(format!("{file}\t{qual}\t{callee}")).or_default() += 1;
+    }
+    let got: BTreeMap<String, String> = rows
+        .iter()
+        .map(|(k, n)| (k.clone(), n.to_string()))
+        .collect();
+    let dumped: Vec<String> = rows.iter().map(|(k, n)| format!("{k}\t{n}")).collect();
+    dump("HKI", "file\tfn\tentry\tcount", &dumped);
+    let mut want = BTreeMap::new();
+    for row in table(&tables::get("HKI")) {
+        assert_eq!(
+            row.len(),
+            4,
+            "HKI table row has {} columns, not 4: {row:?}",
+            row.len()
+        );
+        want.insert(row[..3].join("\t"), row[3].clone());
+    }
+    let mut msgs = diff_rows(
+        "HKI",
+        &got,
+        &want,
+        "a new caller of key_in outside lexscope: key_in forms `<k>.<member>` with no empty-key guard — \
+         name the unit, read whether its key can be empty, add the row",
+        "a caller of key_in is gone: name the unit, remove the row",
+    );
+    let counts = format!(
+        "entries={} sites={}",
+        entries.len(),
+        rows.values().sum::<usize>()
+    );
+    if counts != tables::get("HKI_COUNTS") {
+        msgs.push(format!(
+            "HKI COUNTS table [{}] now [{counts}]",
+            tables::get("HKI_COUNTS")
+        ));
+    }
+    finish("HKI", &msgs);
+}
+
 /// HSTAY's census of one body: every call by its callee's name — `.m` a method call, `f(` a path
 /// call (its last segment), `m!` a macro (its expressions visited too) ; a nested item is not entered.
 struct CallNames(BTreeMap<String, usize>);
@@ -7346,13 +7579,11 @@ const HKC_MUT: &[&str] = &[
 /// (HKC_FORMS) — every lexscope file read, its `#[cfg(test)]` file too, and the arguments of a
 /// macro read as a comma list of expressions. A `write` is attributed to a type through the
 /// binding's own spelled type: a fn / closure parameter `k: T` / `&T` / `&mut T`, a `let k: T`,
-/// a `let k = T(..)`, or `self` inside `impl T`. REVIEW-ONLY (restated at §5.2 Q-DECLKEY DK1-5a,
-/// DELTA16 R-H12 note 3): `Self(..)` inside the type's own `impl` — a construction HKC does not
-/// count (key.rs has none) ; the body of a `macro_rules!` definition and a macro argument that is
-/// no expression — neither is read ; a `.0` write through a
-/// binding whose type is not spelled where HKC reads it (an untyped `let` of a returned key, a
-/// struct field holding a key, a `&mut String` taken by a method HKC_MUT does not list) ; a
-/// whole-key move (`mem::swap` of two keys moves a key, not its text). Outside lexscope the
+/// a `let k = T(..)`, or `self` inside `impl T` ; since §5.2 Q-DECLKEY DK1-6 `Self(..)` inside
+/// the type's own impl counts as that type, and (round 2) so do `let k = Self(..)`, `k: &mut
+/// Self`, `self` of a trait impl for T and `matches!`'s pattern. REVIEW-ONLY: the HKC table
+/// head's NOT-PROMISED C1-C4 (an alias of `Self`, a binding whose type is not spelled, a macro
+/// body, a whole-key move). Outside lexscope the
 /// field is private: no row can exist there (C_AT_FROM_TEXT / C_AT_BUILT_OUTSIDE fail to
 /// compile).
 fn hkc_census() -> BTreeMap<String, usize> {
@@ -7404,6 +7635,9 @@ fn hkc_count(file: &syn::File) -> BTreeMap<(String, String), usize> {
         typed: Vec<BTreeMap<String, String>>,
         /// the key type of the enclosing `impl`, if any
         impl_ty: Vec<Option<String>>,
+        /// §5.2 Q-DECLKEY DK1-6 (DELTA17 F6 (3)): the key type `Self` names in the enclosing
+        /// `impl`, inherent or trait (`impl From<String> for AtKey { .. Self(s) .. }`)
+        self_key: Vec<Option<String>>,
     }
     impl C {
         fn add(&mut self, ty: &str, form: &str) {
@@ -7417,12 +7651,31 @@ fn hkc_count(file: &syn::File) -> BTreeMap<(String, String), usize> {
                 let n = l.ident.to_string();
                 if HKC_TYPES.contains(&n.as_str()) {
                     self.add(&n, form);
+                } else if n == "Self" && p.segments.len() == 1 {
+                    // `Self(..)` / `Self { .. }` / `Self` as a value inside a key type's own impl
+                    if let Some(t) = self.self_key.last().cloned().flatten() {
+                        self.add(&t, form);
+                    }
                 }
+            }
+        }
+        /// round 2: `Self` (`&Self`, `&mut Self`) inside a key type's own impl is that type
+        fn self_named(&self, t: &syn::Type) -> Option<String> {
+            match t {
+                syn::Type::Reference(r) => self.self_named(&r.elem),
+                syn::Type::Paren(p) => self.self_named(&p.elem),
+                syn::Type::Path(p) if p.qself.is_none() && p.path.is_ident("Self") => {
+                    self.self_key.last().cloned().flatten()
+                }
+                _ => None,
             }
         }
         fn bind_pat(&mut self, p: &Pat, ty: Option<String>) {
             let (pat, ty) = match p {
-                Pat::Type(pt) => (&*pt.pat, key_ty(&pt.ty).or(ty)),
+                Pat::Type(pt) => (
+                    &*pt.pat,
+                    key_ty(&pt.ty).or_else(|| self.self_named(&pt.ty)).or(ty),
+                ),
                 other => (other, ty),
             };
             if let (Pat::Ident(pi), Some(t)) = (pat, ty) {
@@ -7453,12 +7706,11 @@ fn hkc_count(file: &syn::File) -> BTreeMap<(String, String), usize> {
     }
     impl<'a> Visit<'a> for C {
         fn visit_item_impl(&mut self, i: &'a syn::ItemImpl) {
-            self.impl_ty.push(if i.trait_.is_none() {
-                key_ty(&i.self_ty)
-            } else {
-                None
-            });
+            // round 2: `self.0` is the key type's field in a trait impl as in an inherent one
+            self.impl_ty.push(key_ty(&i.self_ty));
+            self.self_key.push(key_ty(&i.self_ty));
             visit::visit_item_impl(self, i);
+            self.self_key.pop();
             self.impl_ty.pop();
         }
         fn visit_item_fn(&mut self, f: &'a syn::ItemFn) {
@@ -7490,6 +7742,7 @@ fn hkc_count(file: &syn::File) -> BTreeMap<(String, String), usize> {
             self.typed.pop();
         }
         fn visit_local(&mut self, l: &'a syn::Local) {
+            let self_key = self.self_key.last().cloned().flatten();
             let from_init = l.init.as_ref().and_then(|i| match &*i.expr {
                 Expr::Call(c) => match &*c.func {
                     Expr::Path(p) => p
@@ -7497,7 +7750,16 @@ fn hkc_count(file: &syn::File) -> BTreeMap<(String, String), usize> {
                         .segments
                         .last()
                         .map(|s| s.ident.to_string())
-                        .filter(|n| HKC_TYPES.contains(&n.as_str())),
+                        .and_then(|n| {
+                            if HKC_TYPES.contains(&n.as_str()) {
+                                Some(n)
+                            } else if n == "Self" && p.path.segments.len() == 1 {
+                                // round 2: `let mut k = Self(..)` in a key type's impl
+                                self_key.clone()
+                            } else {
+                                None
+                            }
+                        }),
                     _ => None,
                 },
                 _ => None,
@@ -7594,6 +7856,13 @@ fn hkc_count(file: &syn::File) -> BTreeMap<(String, String), usize> {
                 for a in &args {
                     self.visit_expr(a);
                 }
+            } else if let Ok((e, pat, guard)) = m.parse_body_with(matches_parts) {
+                // round 2: `matches!(e, pat if guard)` — its pattern (a constructor) and guard
+                self.visit_expr(&e);
+                self.visit_pat(&pat);
+                if let Some(g) = guard {
+                    self.visit_expr(&g);
+                }
             }
         }
     }
@@ -7601,6 +7870,7 @@ fn hkc_count(file: &syn::File) -> BTreeMap<(String, String), usize> {
         n: BTreeMap::new(),
         typed: vec![BTreeMap::new()],
         impl_ty: Vec::new(),
+        self_key: Vec::new(),
     };
     c.visit_file(file);
     c.n
@@ -7665,6 +7935,39 @@ fn hkc_the_key_constructions_are_pinned() {
             "AtKey:write=6",
             "DeclKey:value=1",
             "DeclKey:write=1"
+        ]
+    );
+    // DK1-6 (DELTA17 F6 (3)): `Self` inside a key type's own impl, inherent or trait, is that
+    // type (a call, a struct literal, a pattern, a value) ; `Self::new()` and `Self` of a non-key
+    // impl are not counted
+    let fx = syn::parse_file(
+        "impl AtKey { fn a(s: String) -> Self { Self(s) } fn b(&self) -> bool { let Self(t) = self; t.is_empty() } \
+         fn c() -> Self { Self::new() } } \
+         impl From<String> for DeclKey { fn from(s: String) -> Self { Self { 0: s } } } \
+         impl NewKey { fn d(v: Vec<String>) -> Vec<Self> { v.into_iter().map(Self).collect() } } \
+         impl Keyed { fn e() -> Self { Self(Vec::new()) } }",
+    )
+    .expect("HKC fixture 3");
+    assert_eq!(
+        shown(hkc_count(&fx)),
+        ["AtKey:ctor=2", "DeclKey:ctor=1", "NewKey:value=1"]
+    );
+    // DK1-6 round 2: `.0` writes inside a key type's own impl through a `Self`-typed local, a
+    // `&mut Self` parameter and `&mut self` of a trait impl ; `Self(..)` as `matches!`'s pattern
+    let fx = syn::parse_file(
+        "impl AtKey { fn a(p: &str) -> Self { let mut key = Self(String::new()); key.0.push_str(p); key } \
+         fn b(key: &mut Self, s: &str) { key.0.push_str(s); } } \
+         impl Extend<char> for NewKey { fn extend<I>(&mut self, i: I) { self.0.extend(i); } } \
+         impl DeclKey { fn c(k: &Self) -> bool { matches!(k, Self(t) if !t.is_empty()) } }",
+    )
+    .expect("HKC fixture 4");
+    assert_eq!(
+        shown(hkc_count(&fx)),
+        [
+            "AtKey:ctor=1",
+            "AtKey:write=2",
+            "DeclKey:ctor=1",
+            "NewKey:write=1"
         ]
     );
     let rows = hkc_census();

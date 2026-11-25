@@ -18,7 +18,8 @@
 //! I-OUT. Every lexscope fn that takes the Elaborator (a receiver in `impl Elaborator`, or
 //! `Self` in a callback) is on the list E, its body pinned by OUT-F (`self.<field>` whose
 //! field type is not a lexscope type ; a WINDOW type's store counts as not one), OUT-C (calls of fns not defined in lexscope), OUT-M
-//! (macro calls) by (fn, name, count) ; FLOW (`in`, `payload`, `text:<sink>`) is a hand column.
+//! (macro calls) by (fn, name, count) ; FLOW (`in`, `payload`, `text:<sink>`) is a hand column
+//! (its `text:` parts checked by E3 since §5.2 Q-DECLKEY DK1-6, below).
 //!
 //! The rules DELTA11 R2 adds (LS1 part 5), each a counted list whose missing row FAILS:
 //! CARD — an OUT position whose type holds a cardinality constructor at any depth (Option,
@@ -108,6 +109,31 @@
 //! STALE. Its rows are the stores' text door w9 (`Keyed`, `KeyedSet`, deleted at DK3-b) ; the
 //! list does not widen ALLOWED_IMPLS (a `Deref` on any other type still fails IMPL-TRAIT, NP10-1).
 //!
+//! The rule §5.2 Q-DECLKEY DK1-6 adds (DELTA18 G2.4 E1-E4, R-J3, as corrected by R-J7 (a)):
+//! OUTCALL — every call from a fn of the file set (any tier, closures and a macro's expression
+//! list included) to a fn of the crate defined OUTSIDE the file set is a row of OUTCALL (item,
+//! callee, count, class, closes) ; a call with no row, or a moved count, FAILS OUTCALL, a row with
+//! no call is STALE. Three call styles: SELF `self.f(..)` / `Self::f(..)` in `impl Elaborator`
+//! and `Elaborator::f(..)` (callee `Elaborator::f`) ; RECV `<expr>.f(..)` on any other receiver,
+//! resolved by the name f against every method (a fn with a receiver) the crate defines outside
+//! (callee `.f`), but a name on OUTCALL_BLIND (why `std`: on STD_METHODS ; why `module`: a method
+//! of the file set) is not resolved and a blind row no call uses is STALE ; FREE `f(..)` (no fn of
+//! the file set), `crate::..::f(..)` / `super::..::f(..)` out of the module, `T::f(..)` of a crate
+//! type T (callee `f` / `T::f`). CLASS (E2) is bound by the callee's signature: no parameter
+//! spelling a TEXT_TYPES name -> `none` ; one or more -> `in` (an entered parameter passed through),
+//! `error` (the callee is on OUTCALL_SINKS, a closed list) or `text:<Lid>`, never `none`. E3:
+//! `text:<Lid>` names a LEAVE row of the calling item at position `OUT:<callee>`, its type the
+//! callee's text parameters, its closing unit the row's ; a FLOW tag `text:LEAVE-<id>` of E names
+//! an id LEAVE holds, and every other `text:<sink>` part is `error`, an OUT type or a vocabulary
+//! name an OUT type spells, `+` joining parts. Round 2 (§5.2 Q-DECLKEY DK1-6 r2): a fn named as
+//! a value counts as a call ; a path is read through the file's `use` into the crate ; `<T>::f`
+//! and `<T as Tr>::f` are `T::f` ; `(*self).f` is SELF ; `matches!` and `vec![e; n]` are read ;
+//! a type parameter's text bound, `impl Display`, a byte sequence and a text type's own impl take
+//! text. NOT-PROMISED: SURF_OUTCALL's head, N1-N13, one shape a line (data flow, a fn held in a
+//! field or passed in, the blind list, operator / auto-deref / derived calls, a macro body,
+//! macro-made fns, aliases, a struct holding text, constructors, other crates, a wrapper, a
+//! text type behind an alias).
+//!
 //! What the engine reads: the module's file set = `lexscope/mod.rs` (or `lexscope.rs`) and
 //! every file a `mod x;` inside it reaches ; every item there, in `impl` blocks, inline `mod`
 //! blocks, `#[cfg(..)]` twins alike (a cfg'd item counts: fail-closed), and the items
@@ -146,7 +172,7 @@
 //! a body that passes its BODY pin does at run time (the hash is loud, not a refusal).
 //!
 //! Three tests: the engine on fixtures (one clean module that passes with its whole surface
-//! pinned, NS1-NS32, the NB controls, NI1-NI10, NA1-NA7, NU1 and NT1-NT9 each failing with the pinned (item, position, rule)
+//! pinned, NS1-NS32, the NB controls, NI1-NI10, NA1-NA7, NU1, NT1-NT9 and NO1-NO35 each failing with the pinned (item, position, rule)
 //! set) ; the real crate, where `SURF_PRESENT` pinned `absent` until LS2a flipped it to
 //! `present` and pinned the computed surface (the code computes the whole surface the day
 //! the module appears, with no edit here) ; SURF-PLAN, the 30 fns DELTA10 L2 moves, judged by I-SURF on
@@ -225,6 +251,8 @@ const ALLOWED_IMPLS: &[&str] = &["Clone", "Default", "Debug", "Drop", BOUNDARY_T
 const WINDOW_TRAITS: &[&str] = &["Deref", "DerefMut"];
 const STD_ROOTS: &[&str] = &["std", "core", "alloc"];
 const FLOWS: &[&str] = &["in", "payload"];
+/// OUTCALL's fixtures (§5.2 Q-DECLKEY DK1-6): NO1 .. NO_LAST each fail as FIX_EXPECT pins.
+const NO_LAST: u32 = 35;
 /// CARD's named constructors (a slice, an array and two or more `bool` are the others).
 const CARD_CTORS: &[&str] = &["Option", "Vec"];
 /// CARD's MEANS values: `caller`, or one of these prefixes with a non-empty rest.
@@ -717,6 +745,12 @@ struct Cfg {
     e: Vec<Vec<String>>,
     /// WINDOW: type, trait, deleting unit, since (a dated, named admission of one trait impl)
     window: Vec<Vec<String>>,
+    /// OUTCALL: item, callee, count, class, closes
+    outcall: Vec<Vec<String>>,
+    /// OUTCALL's blind list: name, why (`std` | `module`)
+    outcall_blind: Vec<Vec<String>>,
+    /// OUTCALL's error sinks: callee
+    outcall_sinks: BTreeSet<String>,
 }
 
 fn rows_of(text: &str, cols: usize, what: &str) -> Vec<Vec<String>> {
@@ -788,6 +822,9 @@ fn cfg_with(prefix: &str, over: &BTreeMap<String, String>) -> Cfg {
             .collect(),
         e: rows_of(&get(&format!("{prefix}_E")), 5, "E"),
         window: rows_of(&get(&format!("{prefix}_WINDOW")), 4, "WINDOW"),
+        outcall: rows_of(&get(&format!("{prefix}_OUTCALL")), 5, "OUTCALL"),
+        outcall_blind: rows_of(&get(&format!("{prefix}_OUTCALL_BLIND")), 2, "OUTCALL_BLIND"),
+        outcall_sinks: one(&format!("{prefix}_OUTCALL_SINKS")),
     }
 }
 
@@ -3335,6 +3372,9 @@ struct Surface {
     addr_rows: Vec<String>,
     addr_calls: Vec<String>,
     unwind_rows: Vec<String>,
+    /// OUTCALL's computed rows (item, callee, count, style, text parameters) and its counts
+    outcall_rows: Vec<String>,
+    outcall_counts: String,
 }
 
 /// A fn of the file set, for the shim check.
@@ -4205,6 +4245,7 @@ fn surface(vfs: &Vfs, cfg: &Cfg, own: &str, deps: &[Krate]) -> Surface {
     }
     shims_check(&mut eng, &fn_index);
     outgoing_check(&mut eng, &files[0].rel);
+    outcall_check(&mut eng, &files, &ats, &others);
     e_compare(&mut eng);
     macros_check(&mut eng, &files, &ats, &others);
     bodies_check(&mut eng, &files, vfs);
@@ -5474,23 +5515,995 @@ fn e_compare(eng: &mut Eng<'_>) {
             ));
         }
         let flow_ok = if kind == "FN" {
-            flow == "-"
+            if flow == "-" {
+                Ok(())
+            } else {
+                Err(String::new())
+            }
+        } else if FLOWS.contains(&flow.as_str()) {
+            Ok(())
         } else {
-            FLOWS.contains(&flow.as_str())
-                || flow.strip_prefix("text:").is_some_and(|s| !s.is_empty())
+            match flow.strip_prefix("text:") {
+                Some(s) if !s.is_empty() => text_sink_ok(eng, s),
+                _ => Err(String::new()),
+            }
         };
-        if !flow_ok {
+        if let Err(why) = flow_ok {
             fails.push((
                 item.clone(),
                 kind.clone(),
                 "FLOW".into(),
-                format!("FLOW `{flow}`"),
+                if why.is_empty() {
+                    format!("FLOW `{flow}`")
+                } else {
+                    format!("FLOW `{flow}`: {why}")
+                },
             ));
         }
     }
     for (item, kind, rule, d) in fails {
         eng.fail("-", &item, &kind, &rule, d);
     }
+}
+
+// =====================================================================================
+// OUTCALL: the module's calls to fns of the crate defined outside it (§5.2 Q-DECLKEY DK1-6)
+// =====================================================================================
+
+/// OUTCALL's closed list of std method names (W/scopebind/dk1_5a/gen/modcalls.py's STD list, the
+/// census S7-J2 ran): a method call on a receiver other than `self` whose name is on it and on
+/// the table `<prefix>_OUTCALL_BLIND` with why `std` is not resolved (the stated blind spot) — a
+/// std type has a method by that name, and syntax does not know the receiver's type.
+const STD_METHODS: &[&str] = &[
+    "get",
+    "get_mut",
+    "insert",
+    "remove",
+    "contains",
+    "contains_key",
+    "is_empty",
+    "len",
+    "iter",
+    "iter_mut",
+    "into_iter",
+    "keys",
+    "values",
+    "push",
+    "pop",
+    "clear",
+    "clone",
+    "cloned",
+    "copied",
+    "collect",
+    "map",
+    "filter",
+    "find",
+    "any",
+    "all",
+    "join",
+    "split",
+    "rsplit",
+    "rsplit_once",
+    "split_once",
+    "starts_with",
+    "ends_with",
+    "strip_prefix",
+    "strip_suffix",
+    "to_string",
+    "to_owned",
+    "as_str",
+    "unwrap",
+    "unwrap_or",
+    "unwrap_or_else",
+    "unwrap_or_default",
+    "expect",
+    "ok",
+    "err",
+    "is_some",
+    "is_none",
+    "is_ok",
+    "then",
+    "then_some",
+    "and_then",
+    "or_else",
+    "entry",
+    "or_insert",
+    "or_default",
+    "extend",
+    "range",
+    "first",
+    "last",
+    "chain",
+    "rev",
+    "enumerate",
+    "filter_map",
+    "flat_map",
+    "count",
+    "next",
+    "as_ref",
+    "as_deref",
+    "take",
+    "replace",
+    "sort",
+    "dedup",
+    "retain",
+    "fmt",
+    "eq",
+    "cmp",
+    "partial_cmp",
+    "hash",
+    "min",
+    "max",
+    "sum",
+    "with_capacity",
+    "new",
+    "default",
+    "from",
+    "into",
+    "append",
+    "truncate",
+    "split_off",
+    "drain",
+    "lines",
+    "chars",
+    "bytes",
+    "trim",
+    "format",
+    "write",
+    "push_str",
+    "to_vec",
+    "position",
+    "zip",
+    "skip",
+    "windows",
+    "peekable",
+    "last_mut",
+    "find_map",
+    "min_by_key",
+    "max_by_key",
+    "map_or",
+    "map_or_else",
+    "is_some_and",
+    "borrow",
+    "borrow_mut",
+    "deref",
+    "deref_mut",
+    "as_mut",
+    "set",
+    "swap",
+    "get_or_insert_with",
+    "cloned_from",
+    "clone_from",
+    "or",
+    "ok_or",
+    "ok_or_else",
+    "display",
+];
+
+/// E3 (§5.2 Q-DECLKEY DK1-6, DELTA18 G2.4): a FLOW tag `text:<sink>` of E names, per `+` part, a
+/// `LEAVE-<id>` that LEAVE holds, `error`, an entry of the computed OUT types, or a vocabulary
+/// name such an entry spells (`DeclKey` in `Option<DeclKey>`) ; anything else fails FLOW.
+fn text_sink_ok(eng: &Eng<'_>, s: &str) -> Result<(), String> {
+    let spells = |t: &str, name: &str| {
+        t.split(|c: char| !(c.is_alphanumeric() || c == '_'))
+            .any(|w| w == name)
+    };
+    let mut bad = Vec::new();
+    for part in s.split('+') {
+        if let Some(id) = part.strip_prefix("LEAVE-") {
+            if !eng.cfg.leave.iter().any(|l| l[0] == id) {
+                bad.push(format!("LEAVE {id} is no row of LEAVE (a dangling tag)"));
+            }
+        } else if part == "error"
+            || eng.s.out_types.contains(part)
+            || (eng.cfg.vocab.contains_key(part) && eng.s.out_types.iter().any(|t| spells(t, part)))
+        {
+        } else {
+            bad.push(format!(
+                "`{part}` is no LEAVE-<id>, `error`, OUT type or vocabulary name an OUT type spells"
+            ));
+        }
+    }
+    if bad.is_empty() {
+        Ok(())
+    } else {
+        Err(bad.join("; "))
+    }
+}
+
+/// OUTCALL: an fn the crate defines outside the file set — where, its signature, its text-typed
+/// parameters (a parameter type spelling a TEXT_TYPES name at any depth: `&str`, `String`,
+/// `&[String]`, `Option<&str>`, a String-keyed map ; normalised).
+struct ODef {
+    sig: String,
+    text: Vec<String>,
+}
+
+/// OUTCALL's index of the fns outside the file set (items not inside a body): the Elaborator's
+/// (inherent and trait impls), every method with a receiver (any impl, any trait), every free fn,
+/// and every impl fn by (its impl's type, its name).
+#[derive(Default)]
+struct OIdx {
+    elab: BTreeMap<String, Vec<ODef>>,
+    methods: BTreeMap<String, Vec<ODef>>,
+    free: BTreeMap<String, Vec<ODef>>,
+    assoc: BTreeMap<(String, String), Vec<ODef>>,
+}
+
+/// OUTCALL (§5.2 Q-DECLKEY DK1-6 round 2): trait names a bound may spell that take text with no
+/// text type in them (`impl Display`, `S: ToString`) — a parameter so bound takes text.
+const TEXT_BOUNDS: &[&str] = &["Display", "ToString"];
+
+/// Every identifier a bound list names (`AsRef<str>` -> AsRef, str).
+fn bound_names<'b>(bs: impl Iterator<Item = &'b TypeParamBound>, out: &mut BTreeSet<String>) {
+    struct V<'o>(&'o mut BTreeSet<String>);
+    impl<'ast> Visit<'ast> for V<'_> {
+        fn visit_path_segment(&mut self, s: &'ast syn::PathSegment) {
+            self.0.insert(s.ident.to_string());
+            visit::visit_path_segment(self, s);
+        }
+    }
+    let mut v = V(out);
+    for b in bs {
+        v.visit_type_param_bound(b);
+    }
+}
+
+/// A byte sequence at any depth (`&[u8]`, `[u8; N]`, `Vec<u8>`): text, as I-SURF reads it.
+fn spells_bytes(t: &Type) -> bool {
+    struct V(bool);
+    impl<'ast> Visit<'ast> for V {
+        fn visit_type_slice(&mut self, s: &'ast syn::TypeSlice) {
+            self.0 |= type_last(&s.elem).as_deref() == Some("u8");
+            visit::visit_type_slice(self, s);
+        }
+        fn visit_type_array(&mut self, a: &'ast syn::TypeArray) {
+            self.0 |= type_last(&a.elem).as_deref() == Some("u8");
+            visit::visit_type_array(self, a);
+        }
+        fn visit_path_segment(&mut self, s: &'ast syn::PathSegment) {
+            if s.ident == "Vec" {
+                if let syn::PathArguments::AngleBracketed(a) = &s.arguments {
+                    self.0 |= a.args.iter().any(|g| {
+                        matches!(g, syn::GenericArgument::Type(t)
+                            if type_last(t).as_deref() == Some("u8"))
+                    });
+                }
+            }
+            visit::visit_path_segment(self, s);
+        }
+    }
+    let mut v = V(false);
+    v.visit_type(t);
+    v.0
+}
+
+/// The type parameters (of the fn and of its impl) whose bounds, inline or in a `where`
+/// clause, spell a text type or a TEXT_BOUNDS trait (`S: AsRef<str>`, `where S: Into<String>`).
+fn text_generics(gs: &[&syn::Generics]) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    let texty = |names: &BTreeSet<String>| {
+        names
+            .iter()
+            .any(|n| is_text_name(n) || TEXT_BOUNDS.contains(&n.as_str()))
+    };
+    for g in gs {
+        for p in &g.params {
+            if let syn::GenericParam::Type(tp) = p {
+                let mut names = BTreeSet::new();
+                bound_names(tp.bounds.iter(), &mut names);
+                if texty(&names) {
+                    out.insert(tp.ident.to_string());
+                }
+            }
+        }
+        for w in g.where_clause.iter().flat_map(|w| w.predicates.iter()) {
+            if let syn::WherePredicate::Type(pt) = w {
+                let mut names = BTreeSet::new();
+                bound_names(pt.bounds.iter(), &mut names);
+                if let (true, Some(n)) = (texty(&names), type_last(&pt.bounded_ty)) {
+                    out.insert(n);
+                }
+            }
+        }
+    }
+    out
+}
+
+/// OUTCALL's reading of one signature: a parameter takes text when its type spells a TEXT_TYPES
+/// name at any depth, a TEXT_BOUNDS trait (`impl Display`), a byte sequence, or a type
+/// parameter `text_generics` holds ; the receiver takes text when the impl is for a text type
+/// (`impl StrExt for str`: `self_text`).
+fn odef(
+    at: &str,
+    sig: &syn::Signature,
+    outer: Option<&syn::Generics>,
+    self_text: Option<&str>,
+) -> ODef {
+    let mut text = Vec::new();
+    let mut params = Vec::new();
+    let mut gs = vec![&sig.generics];
+    gs.extend(outer);
+    let gen = text_generics(&gs);
+    for a in &sig.inputs {
+        match a {
+            FnArg::Receiver(_) => {
+                if let Some(t) = self_text {
+                    text.push(format!("self: {t}"));
+                }
+                params.push("self".to_string());
+            }
+            FnArg::Typed(pt) => {
+                let mut names = BTreeSet::new();
+                type_names(&pt.ty, &mut names);
+                let t = nt(&pt.ty);
+                if names.iter().any(|n| {
+                    is_text_name(n) || TEXT_BOUNDS.contains(&n.as_str()) || gen.contains(n)
+                }) || spells_bytes(&pt.ty)
+                {
+                    text.push(t.clone());
+                }
+                params.push(t);
+            }
+        }
+    }
+    ODef {
+        sig: format!(
+            "{at} fn {}({}){}",
+            sig.ident,
+            params.join(", "),
+            nret(&sig.output)
+        ),
+        text,
+    }
+}
+
+fn oidx(others: &[(String, syn::File)]) -> OIdx {
+    let mut ix = OIdx::default();
+    for (rel, f) in others {
+        let mut ats = Vec::new();
+        flatten(rel, &f.items, 0, &[], false, &mut ats);
+        for at in &ats {
+            if at.in_body {
+                continue;
+            }
+            match at.item {
+                Item::Fn(x) => ix
+                    .free
+                    .entry(x.sig.ident.to_string())
+                    .or_default()
+                    .push(odef(rel, &x.sig, None, None)),
+                Item::Impl(im) => {
+                    let ty = impl_self_name(&im.self_ty);
+                    let self_text = is_text_name(&ty).then_some(ty.as_str());
+                    for ii in &im.items {
+                        let syn::ImplItem::Fn(x) = ii else { continue };
+                        let n = x.sig.ident.to_string();
+                        let at_ty = format!("{rel} {ty}::");
+                        let d = || odef(&at_ty, &x.sig, Some(&im.generics), self_text);
+                        if ty == ELAB {
+                            ix.elab.entry(n.clone()).or_default().push(d());
+                        }
+                        if x.sig.receiver().is_some() {
+                            ix.methods.entry(n.clone()).or_default().push(d());
+                        }
+                        ix.assoc.entry((ty.clone(), n)).or_default().push(d());
+                    }
+                }
+                Item::Trait(t) => {
+                    for ti in &t.items {
+                        let syn::TraitItem::Fn(x) = ti else { continue };
+                        let n = x.sig.ident.to_string();
+                        let d = || {
+                            odef(
+                                &format!("{rel} trait {}::", t.ident),
+                                &x.sig,
+                                Some(&t.generics),
+                                None,
+                            )
+                        };
+                        if x.sig.receiver().is_some() {
+                            ix.methods.entry(n.clone()).or_default().push(d());
+                        }
+                        // round 2: `Tr::f(x, ..)` (a trait's fn by its path, UFCS)
+                        ix.assoc
+                            .entry((t.ident.to_string(), n))
+                            .or_default()
+                            .push(d());
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    ix
+}
+
+/// One (item, callee) of OUTCALL: its style, how many calls, the callee's text parameters (every
+/// definition by that name: a RECV call reaches one of them), their signatures, the file.
+struct OCall {
+    style: &'static str,
+    n: usize,
+    text: BTreeSet<String>,
+    sigs: BTreeSet<String>,
+    file: String,
+}
+
+/// OUTCALL's walker over the file set: every call in every fn (BODY-ALL's item names), closures
+/// and the arguments of a macro that parse as an expression list included.
+struct OVis<'a> {
+    ix: &'a OIdx,
+    defs: &'a Defs,
+    blind: &'a BTreeMap<String, String>,
+    file: String,
+    /// the module depth below `lexscope` of the file and its inline `mod`s
+    depth: usize,
+    item: Option<String>,
+    ctx: Option<String>,
+    impl_ty: Vec<String>,
+    /// round 2: the file's `use` names bound into the crate (`crate_uses`)
+    uses: BTreeMap<String, Vec<String>>,
+    calls: BTreeMap<(String, String), OCall>,
+    blind_seen: BTreeMap<String, usize>,
+}
+
+/// OUTCALL (§5.2 Q-DECLKEY DK1-6 round 2): a file's `use` names that point into the crate
+/// (`use crate::..` / `super::..` / `self::..`, anywhere in the file, a fn body's too): the name
+/// a path may start with -> the path it stands for (`use crate::util;` util -> crate::util ;
+/// `use crate::Elaborator as El;` El -> crate::Elaborator ; `use crate::m::{self, f};`).
+fn crate_uses(f: &syn::File) -> BTreeMap<String, Vec<String>> {
+    fn tree(t: &syn::UseTree, pre: &mut Vec<String>, out: &mut BTreeMap<String, Vec<String>>) {
+        match t {
+            syn::UseTree::Path(p) => {
+                pre.push(p.ident.to_string());
+                tree(&p.tree, pre, out);
+                pre.pop();
+            }
+            syn::UseTree::Name(n) if n.ident == "self" => {
+                if let Some(l) = pre.last() {
+                    out.insert(l.clone(), pre.clone());
+                }
+            }
+            syn::UseTree::Name(n) => {
+                let mut v = pre.clone();
+                v.push(n.ident.to_string());
+                out.insert(n.ident.to_string(), v);
+            }
+            syn::UseTree::Rename(r) => {
+                let mut v = pre.clone();
+                if r.ident != "self" {
+                    v.push(r.ident.to_string());
+                }
+                out.insert(r.rename.to_string(), v);
+            }
+            syn::UseTree::Glob(_) => {}
+            syn::UseTree::Group(g) => {
+                for x in &g.items {
+                    tree(x, pre, out);
+                }
+            }
+        }
+    }
+    struct U(BTreeMap<String, Vec<String>>);
+    impl<'ast> Visit<'ast> for U {
+        fn visit_item_use(&mut self, u: &'ast syn::ItemUse) {
+            let mut all = BTreeMap::new();
+            tree(&u.tree, &mut Vec::new(), &mut all);
+            for (k, v) in all {
+                if v.len() >= 2 && matches!(v[0].as_str(), "crate" | "super" | "self") {
+                    self.0.insert(k, v);
+                }
+            }
+        }
+    }
+    let mut u = U(BTreeMap::new());
+    u.visit_file(f);
+    u.0
+}
+
+/// A macro's arguments as expressions for OUTCALL (round 2): a comma list ; else `matches!`'s
+/// `e, pat [if guard]` (the scrutinee and the guard) ; else `vec!`'s `e; n` ; else the first
+/// expression of the tokens (what follows it is not read).
+fn outcall_mac_args(m: &syn::Macro) -> Vec<Expr> {
+    if let Ok(l) = Punctuated::<Expr, Token![,]>::parse_terminated.parse2(m.tokens.clone()) {
+        return l.into_iter().collect();
+    }
+    let matches_form = |input: syn::parse::ParseStream| -> syn::Result<Vec<Expr>> {
+        let e: Expr = input.parse()?;
+        let _: Token![,] = input.parse()?;
+        let _ = syn::Pat::parse_multi_with_leading_vert(input)?;
+        let mut out = vec![e];
+        if input.peek(Token![if]) {
+            let _: Token![if] = input.parse()?;
+            out.push(input.parse()?);
+        }
+        let _: Option<Token![,]> = input.parse()?;
+        Ok(out)
+    };
+    if let Ok(v) = matches_form.parse2(m.tokens.clone()) {
+        return v;
+    }
+    let repeat = |input: syn::parse::ParseStream| -> syn::Result<Vec<Expr>> {
+        let e: Expr = input.parse()?;
+        let _: Token![;] = input.parse()?;
+        let n: Expr = input.parse()?;
+        Ok(vec![e, n])
+    };
+    if let Ok(v) = repeat.parse2(m.tokens.clone()) {
+        return v;
+    }
+    let first = |input: syn::parse::ParseStream| -> syn::Result<Vec<Expr>> {
+        let e: Expr = input.parse()?;
+        let _: TokenStream = input.parse()?;
+        Ok(vec![e])
+    };
+    first.parse2(m.tokens.clone()).unwrap_or_default()
+}
+
+impl<'a> OVis<'a> {
+    /// OUTCALL: the fn of the crate defined outside the file set a path names, if any: (style,
+    /// callee, its definitions). Round 2: a first segment a `use` of the file binds into the
+    /// crate is read through it (`use crate::m; m::f`, `use crate::Elaborator as El; El::f`) ; a
+    /// qualified self type `<T>::f` / `<T as Tr>::f` is `T::f` (then `Tr::f`) ; `crate::..` /
+    /// `super::..` out of the module is outside even when a type of the module shares a name.
+    fn resolve(
+        &self,
+        qself: Option<&syn::QSelf>,
+        path: &syn::Path,
+    ) -> Option<(&'static str, String, &'a [ODef])> {
+        let ix: &'a OIdx = self.ix;
+        let mut segs = seg_names(path);
+        let self_ty = |t: String| {
+            if t == "Self" {
+                self.impl_ty.last().cloned().unwrap_or_default()
+            } else {
+                t
+            }
+        };
+        if let Some(q) = qself {
+            let t = self_ty(type_last(&q.ty)?);
+            let last = segs.last()?.clone();
+            if t == ELAB {
+                let ds = ix.elab.get(&last)?;
+                return Some(("SELF", format!("{ELAB}::{last}"), ds));
+            }
+            if self.defs.defined_type(&t) || self.defs.traits.contains(&t) {
+                return None;
+            }
+            let tr = (segs.len() >= 2).then(|| segs[segs.len() - 2].clone());
+            for ty in std::iter::once(t).chain(tr) {
+                if let Some(ds) = ix.assoc.get(&(ty.clone(), last.clone())) {
+                    return Some(("FREE", format!("{ty}::{last}"), ds));
+                }
+            }
+            return None;
+        }
+        if let Some(full) = segs.first().and_then(|s| self.uses.get(s)) {
+            let mut v = full.clone();
+            v.extend(segs[1..].iter().cloned());
+            segs = v;
+        }
+        let n = segs.len();
+        let last = segs[n - 1].clone();
+        if n == 1 {
+            // FREE: a bare `f` that is no fn of the file set
+            if self.defs.free_fns.contains(&last) {
+                return None;
+            }
+            let ds = ix.free.get(&last)?;
+            return Some(("FREE", last, ds));
+        }
+        let ty = self_ty(segs[n - 2].clone());
+        if ty == ELAB {
+            // SELF: `Self::f` in `impl Elaborator`, `Elaborator::f`
+            let ds = ix.elab.get(&last)?;
+            return Some(("SELF", format!("{ELAB}::{last}"), ds));
+        }
+        let out_prefix = matches!(segs[0].as_str(), "crate" | "super");
+        if self.internal_path(&segs[..n - 1])
+            || (!out_prefix && (self.defs.defined_type(&ty) || self.defs.traits.contains(&ty)))
+        {
+            // a path into the module, or a fn of a module type
+            return None;
+        }
+        if let Some(ds) = ix.assoc.get(&(ty.clone(), last.clone())) {
+            // FREE: `T::f`, T a crate type (or trait) with that fn outside the file set
+            return Some(("FREE", format!("{ty}::{last}"), ds));
+        }
+        if out_prefix {
+            // FREE: `crate::m::f` / `super::m::f` to a free fn outside
+            let ds = ix.free.get(&last)?;
+            return Some(("FREE", last, ds));
+        }
+        None
+    }
+
+    fn rec(&mut self, style: &'static str, callee: String, defs: &[ODef]) {
+        let item = self.item.clone().unwrap_or_else(|| "-".into());
+        let file = self.file.clone();
+        let c = self.calls.entry((item, callee)).or_insert_with(|| OCall {
+            style,
+            n: 0,
+            text: BTreeSet::new(),
+            sigs: BTreeSet::new(),
+            file,
+        });
+        c.n += 1;
+        for d in defs {
+            c.text.extend(d.text.iter().cloned());
+            c.sigs.insert(d.sig.clone());
+        }
+    }
+
+    /// A path inside the module: `self::`, `crate::lexscope::`, `lexscope::`, a child module of
+    /// the file set, or `super::` that does not climb out of `lexscope` (by the file's depth).
+    fn internal_path(&self, segs: &[String]) -> bool {
+        match segs.first().map(String::as_str) {
+            Some("self") => true,
+            Some("crate") => segs.get(1).is_some_and(|s| s == MODULE),
+            Some("super") => {
+                let k = segs.iter().take_while(|s| *s == "super").count();
+                k <= self.depth || segs.get(k).is_some_and(|s| s == MODULE)
+            }
+            Some(MODULE) => true,
+            Some(s) => self.defs.mods.contains(s),
+            None => false,
+        }
+    }
+
+    fn fn_body(&mut self, name: String, f: impl FnOnce(&mut Self)) {
+        let saved_item = self.item.replace(name);
+        let saved_ctx = self.ctx.take();
+        f(self);
+        self.ctx = saved_ctx;
+        self.item = saved_item;
+    }
+}
+
+impl<'ast> Visit<'ast> for OVis<'_> {
+    fn visit_item_fn(&mut self, f: &'ast syn::ItemFn) {
+        let name = match &self.ctx {
+            Some(c) => format!("{c}::{}", f.sig.ident),
+            None => f.sig.ident.to_string(),
+        };
+        self.fn_body(name, |v| visit::visit_item_fn(v, f));
+    }
+    fn visit_item_impl(&mut self, im: &'ast syn::ItemImpl) {
+        let ty = impl_self_name(&im.self_ty);
+        let name = match &im.trait_ {
+            Some((_, p, _)) => format!("{} for {ty}", last_name(p)),
+            None => ty.clone(),
+        };
+        let saved = self.ctx.replace(name);
+        self.impl_ty.push(ty);
+        visit::visit_item_impl(self, im);
+        self.impl_ty.pop();
+        self.ctx = saved;
+    }
+    fn visit_item_trait(&mut self, t: &'ast syn::ItemTrait) {
+        let saved = self.ctx.replace(t.ident.to_string());
+        self.impl_ty.push(String::new());
+        visit::visit_item_trait(self, t);
+        self.impl_ty.pop();
+        self.ctx = saved;
+    }
+    fn visit_item_mod(&mut self, m: &'ast syn::ItemMod) {
+        self.depth += 1;
+        visit::visit_item_mod(self, m);
+        self.depth -= 1;
+    }
+    fn visit_impl_item_fn(&mut self, f: &'ast syn::ImplItemFn) {
+        let name = match &self.ctx {
+            Some(c) => format!("{c}::{}", f.sig.ident),
+            None => f.sig.ident.to_string(),
+        };
+        self.fn_body(name, |v| visit::visit_impl_item_fn(v, f));
+    }
+    fn visit_trait_item_fn(&mut self, f: &'ast syn::TraitItemFn) {
+        let name = match &self.ctx {
+            Some(c) => format!("{c}::{}", f.sig.ident),
+            None => f.sig.ident.to_string(),
+        };
+        self.fn_body(name, |v| visit::visit_trait_item_fn(v, f));
+    }
+    fn visit_expr_method_call(&mut self, e: &'ast syn::ExprMethodCall) {
+        let m = e.method.to_string();
+        let in_elab = self.impl_ty.last().is_some_and(|t| t == ELAB);
+        // round 2: `(*self).f(..)` is the receiver `self` too
+        let deref_self = |x: &Expr| match x {
+            Expr::Paren(p) => matches!(&*p.expr, Expr::Unary(u)
+                if matches!(u.op, syn::UnOp::Deref(_)) && is_self_expr(&u.expr)),
+            _ => false,
+        };
+        let on_self = in_elab && (is_self_expr(&e.receiver) || deref_self(&e.receiver));
+        let ix = self.ix;
+        if let (true, Some(ds)) = (on_self, ix.elab.get(&m)) {
+            // SELF: `self.f(..)` in `impl Elaborator`, f an Elaborator fn defined outside
+            self.rec("SELF", format!("{ELAB}::{m}"), ds);
+        } else if on_self && self.defs.type_fns.get(ELAB).is_some_and(|s| s.contains(&m)) {
+            // the module's own Elaborator method
+        } else if let Some(ds) = ix.methods.get(&m) {
+            // RECV: a receiver other than the Elaborator's `self`, resolved by the method's name
+            // against every method the crate defines outside the file set
+            if self.blind.contains_key(&m) {
+                *self.blind_seen.entry(m.clone()).or_default() += 1;
+            } else {
+                self.rec("RECV", format!(".{m}"), ds);
+            }
+        }
+        visit::visit_expr_method_call(self, e);
+    }
+    fn visit_expr_call(&mut self, e: &'ast syn::ExprCall) {
+        // a parenthesised callee `(Self::f)(..)` is a value mention of its path (round 2:
+        // visit_expr_path)
+        if let Expr::Path(p) = &*e.func {
+            if let Some((style, callee, ds)) = self.resolve(p.qself.as_ref(), &p.path) {
+                self.rec(style, callee, ds);
+            }
+            // the callee's path is no value mention (visit_expr_path): only the arguments
+            for a in &e.args {
+                self.visit_expr(a);
+            }
+            return;
+        }
+        visit::visit_expr_call(self, e);
+    }
+    fn visit_expr_path(&mut self, p: &'ast syn::ExprPath) {
+        // round 2: a fn of the crate outside named as a value (`.map(Self::f)`, `let g = f;`,
+        // `.and_then(crate::Elaborator::f)`) counts as a call of that callee
+        if let Some((style, callee, ds)) = self.resolve(p.qself.as_ref(), &p.path) {
+            self.rec(style, callee, ds);
+        }
+        visit::visit_expr_path(self, p);
+    }
+    fn visit_macro(&mut self, m: &'ast syn::Macro) {
+        for e in &outcall_mac_args(m) {
+            self.visit_expr(e);
+        }
+    }
+}
+
+/// OUTCALL (§5.2 Q-DECLKEY DK1-6 ; DELTA18 G2.4 E1-E3, R-J3, as corrected by R-J7 (a)): every call
+/// from a fn of the file set to a fn of the crate defined outside it is a row of OUTCALL (item,
+/// callee, count, class, closes) ; E1 a call with no row FAILS OUTCALL, a moved count FAILS
+/// OUTCALL, a row with no call is STALE ; E2 the class is bound by the callee's signature: no text
+/// parameter -> `none`, one or more -> `in` (an entered parameter passed through), `error` (the
+/// callee is on the closed list `<prefix>_OUTCALL_SINKS`) or `text:<Lid>`, never `none` ; E3
+/// `text:<Lid>` names a LEAVE row of the calling item at position `OUT:<callee>` whose type is the
+/// callee's text parameters and whose closing unit is the row's. Three call styles: SELF
+/// (`self.f` / `Self::f` in `impl Elaborator`, `Elaborator::f`), RECV (`<expr>.f(..)` on another
+/// receiver, resolved by the name f against every method defined outside ; a name on
+/// `<prefix>_OUTCALL_BLIND` is not resolved — why `std`: on STD_METHODS ; why `module`: the file set
+/// defines a method by that name — and a blind row no call uses is STALE), FREE (`f(..)`,
+/// `crate::..::f`, `super::..::f` out of the module, `T::f` of a crate type T outside).
+fn outcall_check(
+    eng: &mut Eng<'_>,
+    files: &[FileRec],
+    ats: &[At<'_>],
+    others: &[(String, syn::File)],
+) {
+    let ix = oidx(others);
+    let mut mod_methods: BTreeSet<String> = BTreeSet::new();
+    for at in ats {
+        match at.item {
+            Item::Impl(im) => {
+                for ii in &im.items {
+                    if let syn::ImplItem::Fn(f) = ii {
+                        mod_methods.insert(f.sig.ident.to_string());
+                    }
+                }
+            }
+            Item::Trait(t) => {
+                for ti in &t.items {
+                    if let syn::TraitItem::Fn(f) = ti {
+                        mod_methods.insert(f.sig.ident.to_string());
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    let blind: BTreeMap<String, String> = eng
+        .cfg
+        .outcall_blind
+        .iter()
+        .map(|r| (r[0].clone(), r[1].clone()))
+        .collect();
+    let (calls, blind_seen) = {
+        let mut v = OVis {
+            ix: &ix,
+            defs: &eng.defs,
+            blind: &blind,
+            file: String::new(),
+            depth: 0,
+            item: None,
+            ctx: None,
+            impl_ty: Vec::new(),
+            uses: BTreeMap::new(),
+            calls: BTreeMap::new(),
+            blind_seen: BTreeMap::new(),
+        };
+        for f in files {
+            v.file = f.rel.clone();
+            v.depth = f.depth;
+            v.uses = crate_uses(&f.file);
+            v.visit_file(&f.file);
+        }
+        (v.calls, v.blind_seen)
+    };
+    for (name, why) in &blind {
+        let ok = match why.as_str() {
+            "std" => STD_METHODS.contains(&name.as_str()),
+            "module" => mod_methods.contains(name),
+            _ => false,
+        };
+        if !ok {
+            eng.fail(
+                "-",
+                name,
+                "BLIND",
+                "WHY",
+                format!("why `{why}`: `std` needs a STD_METHODS name, `module` a method of the file set"),
+            );
+        }
+        if !blind_seen.contains_key(name) {
+            eng.fail(
+                "-",
+                name,
+                "BLIND",
+                "STALE",
+                "a blind-list name that blinds no call: no method call on another receiver names it \
+                 while a method defined outside the file set has that name",
+            );
+        }
+    }
+    let sinks = eng.cfg.outcall_sinks.clone();
+    for s in &sinks {
+        let takes_text = s
+            .strip_prefix(&format!("{ELAB}::"))
+            .and_then(|n| ix.elab.get(n))
+            .is_some_and(|ds| ds.iter().any(|d| !d.text.is_empty()));
+        if !takes_text {
+            eng.fail(
+                "-",
+                s,
+                "SINK",
+                "STALE",
+                "an error sink row names no Elaborator fn outside the file set with a text parameter",
+            );
+        }
+    }
+    let mut want: BTreeMap<(String, String), Vec<String>> = BTreeMap::new();
+    for r in &eng.cfg.outcall {
+        want.insert((r[0].clone(), r[1].clone()), r.clone());
+    }
+    for ((item, callee), c) in &calls {
+        let pos = format!("OUT:{callee}");
+        let sigs: Vec<&str> = c.sigs.iter().map(String::as_str).collect();
+        match want.get(&(item.clone(), callee.clone())) {
+            // E1: an outward call with no row (the rule the SELFTEST comments out)
+            None => eng.fail(
+                &c.file,
+                item,
+                &pos,
+                "OUTCALL",
+                format!(
+                    "an outward call with no OUTCALL row: {} x{} ; callee {}",
+                    c.style,
+                    c.n,
+                    sigs.join(" | ")
+                ),
+            ),
+            Some(r) if r[2] != c.n.to_string() => eng.fail(
+                &c.file,
+                item,
+                &pos,
+                "OUTCALL",
+                format!("pinned {} now {}", r[2], c.n),
+            ),
+            _ => {}
+        }
+    }
+    let leave = eng.cfg.leave.clone();
+    for r in eng.cfg.outcall.clone() {
+        let (item, callee, class, closes) = (&r[0], &r[1], &r[3], &r[4]);
+        let pos = format!("OUT:{callee}");
+        let Some(c) = calls.get(&(item.clone(), callee.clone())) else {
+            eng.fail("-", item, &pos, "STALE", "an OUTCALL row matches no call");
+            continue;
+        };
+        let text: Vec<String> = c.text.iter().cloned().collect();
+        let takes_text = !text.is_empty();
+        let why = match class.as_str() {
+            "none" if takes_text => Some(format!(
+                "the callee takes text ({}): class `none` is refused",
+                text.join(", ")
+            )),
+            "none" => None,
+            "in" | "error" if !takes_text => Some(format!(
+                "class `{class}`: the callee takes no text parameter, its class is `none`"
+            )),
+            "in" => None,
+            "error" if !sinks.contains(callee) => {
+                Some(format!("class `error`: {callee} is not on OUTCALL_SINKS"))
+            }
+            "error" => None,
+            x if x.starts_with("text:") => {
+                let id = &x["text:".len()..];
+                let hit = leave
+                    .iter()
+                    .position(|l| l[0] == id && &l[1] == item && l[2] == pos);
+                match hit {
+                    _ if !takes_text => Some(format!(
+                        "class `{class}`: the callee takes no text parameter, its class is `none`"
+                    )),
+                    None => Some(format!(
+                        "LEAVE {id} holds no `{pos}` row on {item} (a dangling tag)"
+                    )),
+                    Some(i) => {
+                        eng.leave_used.insert(i);
+                        let l = &leave[i];
+                        if l[3] != text.join(", ") {
+                            Some(format!(
+                                "LEAVE {id}'s type `{}` is not the callee's text parameters `{}`",
+                                l[3],
+                                text.join(", ")
+                            ))
+                        } else if l[4].is_empty() || l[4] == "-" {
+                            Some(format!("LEAVE {id} names no closing unit"))
+                        } else if &l[4] != closes {
+                            Some(format!(
+                                "closes `{closes}`: LEAVE {id} closes at `{}`",
+                                l[4]
+                            ))
+                        } else {
+                            None
+                        }
+                    }
+                }
+            }
+            _ => Some(format!(
+                "class `{class}` off none / in / error / text:<Lid>"
+            )),
+        };
+        if let Some(d) = why {
+            eng.fail("-", item, &pos, "CLASS", d);
+        }
+        if closes.is_empty() {
+            eng.fail(
+                "-",
+                item,
+                &pos,
+                "CLOSES",
+                "an OUTCALL row with no closes column",
+            );
+        }
+    }
+    let n_style = |s: &str| -> usize { calls.values().filter(|c| c.style == s).map(|c| c.n).sum() };
+    eng.s.outcall_rows = calls
+        .iter()
+        .map(|((item, callee), c)| {
+            format!(
+                "{item}\t{callee}\t{}\t{}\t{}",
+                c.n,
+                c.style,
+                if c.text.is_empty() {
+                    "-".to_string()
+                } else {
+                    c.text.iter().cloned().collect::<Vec<_>>().join(", ")
+                }
+            )
+        })
+        .collect();
+    eng.s.outcall_counts = format!(
+        "self={} recv={} free={} rows={} blind_names={} blind_calls={}",
+        n_style("SELF"),
+        n_style("RECV"),
+        n_style("FREE"),
+        calls.len(),
+        blind_seen.len(),
+        blind_seen.values().sum::<usize>()
+    );
 }
 
 fn stale_checks(eng: &mut Eng<'_>) {
@@ -5631,14 +6644,17 @@ fn stale_checks(eng: &mut Eng<'_>) {
             + eng.cfg.outgoing.len()
             + eng.cfg.e.len()
             + eng.cfg.body.len()
-            + eng.cfg.macros.len();
+            + eng.cfg.macros.len()
+            + eng.cfg.outcall.len()
+            + eng.cfg.outcall_blind.len()
+            + eng.cfg.outcall_sinks.len();
         if n > 0 {
             eng.fail(
                 "-",
                 MODULE,
                 "-",
                 "STALE",
-                format!("{n} SHIMS / OUTGOING / E / BODY / MACROS rows with no module"),
+                format!("{n} SHIMS / OUTGOING / E / BODY / MACROS / OUTCALL rows with no module"),
             );
         }
     }
@@ -5907,6 +6923,18 @@ fn ht_surf_engine_on_fixtures() {
         &clean.addr_rows,
     );
     dump("FIX_ADDR_CALLS", "fn\tcalls", &clean.addr_calls);
+    dump(
+        "FIX_OUTCALL",
+        "item\tcallee\tcount\tstyle\ttext_params",
+        &clean.outcall_rows,
+    );
+    if clean.outcall_counts != tables::get("FIX_OUTCALL_COUNTS") {
+        msgs.push(format!(
+            "FIX_OUTCALL_COUNTS table [{}] now [{}]",
+            tables::get("FIX_OUTCALL_COUNTS"),
+            clean.outcall_counts
+        ));
+    }
 
     // the negative controls: each fixture fails with exactly its pinned (item, position, rule)
     let mut expect: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
@@ -5923,6 +6951,7 @@ fn ht_surf_engine_on_fixtures() {
     let mut na_failing = BTreeSet::new();
     let mut nu_failing = BTreeSet::new();
     let mut nt_failing = BTreeSet::new();
+    let mut no_failing = BTreeSet::new();
     for (name, vfs) in &fx {
         if name == "CLEAN" {
             continue;
@@ -5960,6 +6989,7 @@ fn ht_surf_engine_on_fixtures() {
                 ("NA", &mut na_failing),
                 ("NU", &mut nu_failing),
                 ("NT", &mut nt_failing),
+                ("NO", &mut no_failing),
             ] {
                 if let Some(x) = name.strip_prefix(pre) {
                     let n: String = x.chars().take_while(char::is_ascii_digit).collect();
@@ -5980,7 +7010,8 @@ fn ht_surf_engine_on_fixtures() {
     }
     // NS1-NS22 (DELTA10 L1) + NS23-NS31 (DELTA11 R2) + NS32 (DELTA12 N-1) ; NB1-NB8 (LS1
     // part 4) + NB9-NB13 ; NI1-NI10 (LS1 part 6, INTERIOR) ; NA1-NA7 (ADDR), NU1 (UNWIND),
-    // NT1-NT9 (IN-TOTAL) (LS1 part 7, DELTA12 S1 S2 S4)
+    // NT1-NT9 (IN-TOTAL) (LS1 part 7, DELTA12 S1 S2 S4) ; NO1-NO16 (OUTCALL and E3, §5.2
+    // Q-DECLKEY DK1-6, DELTA18 G2.4 E4) + NO17-NO35 (DK1-6 round 2)
     for (pre, set, last) in [
         ("NS", &ns_failing, 32),
         ("NB", &nb_failing, 13),
@@ -5988,6 +7019,7 @@ fn ht_surf_engine_on_fixtures() {
         ("NA", &na_failing, 7),
         ("NU", &nu_failing, 1),
         ("NT", &nt_failing, 9),
+        ("NO", &no_failing, NO_LAST),
     ] {
         let missing: Vec<u32> = (1..=last).filter(|n| !set.contains(n)).collect();
         if !missing.is_empty() {
@@ -6110,6 +7142,20 @@ fn ht_surf_the_lexscope_surface_is_pinned() {
         .map(|(a, b, c, d)| format!("{a}\t{b}\t{c}\t{d}"))
         .collect();
     dump("SURF_E", "item\tkind\tname\tcount", &erows);
+    // OUTCALL (§5.2 Q-DECLKEY DK1-6): the computed rows (the pins are SURF_OUTCALL's ; this dump
+    // adds the style and the callee's text parameters) and the counts line
+    dump(
+        "SURF_OUTCALL",
+        "item\tcallee\tcount\tstyle\ttext_params",
+        &s.outcall_rows,
+    );
+    if s.present && s.outcall_counts != tables::get("SURF_OUTCALL_COUNTS") {
+        msgs.push(format!(
+            "SURF_OUTCALL_COUNTS table [{}] now [{}] — set it with the unit that moved it",
+            tables::get("SURF_OUTCALL_COUNTS"),
+            s.outcall_counts
+        ));
+    }
     let counts = format!(
         "present={state} files={} rows={} out_types={} e_fns={} text_flows={}",
         s.files.len(),
@@ -6229,6 +7275,50 @@ fn ht_surf_plan_today_signatures_are_pinned() {
     let vfs = load_dir(&src_dir());
     let (own, deps) = dep_crates(&crate_tree());
     let tys = TyIdx::build(&vfs, &own, &deps);
+    // §5.2 Q-DECLKEY DK1-6 (DELTA18 G3 V, measured): plan mode is loud on a signature type
+    // defined outside the module's file set — a bare name the vocabulary lacks is UNKNOWN, a path
+    // into another module is UNKNOWN(named type of another module ..), and (plan mode reads no
+    // module defs) a vocabulary key name too: over-loud, never silent — no plan-mode extension
+    // is built
+    let mut fx = Vfs::new();
+    fx.insert(
+        "decl.rs".into(),
+        "pub(crate) struct Kept { key: String }\n\
+         impl Elaborator<'_> {\n\
+         pub(crate) fn snap(&self) -> Option<Kept> { None }\n\
+         pub(crate) fn snap2(&self) -> Option<crate::decl::Kept> { None }\n\
+         pub(crate) fn snap3(&self) -> Option<DeclKey> { None }\n}\n"
+            .into(),
+    );
+    let fx_tys = TyIdx::build(&fx, &own, &deps);
+    let fx_fails = |name: &str| -> Vec<String> {
+        let o = plan_row(&fx, &cfg, &fx_tys, "decl.rs", name).expect("G3 V fixture fn");
+        o.fails
+            .iter()
+            .map(|f| format!("{}={}({})", f.pos, f.rule, f.detail))
+            .collect()
+    };
+    assert_eq!(
+        fx_fails("snap"),
+        ["RET=CARD(Option in Option<Kept>)", "RET=UNKNOWN(Kept)"],
+        "G3 V: a type outside the file set"
+    );
+    assert_eq!(
+        fx_fails("snap2"),
+        [
+            "RET=CARD(Option in Option<crate::decl::Kept>)",
+            "RET=UNKNOWN(named type of another module crate::decl::Kept)"
+        ],
+        "G3 V: a path to a type outside the file set"
+    );
+    assert_eq!(
+        fx_fails("snap3"),
+        [
+            "RET=CARD(Option in Option<DeclKey>)",
+            "RET=UNKNOWN(DeclKey)"
+        ],
+        "G3 V: plan mode has no module defs, so a vocabulary key name is UNKNOWN too (loud)"
+    );
     let mut msgs = Vec::new();
     let mut got_rows = Vec::new();
     let (mut n_pass, mut ret_fail, mut text_ret, mut cb_text, mut mut_text) = (0, 0, 0, 0, 0);
