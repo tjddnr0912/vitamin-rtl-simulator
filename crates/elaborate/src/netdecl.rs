@@ -69,10 +69,8 @@ impl Elaborator<'_> {
             let overlap = ivs.windows(2).any(|p| p[1].0 < p[0].1);
             if overlap {
                 let name = self
-                    .symbols
-                    .iter()
-                    .find(|(_, &id)| id == net)
-                    .map(|(n, _)| n.clone())
+                    .net_key_shown(net)
+                    .map(scope_out)
                     .unwrap_or_else(|| format!("#{net}"));
                 self.cont_var.reported.insert(net);
                 self.error(

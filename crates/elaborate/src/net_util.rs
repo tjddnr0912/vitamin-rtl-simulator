@@ -263,38 +263,6 @@ pub(crate) fn resize_bits(
 }
 
 impl Elaborator<'_> {
-    /// Per-NetId fully-qualified name table for the VCD writer, built by inverting
-    /// the FQ-name → NetId `symbols` map (`"top.dut.q"`). A net with no symbol entry
-    /// (anonymous/implicit) falls back to `n{id}`. BTreeMap iteration is sorted, so
-    /// a net mapped by several aliases keeps the lexicographically smallest FQ name
-    /// (its canonical declaration path). Order-independent of arena order → 3-OS
-    /// stable. Computed before `finish()` (which moves `self.nets`/`self.symbols`).
-    ///
-    /// Spelled through `display_of`, so a SINGLETON generate scope (`generate if` /
-    /// `case` / a bare labelled block, stored as `label[0]`) prints as `label` — the
-    /// spelling both reference tools use and the one every `[in …]` context and `%m`
-    /// already print. Before this, one runtime diagnostic carried two spellings of
-    /// one scope on one line (`…g_sw[0].g_subword[0]…` for the net, `…g_sw.g_subword…`
-    /// for the context; reviewer §3.2, 2026-09-09), and a `--probe` path had to be
-    /// typed in the storage spelling. Loop iterations and instance-array elements
-    /// keep their index; storage keys (`symbols`) are untouched.
-    pub(crate) fn net_name_table(&self) -> Vec<String> {
-        let mut names = vec![String::new(); self.nets.len()];
-        for (fq, &id) in self.symbols.iter() {
-            if let Some(slot) = names.get_mut(id as usize) {
-                if slot.is_empty() {
-                    *slot = self.display_of_key_text(fq);
-                }
-            }
-        }
-        for (i, n) in names.iter_mut().enumerate() {
-            if n.is_empty() {
-                *n = format!("n{i}");
-            }
-        }
-        names
-    }
-
     // ── parameter binding (defaults + overrides; FQ-keyed) ──────────
     /// Bind a module's params for the current instance scope: each declared
     /// param's default (const-eval'd IN ORDER so a later param sees earlier ones),

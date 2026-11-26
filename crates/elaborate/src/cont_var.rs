@@ -356,10 +356,8 @@ impl Elaborator<'_> {
 
     /// The variable's hierarchical name, as E3018 has always printed it.
     fn cont_var_name(&self, net: u32) -> String {
-        self.symbols
-            .iter()
-            .find(|(_, &id)| id == net)
-            .map(|(n, _)| n.clone())
+        self.net_key_shown(net)
+            .map(scope_out)
             .unwrap_or_else(|| format!("#{net}"))
     }
 }

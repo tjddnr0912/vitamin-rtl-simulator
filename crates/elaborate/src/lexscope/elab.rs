@@ -6,9 +6,14 @@
 //! scope-keyed stores `pending_block_local_inits` / `pending_scoped_presize` by the scope's
 //! text inside this module ; and (DK1-5b) `names_with_pkg_var_aliases` (X18, `block_local/mod.rs`'s),
 //! moved with its body: it reads the current scope's text to sort names by it (`decl_keep_snapshot`
-//! stays in `decl_scope.rs` and asks [`super::Scopes::keys_under_cur`]).
+//! stays in `decl_scope.rs` and asks [`super::Scopes::keys_under_cur`]) ; and (§5.2 Q-DECLKEY DK3-a) the
+//! three scans of `symbols` that were left outside: `net_is_compiler_internal` (frames_classify.rs's,
+//! moved whole), `bare_name_of_net` (dynarr.rs's bare tail, LEAVE L13) and `alias_iface_port` (ports.rs
+//! bind_iface_port's alias loop).
 
-use super::{found_text, Mark, ReportedAt, ScopeRef};
+use std::collections::BTreeMap;
+
+use super::{found_text, DeclKey, Mark, ReportedAt, ScopeRef};
 use crate::Elaborator;
 use diag::MsgCode;
 use hdl_ast as ast;
@@ -407,6 +412,10 @@ impl Elaborator<'_> {
     /// Keyed on `pkg_var_aliases` (`lib.rs:1187`), never on `symbols`: an
     /// interface-port alias also lives in `symbols` and is not a package variable
     /// (`package.rs:1284-1287` keeps the two apart for exactly this reason).
+    ///
+    /// LEAVE L13, a PERMANENT class since §5.2 Q-DECLKEY DK3-a (ruling R-K3 q6): the bare declared names of
+    /// the current scope leave the module as text — names a declaration was written with, not keys ; the
+    /// scope test is done here.
     pub(crate) fn names_with_pkg_var_aliases(
         &self,
         names: &std::collections::BTreeSet<String>,
@@ -427,5 +436,70 @@ impl Elaborator<'_> {
             out.insert(bare.to_string());
         }
         out
+    }
+
+    /// Is net `net_id` one vita minted for itself (a `$…` scratch: `$ia_tmp$`,
+    /// `$repeat_cnt$`, `$sfmt_tmp$`) rather than one the source declared?
+    ///
+    /// ⚠️ Asked on two paths, each a scan over `symbols`: `classify_frame_body`'s refusal of an out-of-frame
+    /// write (an ERROR path: a recurrence of the round-35 P0 names vita instead of the user's code) and the
+    /// §3.b route veto `frame_outside_writes_are_user_nets` (a normal path: once per DISTINCT out-of-window net).
+    pub(crate) fn net_is_compiler_internal(&self, net_id: u32) -> bool {
+        self.symbols.iter().any(|(fq, &id)| {
+            id == net_id
+                && fq
+                    .rsplit('.')
+                    .next()
+                    .is_some_and(|seg| seg.starts_with('$'))
+        })
+    }
+
+    /// The BARE declared name of net `net_id` (§5.2 Q-DECLKEY DK3-a (iv), X12): the last segment of the first key in
+    /// `symbols`' order whose value is `net_id` — dynarr.rs's snapshot holder, declared in the current scope a line before ;
+    /// `None` when no key holds it. LEAVE L13 (permanent, ruling R-K3 q6): a bare declared name leaves the module as text.
+    pub(crate) fn bare_name_of_net(&self, net_id: u32) -> Option<String> {
+        self.symbols
+            .iter()
+            .find(|(_, &v)| v == net_id)
+            .map(|(k, _)| k.rsplit('.').next().unwrap_or(k).to_string())
+    }
+
+    /// The alias loop of an interface port (§5.2 Q-DECLKEY DK3-a (v), X15 ; `bind_iface_port`'s body,
+    /// ports.rs, moved here with its std verbs): every symbol under the bound instance `inst` is aliased
+    /// under the port `pname` of the current scope (`<child>.<port>.<sig>`, the same net). With a modport,
+    /// `input_of` maps each LISTED member to whether it is an `input` (§25.5): an unlisted member is not
+    /// aliased, an input one is also read-only (`modport_readonly`) ; without one every member aliases with
+    /// full access. No AST type, no callback, no text out.
+    pub(crate) fn alias_iface_port(
+        &mut self,
+        inst: &DeclKey,
+        pname: &str,
+        input_of: Option<&BTreeMap<String, bool>>,
+    ) {
+        let src_prefix = format!("{}.", found_text(inst));
+        let dst_prefix = format!("{}.", self.lex.at_cur(pname).0);
+        let aliases: Vec<(String, u32, bool)> = self
+            .symbols
+            .range(src_prefix.clone()..)
+            .take_while(|(k, _)| k.starts_with(&src_prefix))
+            .filter_map(|(k, &id)| {
+                let suffix = &k[src_prefix.len()..];
+                // The modport lists direct MEMBERS (single segment) — match on
+                // the first path segment so any future nested suffix follows
+                // its member's visibility.
+                let member = suffix.split('.').next().unwrap_or(suffix);
+                let input = match input_of {
+                    Some(dirs) => *dirs.get(member)?, // unlisted → invisible
+                    None => false,
+                };
+                Some((format!("{dst_prefix}{suffix}"), id, input))
+            })
+            .collect();
+        for (k, id, input) in aliases {
+            if input {
+                self.modport_readonly.insert(k.clone());
+            }
+            self.symbols.insert(k, id);
+        }
     }
 }

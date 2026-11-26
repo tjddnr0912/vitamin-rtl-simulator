@@ -1101,22 +1101,6 @@ impl Elaborator<'_> {
         }
     }
 
-    /// Is `net` one vita minted for itself (a `$…` scratch: `$ia_tmp$`,
-    /// `$repeat_cnt$`, `$sfmt_tmp$`) rather than one the source declared?
-    ///
-    /// ⚠️ Asked only on an ERROR path, so the scan over `symbols` costs nothing
-    /// that matters. It exists so a recurrence of the round-35 P0 names vita
-    /// instead of the user's code.
-    pub(crate) fn net_is_compiler_internal(&self, net: u32) -> bool {
-        self.symbols.iter().any(|(fq, &id)| {
-            id == net
-                && fq
-                    .rsplit('.')
-                    .next()
-                    .is_some_and(|seg| seg.starts_with('$'))
-        })
-    }
-
     /// Round-14 V3/V4: classify a frame body — `None` = SUBSET (blocking-assigns to
     /// its own locals + control flow + nested subset calls, executable synchronously
     /// by `run_task_call`); `Some(reason)` = NON-SUBSET (a timing/suspend/fork

@@ -18,8 +18,9 @@
 //! [`Scopes::key_under`] (a carried scope) and [`key_in`] (a member under a read key) ; its constructor is lexscope-wide
 //! (the `pub(super)` field), not this file's: the count of AtKey constructions per lexscope file is pinned
 //! (scope_home HKC). No AtKey is formed outside the module. It reaches a
-//! store only through the `_at` entries (a read: no `_new` entry takes it) and its text leaves the module
-//! only through [`at_text`] (L9, a counted bridge) ; inside the module the walk MOVES the candidate its `hit`
+//! store only through the `_at` entries (a read: no `_new` entry takes it) and its text does not leave the
+//! module (L9 `at_text`, the counted bridge, is deleted since §5.2 Q-DECLKEY DK3-a: its last reader, the
+//! alias loop of an interface port, moved in as `alias_iface_port`) ; inside the module the walk MOVES the candidate its `hit`
 //! accepted into the [`DeclKey`] it returns (DK1-4b-2: the text is moved, not read out). A message that
 //! names what such a read would have probed takes [`Scopes::show_miss`]'s display text: no key is formed
 //! for it.
@@ -151,14 +152,6 @@ pub(super) fn key_text(k: &NewKey) -> &str {
 #[must_use]
 pub(crate) struct AtKey(pub(super) String);
 
-/// L9 (LEAVE): an AtKey's text where it meets a text operation outside the module — one reader left,
-/// ports.rs bind_iface_port's X15 prefix glue (DK3-a) ; elaborate_virtual_iface's two member glues left
-/// at DK1-5a for [`key_in`] / `new_key`, held.rs's compare with a walk's found key at DK1-4b-2 for
-/// [`DeclKey::is_formed_at`] ; a counted bridge.
-pub(crate) fn at_text(k: &AtKey) -> &str {
-    &k.0
-}
-
 /// The key of `member` inside the read key `k` (`<k>.<member>`), typed (DK1-5a: ports.rs
 /// elaborate_virtual_iface's member glue of a bound instance ; L9's two rows there closed).
 /// It always forms `<k>.<member>`: there is no empty-key guard (an empty `k` would give
@@ -189,8 +182,8 @@ pub(crate) fn at_same(a: &AtKey, b: &AtKey) -> bool {
 pub(crate) struct DeclKey(pub(super) String);
 
 /// L11 (LEAVE): a found key's text where it meets a text operation outside the module (a key's
-/// segments read: frames_static_init.rs, gen_scope_name.rs, DK3-b ; a scope prefix glued from it:
-/// ports.rs, DK3-a) ; a counted bridge.
+/// segments read: frames_static_init.rs, gen_scope_name.rs, DK3-b ; ports.rs's scope prefix glue
+/// moved in at DK3-a, `alias_iface_port`) ; a counted bridge.
 #[inline]
 pub(crate) fn found_text(k: &DeclKey) -> &str {
     &k.0

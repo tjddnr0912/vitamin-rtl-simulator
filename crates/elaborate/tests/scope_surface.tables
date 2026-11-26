@@ -100,7 +100,7 @@ zn	d8f9c54aafb2a97e923fc75a6a47a199be52921f7246d60927f08b10862815cf
 == SURF_PRESENT
 present
 == SURF_COUNTS
-present=present files=7 rows=235 out_types=29 e_fns=65 text_flows=63
+present=present files=7 rows=241 out_types=29 e_fns=70 text_flows=83
 == SURF_ROWS
 # the computed surface: one row per OUT position / IN text parameter / type / impl / use
 # §5.2 Q-DECLKEY DK1-4a (2026-11-24): the walk's 18 rows at lexscope/walk.rs (L10 8, ENTER 5, CB 4, PASS 1)
@@ -119,10 +119,16 @@ lexscope/disp.rs	E	FN	Elaborator::disp_frame_path_of	RET	Shown	PASS	-
 lexscope/disp.rs	E	FN	Elaborator::disp_here	RET	Shown	PASS	-
 lexscope/disp.rs	E	FN	Elaborator::disp_inst_top	RET	Shown	PASS	-
 lexscope/disp.rs	E	FN	Elaborator::disp_root_swap_decl_inst	RET	SavedRoot	PASS	-
-lexscope/disp.rs	E	FN	Elaborator::display_of_key_text	IN:key	&str	ENTER:to-display	-
-lexscope/disp.rs	E	FN	Elaborator::display_of_key_text	RET	String	LEAVE:L4	-
+lexscope/disp.rs	E	FN	Elaborator::net_key_shown	IN:net_id	u32	ENTER:lookup	-
+lexscope/disp.rs	E	FN	Elaborator::net_key_shown	RET	Option<Shown>	CARD:hit:the first key in symbols' order that holds the net	-
+lexscope/disp.rs	E	FN	Elaborator::net_name_table	RET	Vec<Shown>	CARD:list:one display name per NetId, in NetId order	-
 lexscope/disp.rs	E	FN	Elaborator::stmt_loc_instance	RET	Shown	PASS	-
+lexscope/elab.rs	E	FN	Elaborator::alias_iface_port	IN:input_of	Option<&BTreeMap<String, bool>>	ENTER:lookup	-
+lexscope/elab.rs	E	FN	Elaborator::alias_iface_port	IN:pname	&str	ENTER:lookup	-
+lexscope/elab.rs	E	FN	Elaborator::alias_iface_port	RET	()	PASS	-
 lexscope/elab.rs	E	FN	Elaborator::assert_block_local_inits_drained	RET	()	PASS	-
+lexscope/elab.rs	E	FN	Elaborator::bare_name_of_net	IN:net_id	u32	ENTER:lookup	-
+lexscope/elab.rs	E	FN	Elaborator::bare_name_of_net	RET	Option<String>	LEAVE:L13	-
 lexscope/elab.rs	E	FN	Elaborator::cur_gen_rtn_key	IN:bare	&str	ENTER:lookup	-
 lexscope/elab.rs	E	FN	Elaborator::cur_gen_rtn_key	RET	Option<String>	LEAVE:L3	-
 lexscope/elab.rs	E	FN	Elaborator::flush_block_local_inits	RET	()	PASS	-
@@ -130,6 +136,8 @@ lexscope/elab.rs	E	FN	Elaborator::hoisted_at_decl_pos	IN:name	&str	ENTER:lookup	
 lexscope/elab.rs	E	FN	Elaborator::hoisted_at_decl_pos	RET	bool	PASS	-
 lexscope/elab.rs	E	FN	Elaborator::names_with_pkg_var_aliases	IN:names	&std::collections::BTreeSet<String>	ENTER:lookup	-
 lexscope/elab.rs	E	FN	Elaborator::names_with_pkg_var_aliases	RET	std::collections::BTreeSet<String>	LEAVE:L13	-
+lexscope/elab.rs	E	FN	Elaborator::net_is_compiler_internal	IN:net_id	u32	ENTER:lookup	-
+lexscope/elab.rs	E	FN	Elaborator::net_is_compiler_internal	RET	bool	PASS	-
 lexscope/elab.rs	E	FN	Elaborator::push_block_local_init	IN:lhs	ast::Lvalue	ENTER:carried	-
 lexscope/elab.rs	E	FN	Elaborator::push_block_local_init	IN:lo	u32	ENTER:carried	-
 lexscope/elab.rs	E	FN	Elaborator::push_block_local_init	IN:rhs	ast::Expr	ENTER:carried	-
@@ -189,7 +197,6 @@ lexscope/key.rs	K	FN	Scopes::new_key	RET	NewKey	PASS	-
 lexscope/key.rs	K	FN	Scopes::show_miss	IN:local	&str	ENTER:to-display	-
 lexscope/key.rs	K	FN	Scopes::show_miss	RET	Shown	PASS	-
 lexscope/key.rs	K	FN	at_same	RET	bool	PASS	-
-lexscope/key.rs	K	FN	at_text	RET	&str	LEAVE:L9	REF
 lexscope/key.rs	K	FN	found_text	RET	&str	LEAVE:L11	REF
 lexscope/key.rs	K	FN	key_in	IN:member	&str	ENTER:lookup	-
 lexscope/key.rs	K	FN	key_in	RET	AtKey	PASS	-
@@ -224,7 +231,6 @@ lexscope/mod.rs	-	USE	key::Keyed	-	-	PASS	-
 lexscope/mod.rs	-	USE	key::KeyedSet	-	-	PASS	-
 lexscope/mod.rs	-	USE	key::NewKey	-	-	PASS	-
 lexscope/mod.rs	-	USE	key::at_same	-	-	PASS	-
-lexscope/mod.rs	-	USE	key::at_text	-	-	PASS	-
 lexscope/mod.rs	-	USE	key::found_text	-	-	PASS	-
 lexscope/mod.rs	-	USE	key::key_in	-	-	PASS	-
 lexscope/mod.rs	-	USE	key::key_same	-	-	PASS	-
@@ -355,6 +361,7 @@ AtKey
 NewKey
 Option<&V>
 Option<DeclKey>
+Option<Shown>
 Option<String>
 Option<V>
 R
@@ -370,7 +377,6 @@ Scopes
 Self::Plain
 Shown
 ShownCtx
-String
 T::Plain
 Vec<&NewKey>
 Vec<Shown>
@@ -390,16 +396,17 @@ std::collections::BTreeSet<String>
 # §5.2 Q-DECLKEY DK1-4b-2 (2026-11-24): L10 CLOSED — its four `RET Option<String>` rows deleted (the walk returns a DeclKey: SURF_ROWS CARD) ; L11 `found_text`, a found key's text where it meets a text operation outside the module (R-H5: ports.rs bind_iface_port's prefix glue -> DK3-a ; gen_scope_name.rs key_spells_indexed_singleton, frames_static_init.rs frame_init_name_is_local_or_const -> DK3-b, HBR's three rows), deleting unit DK3-b
 # §5.2 Q-DECLKEY DK1-5a (2026-11-25): L5 and L6 CLOSED, rows deleted (Scopes::key_under returns an AtKey ; Scopes::scope_text is private, its last reader outside, hier_resolve, moved in) ; L9 at_text outside 3 -> 1 (ports.rs elaborate_virtual_iface's two member-key glues: src `key_in`, dst `new_key` ; bind_iface_port's X15 prefix left, DK3-a) ; L12 OPENED: Elaborator::indexed_gen_singleton RET Option<String>, the label key `level.label` of a singleton generate scope, read by key_spells_indexed_singleton (gen_scope_name.rs, HBR 1 row), deleting unit DK3-b (it becomes a lexscope entry there and indexed_gen_singleton goes private, DELTA17 F3.1)
 # §5.2 Q-DECLKEY DK1-5b (2026-11-25): L1 CLOSED (Scopes::cur_prefix_text private: its last readers outside, names_with_pkg_var_aliases and elaborate_package's snapshot argument, moved in or gone) and L7 CLOSED at DK1-5b, not DK3-b (key_text pub(super): elaborate_package hands its six key lists to decl_keep_snapshot as `&NewKey`s) — both rows deleted ; L13 OPENED: Elaborator::names_with_pkg_var_aliases RET std::collections::BTreeSet<String>, the bare names a package variable import binds in the current scope with the names handed in, read by its four callers outside (block_local_feed.rs, iface_inst.rs, instance.rs x2), deleting unit DK3-a (DELTA18 T7: L13's closing form is decided there, R-I3)
+# §5.2 Q-DECLKEY DK3-a (2026-11-26): L4 CLOSED (display_of_key_text private: its one caller, net_name_table, moved in and returns Vec<Shown>) and L9 CLOSED (at_text deleted: its last reader, bind_iface_port's X15 prefix, is alias_iface_port's `at_cur(..).0` inside) — two rows deleted ; L13 is PERMANENT (ruling R-K3, q6: the bare declared names of the current scope leave as text) and gains bare_name_of_net (X12, dynarr.rs's snapshot holder: its bare name)
+# NOT-PROMISED NP19-7 (§5.2 Q-DECLKEY DK3-a): scope_home's LEAVE_PERMANENT reads this table's id column only — a row given id L13 (or L0) with closes `permanent` passes it (scope_home.tables HBR's head)
 id	item	position	type	closes
 L11	found_text	RET	&str	DK3-b
-L13	Elaborator::names_with_pkg_var_aliases	RET	std::collections::BTreeSet<String>	DK3-a
+L13	Elaborator::names_with_pkg_var_aliases	RET	std::collections::BTreeSet<String>	permanent
+L13	Elaborator::bare_name_of_net	RET	Option<String>	permanent
 L2	Elaborator::walk_rtn_scopes	RET	Option<String>	RS1
 L2	Elaborator::walk_rtn_scopes	CB:hit.0	&str	RS1
 L3	Elaborator::cur_gen_rtn_key	RET	Option<String>	RS1
 L0	scope_out	RET	T::Plain	permanent
 L0	Outgoing::plain	RET	Self::Plain	permanent
-L4	Elaborator::display_of_key_text	RET	String	DK4
-L9	at_text	RET	&str	DK3-a
 L12	Elaborator::indexed_gen_singleton	RET	Option<String>	DK3-b
 == SURF_ENTER
 # ENTER: text or a number in (IN-TOTAL, DELTA12 S2), by role (to-scope / to-display / lookup /
@@ -410,6 +417,7 @@ L12	Elaborator::indexed_gen_singleton	RET	Option<String>	DK3-b
 # §5.2 Q-DECLKEY DK1-5a (2026-11-25): hier_resolve `path` (the dotted path the resolver composes keys from) and `table` (the caller's text-keyed leaf map, window w9: retyped at DK3-b, DELTA18 T4) ; indexed_gen_singleton `level` / `seg` (the scope text and the source segment its label key is formed from) ; key_in `member` (an interface member's name) — lookup
 # §5.2 Q-DECLKEY DK1-5b (2026-11-25): names_with_pkg_var_aliases `names` (the scope's own declared names, copied into the set it returns) — lookup (`carried` is refused: the body reads it, `.clone()`)
 # §5.2 Q-DECLKEY DK2 (2026-11-26, form (c)): the four walks are private: their `name` rows gone ; the 23 named entries' `name` (lookup, TEXT str) rows added by the pass
+# §5.2 Q-DECLKEY DK3-a (2026-11-26): display_of_key_text's `key` row deleted (private, off the surface) ; + the three by-id entries' `net_id` (the id looked up among symbols' values, NUMBER) and alias_iface_port's `pname` (the port name the alias keys are formed under at the current scope) and `input_of` (the modport's member names, looked up) — lookup
 item	param	role	holds
 Elaborator::names_with_pkg_var_aliases	names	lookup	TEXT String
 Elaborator::with_scope	seg	to-scope	TEXT str
@@ -422,7 +430,6 @@ Scopes::scope_swap_pkg	pkg	to-scope	TEXT str
 Elaborator::disp_frame_path_of	key	lookup	TEXT str
 Elaborator::disp_frame_path_of	bare	lookup	TEXT str
 Elaborator::disp_enter_frame_root	name	lookup	TEXT str
-Elaborator::display_of_key_text	key	to-display	TEXT str
 Scopes::disp_chain_push	label	to-display	TEXT String
 Scopes::disp_chain_swap_single	seg	to-display	TEXT str
 Scopes::disp_class_method_swap	method	to-display	TEXT String
@@ -473,6 +480,11 @@ Elaborator::walk_key_wide	name	lookup	TEXT str
 Elaborator::walk_key_wide_value_or_net	name	lookup	TEXT str
 Elaborator::walk_shadowed_fixed_string_dyn	name	lookup	TEXT str
 Elaborator::walk_shadowed_string_array_elem	name	lookup	TEXT str
+Elaborator::net_key_shown	net_id	lookup	NUMBER u32
+Elaborator::bare_name_of_net	net_id	lookup	NUMBER u32
+Elaborator::net_is_compiler_internal	net_id	lookup	NUMBER u32
+Elaborator::alias_iface_port	pname	lookup	TEXT str
+Elaborator::alias_iface_port	input_of	lookup	TEXT String
 == SURF_WINDOW
 # WINDOW (§5.2 Q-DECLKEY DK1-1 ; DELTA14 F1 / D2 w9, R-F1, R-F10, premise10 N10-9 / NP10-1): a trait impl off
 # ALLOWED_IMPLS admitted for the ONE type a row names, the trait one of WINDOW_TRAITS (Deref, DerefMut) ; each row
@@ -511,7 +523,26 @@ ShownCtx	Vec<diag::Frame>
 # §5.2 Q-DECLKEY DK1-5a (2026-11-25): the five moved fns' rows (lexscope/hier.rs ; is_hier_scope private, its own rows, R-J7 d: a call to an in-module fn is no OUT-C row, so no `.is_hier_scope` row exists) ; flow `in` but hier_resolve's `.cloned` (payload: the table's value) and indexed_gen_singleton's label key (text:LEAVE-L12) ; `Self::gen_seg_label = 1` (indexed_gen_singleton) is the ONE call from these bodies to a fn outside the module with a text argument: its own IN `seg` passed through, flow `in` (R-J7 a) — NOT pinned by class until DK1-6 (SURF_OUTCALL, R-J7 c): this row is change detection only ; §5.2 Q-DECLKEY DK1-6 (2026-11-25): the class pin is SURF_OUTCALL's row `Elaborator::indexed_gen_singleton · Elaborator::gen_seg_label · 1 · in` (E2: gen_seg_label takes `&str`, so `none` is refused ; the row's `in` is hand, NOT-PROMISED: no data flow) ; this OUT-C row stays change detection
 # §5.2 Q-DECLKEY DK1-5b (2026-11-25): names_with_pkg_var_aliases' rows (moved to lexscope/elab.rs): flow text:LEAVE-L13 where the op forms or hands the text of the set it returns (the two `.clone`s of `names`, the alias keys' `.keys`, the `.rsplit_once` / `.as_str` that cut the bare name, `.to_string`, `.insert`), `in` for the bool tests and the store read ; it calls no fn outside the module (move_census calls_outside=0)
 # §5.2 Q-DECLKEY DK2 (2026-11-26, form (c)): the 23 named entries' FN / OUT-F / OUT-C rows, flow `in` (the walk's candidate AtKey, read by each store's `contains_at` or by a lane) ; the four walks' rows stand ; a site's closure rows leave with the closure
+# §5.2 Q-DECLKEY DK3-a (2026-11-26): + net_key_shown, net_name_table (moved in), net_is_compiler_internal (moved in), bare_name_of_net, alias_iface_port: 5 fns, 51 rows, FLOW read off each body (text:Shown for what net_key_shown / net_name_table hand out, text:LEAVE-L13 for bare_name_of_net's name, in for the rest) ; display_of's four `text:Shown+LEAVE-L4` -> `text:Shown` (L4 closed: its one reader is net_name_table, inside)
 item	kind	name	count	flow
+Elaborator::alias_iface_port	FN	-	-	-
+Elaborator::alias_iface_port	OUT-C	.at_cur	1	in
+Elaborator::alias_iface_port	OUT-C	.clone	2	in
+Elaborator::alias_iface_port	OUT-C	.collect	1	in
+Elaborator::alias_iface_port	OUT-C	.filter_map	1	in
+Elaborator::alias_iface_port	OUT-C	.get	1	in
+Elaborator::alias_iface_port	OUT-C	.insert	2	in
+Elaborator::alias_iface_port	OUT-C	.len	1	in
+Elaborator::alias_iface_port	OUT-C	.next	1	in
+Elaborator::alias_iface_port	OUT-C	.range	1	in
+Elaborator::alias_iface_port	OUT-C	.split	1	in
+Elaborator::alias_iface_port	OUT-C	.starts_with	1	in
+Elaborator::alias_iface_port	OUT-C	.take_while	1	in
+Elaborator::alias_iface_port	OUT-C	.unwrap_or	1	in
+Elaborator::alias_iface_port	OUT-C	Some	1	in
+Elaborator::alias_iface_port	OUT-F	modport_readonly	1	in
+Elaborator::alias_iface_port	OUT-F	symbols	2	in
+Elaborator::alias_iface_port	OUT-M	format	3	in
 Elaborator::assert_block_local_inits_drained	FN	-	-	-
 Elaborator::assert_block_local_inits_drained	OUT-C	.chain	1	text:error
 Elaborator::assert_block_local_inits_drained	OUT-C	.cloned	1	text:error
@@ -523,6 +554,15 @@ Elaborator::assert_block_local_inits_drained	OUT-C	.len	3	in
 Elaborator::assert_block_local_inits_drained	OUT-F	pending_block_local_inits	2	in
 Elaborator::assert_block_local_inits_drained	OUT-F	pending_scoped_presize	2	in
 Elaborator::assert_block_local_inits_drained	OUT-M	format	1	text:error
+Elaborator::bare_name_of_net	FN	-	-	-
+Elaborator::bare_name_of_net	OUT-C	.find	1	text:LEAVE-L13
+Elaborator::bare_name_of_net	OUT-C	.iter	1	text:LEAVE-L13
+Elaborator::bare_name_of_net	OUT-C	.map	1	text:LEAVE-L13
+Elaborator::bare_name_of_net	OUT-C	.next	1	text:LEAVE-L13
+Elaborator::bare_name_of_net	OUT-C	.rsplit	1	text:LEAVE-L13
+Elaborator::bare_name_of_net	OUT-C	.to_string	1	text:LEAVE-L13
+Elaborator::bare_name_of_net	OUT-C	.unwrap_or	1	text:LEAVE-L13
+Elaborator::bare_name_of_net	OUT-F	symbols	1	in
 Elaborator::ctx_here	FN	-	-	-
 Elaborator::cur_context	FN	-	-	-
 Elaborator::cur_context	OUT-C	.cur_prefix_text	1	in
@@ -564,12 +604,12 @@ Elaborator::disp_root_swap_decl_inst	OUT-C	SavedRoot	1	text:SavedRoot
 Elaborator::display_of	FN	-	-	-
 Elaborator::display_of	OUT-C	.contains	2	in
 Elaborator::display_of	OUT-C	.is_empty	2	in
-Elaborator::display_of	OUT-C	.join	1	text:Shown+LEAVE-L4
+Elaborator::display_of	OUT-C	.join	1	text:Shown
 Elaborator::display_of	OUT-C	.push	2	in
 Elaborator::display_of	OUT-C	.push_str	1	in
-Elaborator::display_of	OUT-C	.split	1	text:Shown+LEAVE-L4
-Elaborator::display_of	OUT-C	.strip_suffix	1	text:Shown+LEAVE-L4
-Elaborator::display_of	OUT-C	.to_string	4	text:Shown+LEAVE-L4
+Elaborator::display_of	OUT-C	.split	1	text:Shown
+Elaborator::display_of	OUT-C	.strip_suffix	1	text:Shown
+Elaborator::display_of	OUT-C	.to_string	4	text:Shown
 Elaborator::display_of	OUT-C	String::new	1	in
 Elaborator::display_of	OUT-C	Vec::new	1	in
 Elaborator::display_of	OUT-F	gen_singleton_labels	1	in
@@ -704,6 +744,35 @@ Elaborator::names_with_pkg_var_aliases	OUT-C	.keys	1	text:LEAVE-L13
 Elaborator::names_with_pkg_var_aliases	OUT-C	.rsplit_once	1	text:LEAVE-L13
 Elaborator::names_with_pkg_var_aliases	OUT-C	.to_string	1	text:LEAVE-L13
 Elaborator::names_with_pkg_var_aliases	OUT-F	pkg_var_aliases	2	in
+Elaborator::net_is_compiler_internal	FN	-	-	-
+Elaborator::net_is_compiler_internal	OUT-C	.any	1	in
+Elaborator::net_is_compiler_internal	OUT-C	.is_some_and	1	in
+Elaborator::net_is_compiler_internal	OUT-C	.iter	1	in
+Elaborator::net_is_compiler_internal	OUT-C	.next	1	in
+Elaborator::net_is_compiler_internal	OUT-C	.rsplit	1	in
+Elaborator::net_is_compiler_internal	OUT-C	.starts_with	1	in
+Elaborator::net_is_compiler_internal	OUT-F	symbols	1	in
+Elaborator::net_key_shown	FN	-	-	-
+Elaborator::net_key_shown	OUT-C	.clone	1	text:Shown
+Elaborator::net_key_shown	OUT-C	.find	1	text:Shown
+Elaborator::net_key_shown	OUT-C	.iter	1	text:Shown
+Elaborator::net_key_shown	OUT-C	.map	1	text:Shown
+Elaborator::net_key_shown	OUT-C	Shown	1	text:Shown
+Elaborator::net_key_shown	OUT-F	symbols	1	in
+Elaborator::net_name_table	FN	-	-	-
+Elaborator::net_name_table	OUT-C	.collect	1	text:Shown
+Elaborator::net_name_table	OUT-C	.enumerate	1	text:Shown
+Elaborator::net_name_table	OUT-C	.get_mut	1	in
+Elaborator::net_name_table	OUT-C	.into_iter	1	text:Shown
+Elaborator::net_name_table	OUT-C	.is_empty	2	in
+Elaborator::net_name_table	OUT-C	.iter	1	text:Shown
+Elaborator::net_name_table	OUT-C	.iter_mut	1	text:Shown
+Elaborator::net_name_table	OUT-C	.len	1	in
+Elaborator::net_name_table	OUT-C	.map	1	text:Shown
+Elaborator::net_name_table	OUT-F	nets	1	in
+Elaborator::net_name_table	OUT-F	symbols	1	in
+Elaborator::net_name_table	OUT-M	format	1	text:Shown
+Elaborator::net_name_table	OUT-M	vec	1	text:Shown
 Elaborator::push_block_local_init	FN	-	-	-
 Elaborator::push_block_local_init	OUT-C	.clone	1	in
 Elaborator::push_block_local_init	OUT-C	.entry	1	in
@@ -931,7 +1000,7 @@ Scopes::gen_binding_encloses	span_holds	2	none	-
 # `<expr>.<name>(..)` on a receiver other than the Elaborator's `self` is NOT resolved (syntax does not know the receiver's type) ;
 # why `std` (the name is on scope_surface.rs's STD_METHODS) or `module` (the file set defines a method by that name) ; a row no call
 # uses is STALE (it blinds no call: no method call on another receiver names it while an outside method has that name). On this tree:
-# 1 name, `is_empty` why `std` (41 calls ; ConstFrame::is_empty bound/frame.rs, ReadMark::is_empty read_set.rs are the outside
+# 1 name, `is_empty` why `std` (43 calls since DK3-a: + net_name_table's two, moved in ; ConstFrame::is_empty bound/frame.rs, ReadMark::is_empty read_set.rs are the outside
 # definitions) ; 0 rows why `module`. Each row is a NOT-PROMISED shape of SURF_OUTCALL (N4): a call by that name on another receiver
 # is not resolved, whatever its receiver's type (round 2: `(*self).name(..)` is the Elaborator's self, SELF, not blinded: FIX NO18). S7-J2's census (modcalls.py, any `fn` name) printed 66 / 69 std-name calls over is_empty, push, contains,
 # join: push / contains / join are FREE fns outside (decl_collide.rs, block_local_class.rs, da/expr_effect.rs), which no method call
@@ -947,7 +1016,7 @@ Elaborator::error
 Elaborator::error_at
 == SURF_OUTCALL_COUNTS
 # calls by style (SELF / RECV / FREE), (item, callee) rows, the blind list's names used and their calls
-self=21 recv=1 free=2 rows=22 blind_names=1 blind_calls=41
+self=21 recv=1 free=2 rows=22 blind_names=1 blind_calls=43
 == SURF_CARD
 # CARD (DELTA11 R2): an OUT position holding Option / Vec / a slice / an array / two or more
 # `bool`, with MEANS (hand): caller | hit:<question> | list:<what> ; a missing row FAILS CARD,
@@ -956,6 +1025,7 @@ self=21 recv=1 free=2 rows=22 blind_names=1 blind_calls=41
 # §5.2 Q-DECLKEY DK1-5a (2026-11-25): hier_resolve RET Option<V> (the leaf table's value under the resolved key, or none)
 # §5.2 Q-DECLKEY DK1-5b (2026-11-25): keys_under_cur RET Vec<&NewKey> (the package fold's saved keys under the current scope, each once, in key-text order: the order decl_keep_snapshot records and decl_keep_restore replays)
 # §5.2 Q-DECLKEY DK2 (2026-11-26, form (c)): the four walks are private: their RET rows gone ; the 23 named entries' RET Option<DeclKey> rows added by the pass, means as the walks'
+# §5.2 Q-DECLKEY DK3-a (2026-11-26): + net_key_shown (hit) and net_name_table (list) ; bare_name_of_net's Option is LEAVE L13's row
 item	position	type	means
 Keyed::get_found	RET	Option<&V>	hit:a value stored under the key
 ScopeKeyed::take_at	RET	Option<V>	hit:a value stored at the carried scope
@@ -989,6 +1059,8 @@ Elaborator::walk_key_wide	RET	Option<DeclKey>	hit:the declaration key the walk f
 Elaborator::walk_key_wide_value_or_net	RET	Option<DeclKey>	hit:the declaration key the walk found
 Elaborator::walk_shadowed_fixed_string_dyn	RET	Option<DeclKey>	hit:the declaration key the walk found
 Elaborator::walk_shadowed_string_array_elem	RET	Option<DeclKey>	hit:the declaration key the walk found
+Elaborator::net_key_shown	RET	Option<Shown>	hit:the first key in symbols' order that holds the net
+Elaborator::net_name_table	RET	Vec<Shown>	list:one display name per NetId, in NetId order
 == SURF_CB
 # CB (DELTA11 R2): a callback parameter of a surface item, kind Fn | FnMut | FnOnce | fn, its
 # argument types, CALLS (hand): once (FnOnce) | per:<what> | probe:<what>. First rows at LS2a.
@@ -1024,9 +1096,13 @@ lexscope/disp.rs	Elaborator::display_prefix	b8f0d3020e9b4c149da08ca57d00c95e420d
 lexscope/disp.rs	Elaborator::enter_frame_scope_root	0c3429c08abc678bd1233a3c442c45dad19994c59d1cfe484b012f126542eeac
 lexscope/disp.rs	Elaborator::frame_path	e91364f500b060fe9902849d65b4f0fc49205c03ec3a45653579e9fa6515760a
 lexscope/disp.rs	Elaborator::frame_path_of	823ba84312a47cec1fe5a422c8df2b42892f809d0260fc0afa30738ac77e0fde
+lexscope/disp.rs	Elaborator::net_key_shown	8147128a001379154c9183183de78af7b4b4f2d90c9af8b1bd0526cc952e6623
+lexscope/disp.rs	Elaborator::net_name_table	85844e163277e8488376bf10f4acc1029ef025460acb555704dbae144ad70400
 lexscope/disp.rs	Elaborator::scope_chain_abs	08982b08354d4fb83357eabf54dbc92cddca5f06e42670a29e43f9780fc2ee90
 lexscope/disp.rs	Elaborator::stmt_loc_instance	f5718abbc8b5d0b5e42c9ea74827a1b2eb61a9a44cb49e060b86a1e0d1546614
+lexscope/elab.rs	Elaborator::alias_iface_port	c41811ea0a7176c338e7e7ca27bebea128a3a06fd1bd000bea06d4ccc83f6bd1
 lexscope/elab.rs	Elaborator::assert_block_local_inits_drained	e16e5a4ed7f2cbdc6a5709fc2ed990679578f16652d7f73bfbdd4803892bf162
+lexscope/elab.rs	Elaborator::bare_name_of_net	321823c80b8ff32e0a4ab6b3d546851bb6b2ff9a1253e38ea7880f7b75e61fb5
 lexscope/elab.rs	Elaborator::cur_gen_rtn_key	145f90e1aed58635660a165acea00147262cac1991617b27de0d3efabe088e5f
 lexscope/elab.rs	Elaborator::decl_pos_key	3bc7904fe805e472cb04f21a6f926a345fc405663a001a94066c87d779d7b940
 lexscope/elab.rs	Elaborator::drain_scoped_presize	00f2579cfe53586a10ef357797c63a237275c3722bbb5388f11bc992f4e961d9
@@ -1034,6 +1110,7 @@ lexscope/elab.rs	Elaborator::flush_block_local_inits	96c4c9ddde4eecdfa18217565a6
 lexscope/elab.rs	Elaborator::gen_rtn_key	a0eef9d5eb944c948259292ce3c21fdd2f66141aa4beb20424fee34d0bc95bae
 lexscope/elab.rs	Elaborator::hoisted_at_decl_pos	407e99498c85a245fc330096f3b447ba861712defbf503ecf488a5a91602f058
 lexscope/elab.rs	Elaborator::names_with_pkg_var_aliases	3b2e58f26bc9994497723116ebf3948571452c57d8015df7df4b432a473123b3
+lexscope/elab.rs	Elaborator::net_is_compiler_internal	97c4e9b7380e9f956677cc3e0ba491d543d1552e39e7d890d4c3e372626190b1
 lexscope/elab.rs	Elaborator::push_block_local_init	1e7349e2e3b8b72df1ad90ee701abf9bb7dfa53afd8107b2839f67a2558d4601
 lexscope/elab.rs	Elaborator::report_at	0a7914e184740a121f3ad5e2e54417d01cd3b8cab4d3b818ab91ea08640b7928
 lexscope/elab.rs	Elaborator::scoped_init_key	e8e6bdb08ad2356dd41579fa21fbae58edd780656be45d5940d1b66b359beddf
@@ -1071,7 +1148,6 @@ lexscope/key.rs	Scopes::at_cur	3d582b863ab0e29f57edea8a089557b3963d49bec59c7917f
 lexscope/key.rs	Scopes::new_key	90dd5e8de6c4251f8a07e8fefea3668e34f8959476c5118c5d2ae75061e42bd3
 lexscope/key.rs	Scopes::show_miss	b1f4dc8341919651502a4bffd2103726163292a19a886fb2f728b18b733a7ef8
 lexscope/key.rs	at_same	bf297f95d0e553dd42c2d1c834d4d2e7fc8619999b662301c6e6247a542b7787
-lexscope/key.rs	at_text	80304ba5cdaae492d0bc0ab625c80f4162571f6352864fbed7cc41853ad277ad
 lexscope/key.rs	found_text	80304ba5cdaae492d0bc0ab625c80f4162571f6352864fbed7cc41853ad277ad
 lexscope/key.rs	key_in	9a8aca0aa37b0c6367c5d77f2cfbdf7e38d94e9d31c9354599116edcf4a71fc4
 lexscope/key.rs	key_same	bf297f95d0e553dd42c2d1c834d4d2e7fc8619999b662301c6e6247a542b7787
@@ -1155,11 +1231,11 @@ lexscope/tests.rs	fb_disp_chain_take_push_pop_restore	2a42b6329bbc34ed7ed14b1c9a
 lexscope/tests.rs	fb_disp_root_and_method_swap_restore	1602f61170e077d46697843b2dc91cdcc2c946c5eb768296c3a60e80c2b98107
 lexscope/tests.rs	fb_enter_and_restore	dfdb9eb401228b2603ebe912984e171022f50aa4c5ca06adf3f6e7a18b53c42b
 lexscope/tests.rs	fb_gen_binding_encloses	206a8d8e9937fe5b523837689a49a6d7ea9b278ae5dd8311ede01bd9db3f6e8a
-lexscope/tests.rs	fb_key_under_and_scope_debug	9b2f2f49c75299232b4754788c50556d88eec84327fe8755dc1b9437b3cd8680
+lexscope/tests.rs	fb_key_under_and_scope_debug	8d660b6bf1c1ac388cbfb81ad70cf7ec4fe5497a589cb42e4679a59de8bf4ebe
 lexscope/tests.rs	fb_keys_under_cur_orders_and_dedups	eb0c4858b1c9a8c6b34a1e83641fea1ee9ba194ec8546fa91e30037f0541ab85
 lexscope/tests.rs	fb_marks_swap_put_exchange_and_ask	f5b1752089cc35f442d0c47c356ba0678954ee25d43285534e0f0ab39e7f0a34
 lexscope/tests.rs	fb_new_is_the_empty_path	f210f156ce27c33ae71711ae50e80b5480712be2487d083c3da71b59ebcff5b4
-lexscope/tests.rs	fb_read_key_meets_the_declared_key	7a2491e4fc3a4d8900f79c87b9e063efdd82e7f10ad84db06084d481d5f912f2
+lexscope/tests.rs	fb_read_key_meets_the_declared_key	8757bd32c0f703ff21bd338f86f22f0df65ceb8f56a0267e0c2049034c249924
 lexscope/tests.rs	fb_reentry_reuses_the_id	de68374e8740b743110934b6a4132eaba190f1fdb8abbaf80e4690c42d508951
 lexscope/tests.rs	fb_scope_child_text_and_reentry	c46e0ebdbeb76c7adaa70b7b28559f1dfb503d1ef00519e5495834733ce2e777
 lexscope/tests.rs	fb_scope_keyed_push_here	c9f10efeef1201cd95ec9eb5a141bc86d58da0e6142f2d73c3bd7932d4f88b83
@@ -1225,6 +1301,7 @@ Elaborator::with_scope	IN:f	Self = Elaborator -> Elaborator.const_call_fn -> Ref
 # §5.2 Q-DECLKEY DK1-5a (2026-11-25): hier_resolve, hier_key_within, indexed_gen_singleton, singleton_scope_key moved to lexscope/hier.rs (file column ; singleton_scope_key private now) ; + is_hier_scope (R-J2: the resolver's scope question moves in with it, private ; absent from moved.tsv and from this table before) — 30 -> 31 fns
 # §5.2 Q-DECLKEY DK1-5b (2026-11-25): + names_with_pkg_var_aliases (X18, the unit's one mover, lexscope/elab.rs ; absent from moved.tsv and this table before: move_census SURF_PLAN absent=1) — 31 -> 32 fns ; decl_keep_snapshot stays outside (R-J1: no row) and keys_under_cur is a new entry, not a moved fn (no row)
 # §5.2 Q-DECLKEY DK2 (2026-11-26, form (c)): the four generic walks are private (each site calls a named entry, 23, E-1c) — 4 rows re-judged off the surface (their CB:hit / CB:hit.0 / IN:name / RET verdicts leave with the visibility) ; walk_scopes (scope.rs) deleted, its row gone: 32 -> 31 fns ; the entries take `name: &str` (+ `prefix`) and return Option<DeclKey>, no callback (SURF_ROWS)
+# §5.2 Q-DECLKEY DK3-a (2026-11-26): net_name_table moved to lexscope/disp.rs and returns Vec<Shown> — its row re-homed and re-judged (unit column DK4 kept: moved.tsv's label)
 unit	fn	file	vis	tier	signature	verdict	fails	in_enter
 DK1	decl_probe_key	lexscope/walk.rs	-	E	(&self, name: &str, key: &mut AtKey, hit: &impl Fn(&AtKey) -> bool) -> bool	FAIL	ARG:key=UNKNOWN(AtKey); CB:hit=CB(a callback Fn(&AtKey)); CB:hit.0=UNKNOWN(AtKey)	name
 DK1	hier_key_within	lexscope/hier.rs	-	E	(&self, base: &str, rest: &[String]) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	base,rest
@@ -1238,7 +1315,7 @@ DK1	walk_scopes_key	lexscope/walk.rs	-	E	(&self, name: &str, hit: impl Fn(&AtKey
 DK1	walk_scopes_key_from	lexscope/walk.rs	-	E	(&self, prefix: &crate::ScopeRef, name: &str, hit: impl Fn(&AtKey) -> bool) -> Option<DeclKey>	FAIL	CB:hit=CB(a callback Fn(&AtKey)); CB:hit.0=UNKNOWN(AtKey); RET=CARD(Option in Option<DeclKey>); RET=UNKNOWN(DeclKey)	prefix,name
 DK1	walk_scopes_key_inner	lexscope/walk.rs	-	E	(&self, name: &str, hit: impl Fn(&AtKey) -> bool, stop_at_net_binding: bool) -> Option<DeclKey>	FAIL	CB:hit=CB(a callback Fn(&AtKey)); CB:hit.0=UNKNOWN(AtKey); RET=CARD(Option in Option<DeclKey>); RET=UNKNOWN(DeclKey)	name
 DK1	walk_scopes_key_shadowed	lexscope/walk.rs	-	E	(&self, name: &str, hit: impl Fn(&AtKey) -> bool) -> Option<DeclKey>	FAIL	CB:hit=CB(a callback Fn(&AtKey)); CB:hit.0=UNKNOWN(AtKey); RET=CARD(Option in Option<DeclKey>); RET=UNKNOWN(DeclKey)	name
-DK4	net_name_table	net_util.rs	pub(crate)	E	(&self) -> Vec<String>	FAIL	RET=CARD(Vec in Vec<String>); RET=TEXT(String)	-
+DK4	net_name_table	lexscope/disp.rs	pub(crate)	E	(&self) -> Vec<Shown>	FAIL	RET=CARD(Vec in Vec<Shown>); RET=UNKNOWN(Shown)	-
 LS2-d	cur_context	lexscope/disp.rs	-	E	(&self) -> Vec<diag::Frame>	FAIL	RET=CARD(Vec in Vec<diag::Frame>); RET=UNKNOWN(named type of another module diag::Frame)	-
 LS2-d	display_of	lexscope/disp.rs	-	E	(&self, prefix: &str) -> String	FAIL	RET=TEXT(String)	prefix
 LS2-d	display_prefix	lexscope/disp.rs	-	E	(&self) -> String	FAIL	RET=TEXT(String)	-
@@ -1258,7 +1335,7 @@ LS3	push_block_local_init	lexscope/elab.rs	pub(crate)	E	(&mut self, scope: Optio
 LS3	scoped_init_key	lexscope/elab.rs	-	E	(&self, scope: Option<&str>) -> String	FAIL	RET=TEXT(String)	scope
 LS3	report_at	lexscope/elab.rs	pub(crate)	E	(&mut self, span: Option<ast::Span>, prefix: &ScopeRef, msg: &str, reported: &mut ReportedAt)	FAIL	ARG:reported=UNKNOWN(ReportedAt)	span,prefix,msg
 == SURF_PLAN_COUNTS
-fns=31 pass=5 fail=26 ret_fail=23 ret_text=16 callback_text=1 mut_text=0 card=15 cb=8 interior=1 enter=38 enter_number=6 in_unknown=0
+fns=31 pass=5 fail=26 ret_fail=23 ret_text=15 callback_text=1 mut_text=0 card=15 cb=8 interior=1 enter=38 enter_number=6 in_unknown=0
 == FIX_LEAVE
 id	item	position	type	closes
 L0	scope_out	RET	T::Plain	permanent

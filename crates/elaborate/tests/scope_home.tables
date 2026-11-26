@@ -364,6 +364,7 @@ rows 102 {"COPY": 15, "FRAME": 3, "OWN": 36, "PLACE": 5, "R5": 1, "R5TAIL": 2, "
 # §5.2 Q-DECLKEY DK1-5a (2026-11-25): the hierarchical resolver moves into lexscope/hier.rs (MOVE 5, R-J2) — hier_resolve's `segs` re-homed
 # §5.2 Q-DECLKEY DK1-5b (2026-11-25): decl_keep_snapshot STAYS in decl_scope.rs (R-J1) and hands its key list to lexscope: the `keys` collection it built (BTreeSet<&str>) is keys_under_cur's now (BTreeMap<&str, &NewKey>, lexscope/mod.rs) [DK1-6 (2026-11-25): ROUND 1's form, never built — the round-2 line below is the built state (newreads N9 (b))]
 # §5.2 Q-DECLKEY DK1-5b round 2 (2026-11-25, the cost trip on the package path): keys_under_cur builds no collection of its own: it takes the caller's Vec<&NewKey> BY VALUE and sorts, dedups and filters it in place (no BTreeMap, no second Vec) ; its H7 row `keys_under_cur 1 keys` is gone
+# §5.2 Q-DECLKEY DK3-a (2026-11-26): bind_iface_port's alias list moves with its loop into lexscope/elab.rs alias_iface_port (X15): 2 -> 1 (mp_dirs), + 1 (aliases)
 file	fn	lets	bindings
 block_local/gate.rs	deny_static_init_reading_per_entry	1	hits
 block_local/hoist.rs	hoist_block_local_nets	1	pushed
@@ -440,6 +441,7 @@ instance.rs	elaborate_instance	6	conflict_names,local_const_funcs,wc_const_fn,ex
 instance.rs	elaborate_instance	UNTYPED	names=gather_local_decl_names,dbl=gather_block_local_names,shadow_names=names_with_pkg_var_aliases,scoped_blocks=compute_scoped_block_locals,per_entry_blocks=compute_per_entry_block_locals,coalesced=compute_coalesced_block_locals,shadow_names=names_with_pkg_var_aliases,map=compute_scoped_block_locals
 instance_array.rs	elaborate_instance_array	1	port_widths
 lexscope/disp.rs	display_of	1	out
+lexscope/elab.rs	alias_iface_port	1	aliases
 lexscope/elab.rs	assert_block_local_inits_drained	1	keys
 lexscope/elab.rs	flush_block_local_inits	3	keys,all,runs
 lexscope/hier.rs	hier_resolve	1	segs
@@ -466,7 +468,7 @@ pkg_body_scope.rs	rtn_declared_names	1	names
 pkg_scoped_frames.rs	frame_scoped_pkg_routines	2	late,cands
 pkg_scoped_frames.rs	frame_scoped_pkg_routines	UNTYPED	frame_set=build_frame_set,reachable=scoped_reachable_callees
 pkg_scoped_frames.rs	scoped_reachable_callees	3	want,seen,keys
-ports.rs	bind_iface_port	2	mp_dirs,aliases
+ports.rs	bind_iface_port	1	mp_dirs
 ports.rs	elaborate_virtual_iface	1	bound
 ports.rs	elaborate_virtual_iface	UNTYPED	members=iface_member_names
 ports.rs	wire_ports	1	wildcard_conns
@@ -512,7 +514,7 @@ block_local_class.rs	compute_timed_blocks	let	path
 block_local_class.rs	compute_timed_blocks	field:Acc	sharers
 block_local_class.rs	compute_timed_blocks	field:Acc	scoped
 == H7_COUNTS
-lets 155 fns 85 untyped 30 readers 26
+lets 155 fns 86 untyped 30 readers 26
 == HM
 # HM: the mints of scope-qualified text, by (file, fn, mint kind, name) with a count — g3 mints.tsv's rule
 # (census_g3.rs + link.py): `call` a call of a mint fn (MINT_CALLS), `fmt` / `fmt-tempname` a `format!` /
@@ -539,6 +541,7 @@ lets 155 fns 85 untyped 30 readers 26
 # §5.2 Q-DECLKEY DK1-5b (2026-11-25): decl_keep_snapshot's `format!("{prefix}.")` (the package scope's text and its dot) is keys_under_cur's (lexscope/mod.rs ; TAG scope kept) — every mint of the snapshot is inside the module [DK1-6 (2026-11-25): ROUND 1's form, never built — the round-2 line below is the built state (newreads N9 (b))]
 # §5.2 Q-DECLKEY DK1-5b round 2 (2026-11-25, the cost trip on the package path): that `format!` is gone: the prefix test reads the current text and the byte after it (`k.starts_with(prefix)` and `as_bytes()[prefix.len()] == b'.'`), no `<prefix>.` text is formed ; its HM row `keys_under_cur fmt format 1` is gone
 # §5.2 Q-DECLKEY DK2 (2026-11-26, form (c)): the 51 walk calls call their NAMED ENTRY (MINT_CALLS knows the 23 by E-1c ; TAG key as the walk rows) — 46 site rows re-keyed (the five two-walk fns split 2 -> 1+1), walk_scopes' `call walk_scopes_key` row gone, + 23 rows `lexscope/walk.rs <entry> call <its walk> 1 key`
+# §5.2 Q-DECLKEY DK3-a (2026-11-26): bind_iface_port's two prefix formats move to lexscope/elab.rs alias_iface_port (TAG scope kept)
 file	fn	kind	name	count	TAG
 array_geom.rs	shape_bits	call	walk_key_value	1	key
 arrays.rs	expr_array_chain	join	join	1	spelling
@@ -671,6 +674,7 @@ lexscope/disp.rs	scope_chain_abs	derived-fn	scope_chain_abs	1	display
 lexscope/disp.rs	scope_chain_abs	fmt	format	2	display
 lexscope/disp.rs	scope_chain_abs	join	join	2	display
 lexscope/disp.rs	stmt_loc_instance	fmt	format	1	display
+lexscope/elab.rs	alias_iface_port	fmt	format	2	scope
 lexscope/elab.rs	cur_gen_rtn_key	call	gen_rtn_key	1	key
 lexscope/elab.rs	cur_gen_rtn_key	derived-fn	cur_gen_rtn_key	1	key
 lexscope/elab.rs	decl_pos_key	fmt	format	1	key
@@ -753,7 +757,6 @@ param_query.rs	real_param_is_non_integral	call	walk_key_real_value_or_net	1	key
 param_query.rs	real_param_lowers_real	call	walk_key_real_value_or_net	1	key
 params.rs	param_sel_range	call	walk_key_value_or_net	1	key
 ports.rs	bind_iface_port	call	walk_key_iface_inst	1	key
-ports.rs	bind_iface_port	fmt	format	2	scope
 ports.rs	check_modport_write	call	walk_key_net	1	key
 ports.rs	check_modport_write	join	join	1	spelling
 ports.rs	elaborate_virtual_iface	fmt	format	1	key
@@ -793,11 +796,13 @@ all_clocking_names array_const_meta array_const_vals  array_param_overrides bind
 # §5.2 Q-DECLKEY DK1-5a (2026-11-25): is_hier_scope moves into lexscope/hier.rs, private (R-J2) — its three range scans re-homed ; ENTRY X16 -> w9:DK3-b (DELTA18 G2.2: X16 is no entry to build, the scans are in-module window uses, DK3-b's list, T9)
 # §5.2 Q-DECLKEY DK1-5b (2026-11-25): names_with_pkg_var_aliases moves into lexscope/elab.rs (MOVE 1): its X18 scan re-homed ; X19, the HAND row of the parameter scan, re-homed to lexscope/mod.rs keys_under_cur (the `keys` it orders is the list decl_keep_snapshot hands in ; plan18/s7 S7-J4 (y): accepted, counts unchanged) — the scan the header names as decl_scope.rs:377 is that one
 # §5.2 Q-DECLKEY DK2 (2026-11-26, form (c)): clk_refused_at's candidate scan moves into held.rs hit_clk_refused (walk_from_net_or_refused_clk's closure calls it) — a second HAND row, X24 names both scans (DELTA19B I2 L4 ; R7) ; clk_refused_at's row stands for `refused`
+# §5.2 Q-DECLKEY DK3-a (2026-11-26): the three DK4-show scans (cont_var.rs, lvalue.rs, netdecl.rs) are one scan of lexscope/disp.rs net_key_shown ; net_name_table moved in ; X12 (dynarr.rs) is lexscope/elab.rs bare_name_of_net, X13 net_is_compiler_internal moved in, X15 bind_iface_port's range is alias_iface_port's — 7 rows gone, 5 new, KIND and ENTRY kept: scans 29 -> 27
+# NOT-PROMISED (§5.2 Q-DECLKEY DK3-a): a scan of `symbols` written back outside lexscope is seen by HS / HOUT today (control K7: cont_var.rs
+#  cont_var_name, HS NEW ROW + HOUT GONE ROW ; K8: ports.rs bind_iface_port, HS NEW ROW + HF CHANGED) and by the compiler only after DK3-b
+#  deletes the window (K7b: E0599, no `iter` on Keyed).
 file	fn	store	method	count	KIND	ENTRY
 classes.rs	register_classes	class_table	iter	1	KEY-BLIND	Z2-values
-cont_var.rs	cont_var_name	symbols	iter	1	PRINT/DUMP	DK4-show
 driver.rs	run	bind_targets	values	1	KEY-BLIND	Z2-values
-dynarr.rs	dyn_blocking_special	symbols	iter	1	TEXT-SCAN-ANSWERS	X12
 expr_size_hier.rs	facts_have_body_write_funcs	module_facts	values	1	KEY-BLIND	Z2-values
 frames_body.rs	seed_subroutine_routes	func_table	iter	1	KEY-BLIND	Z2-values
 frames_body.rs	seed_subroutine_routes	task_table	iter	1	KEY-BLIND	Z2-values
@@ -805,24 +810,24 @@ frames_classify.rs	build_frame_set	func_table	for	2	KEY-BLIND	Z2-values
 frames_classify.rs	build_frame_set	func_table	iter	1	KEY-BLIND	Z2-values
 frames_classify.rs	build_frame_set	func_table	keys	1	KEY-BLIND	Z2-values
 frames_classify.rs	build_task_frame_set	task_table	for	2	KEY-BLIND	Z2-values
-frames_classify.rs	net_is_compiler_internal	symbols	iter	1	TEXT-SCAN-ANSWERS	X13
 held.rs	clk_refused_at	clk_refused	iter	1	HAND:TEXT-SCAN-ANSWERS	X24
 held.rs	hit_clk_refused	clk_refused	iter	1	HAND:TEXT-SCAN-ANSWERS	X24
+lexscope/disp.rs	net_key_shown	symbols	iter	1	PRINT/DUMP	DK4-show
+lexscope/disp.rs	net_name_table	symbols	iter	1	PRINT/DUMP	DK4-show
+lexscope/elab.rs	alias_iface_port	symbols	range	1	TEXT-SCAN-ANSWERS	X15
+lexscope/elab.rs	bare_name_of_net	symbols	iter	1	TEXT-SCAN-ANSWERS	X12
 lexscope/elab.rs	names_with_pkg_var_aliases	pkg_var_aliases	keys	1	TEXT-SCAN-ANSWERS	X18
+lexscope/elab.rs	net_is_compiler_internal	symbols	iter	1	TEXT-SCAN-ANSWERS	X13
 lexscope/hier.rs	is_hier_scope	hier_params	range	1	TEXT-SCAN-ANSWERS	w9:DK3-b
 lexscope/hier.rs	is_hier_scope	symbols	range	1	TEXT-SCAN-ANSWERS	w9:DK3-b
 lexscope/hier.rs	is_hier_scope	wide_param_bits	range	1	TEXT-SCAN-ANSWERS	w9:DK3-b
 lexscope/mod.rs	keys_under_cur	keys	iter	1	HAND:TEXT-SCAN-ANSWERS	X19
-lvalue.rs	check_lvalue_kind	symbols	iter	1	PRINT/DUMP	DK4-show
-net_util.rs	net_name_table	symbols	iter	1	PRINT/DUMP	DK4-show
-netdecl.rs	check_whole_net_multidriver	symbols	iter	1	PRINT/DUMP	DK4-show
 pkg_body_scope.rs	frame_key_of	frame_idx	iter	1	KEY-BLIND	Z2-values
 pkg_body_scope.rs	imported_routine_bodies	func_table	keys	1	TEXT-SCAN-ANSWERS	X14-RS1
 pkg_body_scope.rs	imported_routine_bodies	rtn_pkg	keys	1	KEY-BLIND	Z2-values
 pkg_body_scope.rs	imported_routine_bodies	task_table	keys	1	TEXT-SCAN-ANSWERS	X14-RS1
-ports.rs	bind_iface_port	symbols	range	1	TEXT-SCAN-ANSWERS	X15
 == HS_COUNTS
-stores 81 scans 29 kinds {"KEY-BLIND": 13, "PRINT/DUMP": 4, "TEXT-SCAN-ANSWERS": 12}
+stores 81 scans 27 kinds {"KEY-BLIND": 13, "PRINT/DUMP": 2, "TEXT-SCAN-ANSWERS": 12}
 == HH
 # HH: the current-prefix reads (g3 k4_reads.tsv, 59) — a probe (get / contains_key / contains / range /
 # get_mut, or an index) of a field or a fn-local table whose key argument is an `fq` call or a `let` holding
@@ -874,6 +879,7 @@ reads 39 roles {"composite": 4, "whole": 35} stores {"array_param_overrides": 1,
 # §5.2 Q-DECLKEY DK1-5a (2026-11-25): hier_resolve's `split '.'` and is_hier_scope's `starts_with <probe>` re-homed to lexscope/hier.rs (TAG / UNIT kept)
 # §5.2 Q-DECLKEY DK1-5b (2026-11-25): names_with_pkg_var_aliases' `rsplit_once '.'` (moved to lexscope/elab.rs) and decl_keep_snapshot's two `starts_with <mine>` (keys_under_cur's, lexscope/mod.rs) re-homed (TAG / UNIT kept) [DK1-6 (2026-11-25): ROUND 1's form, never built — the round-2 line below is the built state (newreads N9 (b))]
 # §5.2 Q-DECLKEY DK1-5b round 2 (2026-11-25, the cost trip on the package path): the two `starts_with <mine>` are one `starts_with <prefix>`, in the closure `mine` the debug_assert and the retain both call (TAG / UNIT kept)
+# §5.2 Q-DECLKEY DK3-a (2026-11-26): five segment tests re-homed with their fns: X12 dynarr.rs -> lexscope/elab.rs bare_name_of_net, X13 net_is_compiler_internal moved in, X15 bind_iface_port's two -> alias_iface_port (TAG key, UNIT DK3 kept)
 file	fn	method	arg	count	TAG	UNIT
 block_local/gate.rs	actual_is_record_of	starts_with	'$'	1	spelling	-
 block_local/gate.rs	actual_is_record_of	strip_prefix	"$unp$"	1	spelling	-
@@ -891,13 +897,10 @@ decl_collide.rs	carrier_stem	rsplit_once	'$'	1	spelling	-
 decl_collide.rs	carrier_stems	strip_suffix	"$s"	1	spelling	-
 decl_collide.rs	carrier_stems	strip_suffix	"$w"	1	spelling	-
 decl_collide.rs	internal_name	starts_with	'$'	1	spelling	-
-dynarr.rs	dyn_blocking_special	rsplit	'.'	1	key	DK3
 edge_gate.rs	source_name	strip_prefix	"__forvar_"	1	spelling	-
 elab_task.rs	try_elab_task	strip_prefix	<ELAB_TASK_PREFIX>	1	spelling	-
 events.rs	lower_delay	contains	'.'	1	spelling	-
 expr_main.rs	lower_expr_ungated	starts_with	"$__vita_stream_"	1	spelling	-
-frames_classify.rs	net_is_compiler_internal	rsplit	'.'	1	key	DK3
-frames_classify.rs	net_is_compiler_internal	starts_with	'$'	1	key	DK3
 frames_classify_write.rs	refuse_body_write_call	contains	"::"	1	key	RS1
 frames_reserve.rs	reserve_frame_func	contains	"::"	1	key	RS1
 frames_reserve.rs	reserve_frame_func	contains	'$'	1	key	RS1
@@ -918,6 +921,9 @@ lexscope/disp.rs	scope_chain_abs	contains	"$blk$"	1	display	B3k
 lexscope/disp.rs	scope_chain_abs	split	'.'	1	display	B3k
 lexscope/disp.rs	scope_chain_abs	starts_with	"$blk$"	1	display	B3k
 lexscope/disp.rs	stmt_loc_instance	strip_prefix	'.'	1	display	-
+lexscope/elab.rs	alias_iface_port	split	'.'	1	key	DK3
+lexscope/elab.rs	alias_iface_port	starts_with	<src_prefix>	1	key	DK3
+lexscope/elab.rs	bare_name_of_net	rsplit	'.'	1	key	DK3
 lexscope/elab.rs	cur_gen_rtn_key	strip_prefix	'.'	1	scope	RS1
 lexscope/elab.rs	cur_gen_rtn_key	strip_prefix	<inst>	1	scope	RS1
 lexscope/elab.rs	flush_block_local_inits	split	'.'	1	scope	B3k
@@ -927,6 +933,8 @@ lexscope/elab.rs	gen_rtn_key	is_gen_scope_segment	-	1	scope	RS1
 lexscope/elab.rs	gen_rtn_key	split	'.'	1	scope	RS1
 lexscope/elab.rs	gen_rtn_key	starts_with	'$'	1	scope	RS1
 lexscope/elab.rs	names_with_pkg_var_aliases	rsplit_once	'.'	1	key	DK1
+lexscope/elab.rs	net_is_compiler_internal	rsplit	'.'	1	key	DK3
+lexscope/elab.rs	net_is_compiler_internal	starts_with	'$'	1	key	DK3
 lexscope/elab.rs	walk_rtn_scopes	rfind	'.'	1	scope	RS1
 lexscope/elab.rs	walk_rtn_scopes	strip_prefix	'.'	1	scope	RS1
 lexscope/elab.rs	walk_rtn_scopes	strip_prefix	<inst>	1	scope	RS1
@@ -964,8 +972,6 @@ params.rs	resolve_param_overrides	split_once	"$p"	1	spelling	-
 params.rs	resolve_param_overrides	strip_suffix	"$w"	1	spelling	-
 pkg_body_scope.rs	imported_routine_bodies	contains	"::"	1	key	RS1
 pkg_body_scope.rs	with_default_arg_scope	rsplit	"::"	1	key	RS1
-ports.rs	bind_iface_port	split	'.'	1	key	DK3
-ports.rs	bind_iface_port	starts_with	<src_prefix>	1	key	DK3
 scope.rs	lookup_net_scoped	split	'.'	1	spelling	DK3
 scope.rs	rtn_key_bare	rfind	'$'	1	key	RS1
 stmt_main.rs	lower_stmt_inner	starts_with	"$f"	1	spelling	-
@@ -1282,6 +1288,7 @@ stmt_main.rs	lower_stmt_inner	with_scope	1	BLOCK
 # exit out of the region, a path that is not r1 ; the test requires it there). Not seen: a panic (only the four
 # diverging macros end a path), a write through a `&mut String` bound earlier, a macro that does not parse.
 # LS2a: FORM is the funnel entry's name (H3's note), `scope_restore(b)` / `scope_repoint(x)` read as `cur_prefix = b / x`.
+# §5.2 Q-DECLKEY DK3-a (2026-11-26): bind_iface_port's body after the scope swap is shorter by the alias loop (alias_iface_port): restores e8 -> e5
 file	fn	site	form	bind	arg	block	opener	restores	repoints	same	exits	paths	nest	PLAN8	READ
 cont_array.rs	check_whole_array_sole_writer	1	scope_swap_empty	saved	-	body	s11	e0	&prefix@e1/for/s0	yes	-	end=r1	-	NOT-FIT	-
 cont_var.rs	check_var_cont_assign_sole_writer	1	scope_swap_empty	saved	-	body	s10	e0	&a.prefix@e3/for/s2,&a.prefix@e1/for/s1/then/s1	yes	continue(local)x1	end=r1	-	NOT-FIT	-
@@ -1301,7 +1308,7 @@ iface_inst.rs	elaborate_iface_instances	1	scope_swap	saved_prefix	&path	s6/for/s
 iface_inst.rs	elaborate_iface_instances	2	scope_swap	saved_prefix	&path	s6/for/s4/then/s3/then	s2	e0	-	yes	-	end=r1	wire_ports	FIT	-
 instance.rs	elaborate_instance	1	scope_swap	saved_prefix	inst_path	body	s8	e13	-	yes	continue(local)x7	end=r1	dyn:is_header_importx2,dyn:site_ofx2,elaborate_iface_instances,flush_block_local_inits,materialize_cover,materialize_sva_checkers,wire_ports	FIT	dyn:is_header_import and dyn:site_of are this fn's local closures, neither captures self (the first calls `Self::import_precedes_header` with no receiver): they cannot write cur
 package.rs	elaborate_package	1	scope_swap_pkg	saved_prefix	&pkg	body	s1	e13	-	yes	continue(local)x3	end=r1	-	FIT	-
-ports.rs	bind_iface_port	1	scope_swap	saved_for_lookup	parent_prefix	body	s1	e8	-	yes	-	end=r1;return=r1	-	FIT	-
+ports.rs	bind_iface_port	1	scope_swap	saved_for_lookup	parent_prefix	body	s1	e5	-	yes	-	end=r1;return=r1	-	FIT	-
 ports.rs	wire_array_port	1	scope_swap	saved	parent_prefix	body	s0	e16/then/s0/then/s1,e14/letelse/s0,e6	-	no	return@e16/then/s0/then/s3,return@e14/letelse/s2	end=r1;return=r1	-	NOT-FIT	one opener, three restores on exclusive paths: two inside the early-out branches, each followed by its `return` (paths: return=r1), one at the end ; PLAN8's NOT-FIT reason
 ports.rs	wire_ports	1	scope_swap	saved	parent_prefix	s2/arm0	s0	e2	-	yes	continue(local)x1	end=r1	-	FIT	-
 ports.rs	wire_ports	2	scope_swap	saved	parent_prefix	s3/for/s8/arm0	s2	e2	-	yes	-	end=r1	-	FIT	LS2a: base site 2 (a clone save `child_prefix` with two parent re-points, NOT-FIT) is two swap / restore pairs by the witness HAND (`scope_witness` / `scope_witness_check`, ports.rs Input / Output arms)
@@ -1350,15 +1357,18 @@ stmt_main.rs	lower_stmt_inner	with_scope	&seg	1
 # ARG:<callee> (a method's receiver tokens + name), RECV:.<method>, ASSIGN:<lhs>, RET, MAC:<macro>><outer>,
 # CLOSURE><outer>, BIN / COND / STMT / OTHER. Equal on T to copies.tsv's H01-H13, H28, H30 destinations, the
 # 9 saves and 9 restores of DELTA10 L2, push_func's 3 producers, the set's 3 lines (LS1 part 4 REPORT).
-# LS2-d: the callees add the typed shims, LEAVE L4 display_of_key_text, stmt_loc_instance, shown_from_spelling,
+# LS2-d: the callees add the typed shims, LEAVE L4 display_of_key_text (L4 closed at §5.2 Q-DECLKEY DK3-a: private, its one
+# call inside lexscope/disp.rs net_name_table), stmt_loc_instance, shown_from_spelling,
 # scope_out (a call, or `scope_out` handed on as a value: arg `fn-value`) and `.plain()` ; a SAVE is also a call of
 # a Saved* entry (disp_chain_take / disp_chain_swap_single / disp_root_swap_empty / disp_enter_frame_root /
 # disp_root_swap_decl_inst / disp_class_method_swap) and a RESTORE a disp_*_restore(<local>) ; the display fields
 # are read as `<recv>.lex.F` too (disp_chain / disp_root / disp_method).
+# §5.2 Q-DECLKEY DK3-a (2026-11-26): net_name_table's display_of_key_text row re-homed (lexscope/disp.rs) ; + 4 `scope_out` fn-value rows: its Vec<Shown> leaves through api.rs, and the three by-id diagnostics (cont_var.rs, lvalue.rs, netdecl.rs) print net_key_shown's Shown
 file	fn	what	arg	sink	count
 api.rs	elaborate_located_params	LIT:InstanceInfo	path=scope_out(r.path)	CLOSURE>ARG:std::mem::take(&mut el.instances_info).into_iter().map	1
 api.rs	elaborate_located_params	LIT:ProcIdent	scope=scope_out(r.scope)	CLOSURE>ARG:std::mem::take(&mut el.ca_idents).into_iter().map	1
 api.rs	elaborate_located_params	LIT:ProcIdent	scope=scope_out(r.scope)	CLOSURE>ARG:std::mem::take(&mut el.proc_idents).into_iter().map	1
+api.rs	elaborate_located_params	scope_out	fn-value	ARG:el.net_name_table().into_iter().map	1
 api.rs	elaborate_located_params	scope_out	fn-value	ARG:std::mem::take(&mut el.frame_func_names).into_iter().map	1
 api.rs	elaborate_located_params	scope_out	fn-value	ARG:std::mem::take(&mut el.proc_inst_scopes).into_iter().map	1
 api.rs	elaborate_located_params	scope_out	fn-value	ARG:std::mem::take(&mut el.proc_scopes).into_iter().map	1
@@ -1378,6 +1388,7 @@ class_lower.rs	lower_class_method_body	SAVE:disp_method	.disp_class_method_swap(
 class_lower.rs	lower_class_method_body	SAVE:disp_root	.disp_root_swap_empty(-)	LOCAL:saved_root#2	1
 classes.rs	reserve_class_method	push_func.m_path	shown_from_spelling(format!("{cname}.{}", method.name))	LOCAL:pushed#2	1
 classes.rs	reserve_class_method	shown_from_spelling	format!("{cname}.{}", method.name)	ARG:self.push_func	1
+cont_var.rs	cont_var_name	scope_out	fn-value	ARG:self.net_key_shown(net).map	1
 cover.rs	register_cover_instance	LIT:CovgInstMeta	inst=scope_out(key_show(&key))	ARG:self.coverage_manifest.push	1
 cover.rs	register_cover_instance	scope_out	key_show(&key)	FIELD:CovgInstMeta.inst	1
 driver.rs	error	ctx_here	-	ARG:scope_out	1
@@ -1432,6 +1443,7 @@ lexscope/disp.rs	frame_path	display_of	self.lex.mark_text(Mark::Inst)	LOCAL:inst
 lexscope/disp.rs	frame_path	display_of	self.lex.scope_text(scope)	LOCAL:d#2	1
 lexscope/disp.rs	frame_path_of	frame_path	bare	RET	1
 lexscope/disp.rs	frame_path_of	frame_path	key	RET	1
+lexscope/disp.rs	net_name_table	display_of_key_text	fq	ASSIGN:*slot	1
 lexscope/disp.rs	scope_chain_abs	display_prefix	-	LOCAL:p#4	1
 lexscope/disp.rs	stmt_loc_instance	scope_chain_abs	-	LOCAL:s#3	1
 lexscope/mod.rs	disp_chain_swap_single	SAVE:disp_chain	mem::replace(&mut self.disp_chain, vec!(seg.to_string()))	ARG:SavedChain	1
@@ -1440,10 +1452,11 @@ lexscope/mod.rs	disp_class_method_swap	SAVE:disp_method	.replace(method)	ARG:Sav
 lexscope/mod.rs	disp_root_swap_empty	SAVE:disp_root	.replace(String::new())	ARG:SavedRoot	1
 lexscope/mod.rs	scope_child	child_prefix	inst_name	LOCAL:text#2	1
 lexscope/mod.rs	scope_out	plain	-	RET	1
+lvalue.rs	check_lvalue_kind	scope_out	fn-value	ARG:self.net_key_shown(c.net).map	1
 net_util.rs	add_net	scope_out	key_show(&key)	MAC:format>ARG:self.error	1
 net_util.rs	declare_implicit_net	scope_out	key_show(&fq)	MAC:format>ARG:self.warn_code	1
-net_util.rs	net_name_table	display_of_key_text	fq	ASSIGN:*slot	1
 net_util.rs	warn_implicit_net_truncation	scope_out	self.lex.show_miss(n)	MAC:format>ARG:self.warn_code	1
+netdecl.rs	check_whole_net_multidriver	scope_out	fn-value	ARG:self.net_key_shown(net).map	1
 proc_ident.rs	push_cont_assign	LIT:ProcIdentRow	scope=self.lex.cur_shown()	ARG:self.ca_idents.push	1
 proc_ident.rs	push_cont_assign	cur_shown	-	FIELD:ProcIdentRow.scope	1
 read_set.rs	recompute_in_body_star_sites	scope_out	s.ctx.clone()	FIELD:Diagnostic.context	1
@@ -1471,7 +1484,10 @@ systask.rs	lower_systask	scope_out	self.lex.show_miss(&joined)	MAC:format>LOCAL:
 # §5.2 Q-DECLKEY DK1-3 (2026-11-24, the read side): scope_out 23 -> 30, the 7 message / IR-constant texts `fq` gave are `scope_out(<recv>.lex.show_miss(..))` handed to their
 # format's argument (scope.rs resolve_net, instance_array.rs, sva_clocking.rs x2, net_util.rs warn_implicit_net_truncation,
 # systask.rs lower_systask, inline_task_locals.rs ; the last three bound it to a `let` before: no LOCAL sink, HC LOCAL stays 5)
-{"LIT": 7, "RESTORE": 9, "SAVE": 16, "child_prefix": 1, "ctx_here": 6, "cur_context": 1, "cur_shown": 3, "cur_shown_quoted_or": 1, "disp_chain_abs": 2, "disp_frame_path_of": 2, "disp_here": 2, "disp_inst_top": 1, "disp_inst_top_text": 1, "display_of": 6, "display_of_key_text": 1, "display_prefix": 3, "enter_frame_scope_root": 1, "frame_path": 3, "frame_path_of": 1, "plain": 1, "push_func.m_path": 3, "scope_chain_abs": 2, "scope_out": 30, "shown_from_spelling": 1, "stmt_loc_instance": 1}
+# §5.2 Q-DECLKEY DK3-a (2026-11-26): scope_out 30 -> 34, + 4 fn-value (api.rs elaborate_located_params: net_name_table's Vec<Shown> ; cont_var.rs
+# cont_var_name, lvalue.rs check_lvalue_kind, netdecl.rs check_whole_net_multidriver: net_key_shown's Shown) ; display_of_key_text 1 stays (its row
+# re-homed net_util.rs -> lexscope/disp.rs with net_name_table)
+{"LIT": 7, "RESTORE": 9, "SAVE": 16, "child_prefix": 1, "ctx_here": 6, "cur_context": 1, "cur_shown": 3, "cur_shown_quoted_or": 1, "disp_chain_abs": 2, "disp_frame_path_of": 2, "disp_here": 2, "disp_inst_top": 1, "disp_inst_top_text": 1, "display_of": 6, "display_of_key_text": 1, "display_prefix": 3, "enter_frame_scope_root": 1, "frame_path": 3, "frame_path_of": 1, "plain": 1, "push_func.m_path": 3, "scope_chain_abs": 2, "scope_out": 34, "shown_from_spelling": 1, "stmt_loc_instance": 1}
 == HDBG
 # HDBG (§5.2 Q-LEXSCOPE LS2a ; DELTA9 N-8, DELTA10 N-g): lexscope's debug-only code. The identifier
 # `debug_assertions` occurs 0 times in lexscope's files (every file of the directory, any spelling: cfg,
@@ -1497,6 +1513,18 @@ ident=0 asserts=6
 # §5.2 Q-DECLKEY DK1-4b-2 (2026-11-24): L10 CLOSED (the walk returns a DeclKey ; SURF_LEAVE's four L10 rows deleted): the 47 walk-entry reads leave HBR (walk_scopes_key 40, walk_scopes_key_shadowed 3, scoped_key_at_or_above 3, walk_scopes_key_from 1 ; no HH / H6 / HM row takes them: those tables pass unchanged but H6's FOUND rows) ; held.rs clk_refused_at's L9 at_text (BIN:==, now DeclKey::is_formed_at) and struct_arm.rs struct_arm_rhs's L7 key_text (BIN:!=, now DeclKey::is_formed_as) gone ; + LEAVE L11 found_text's three rows: ports.rs bind_iface_port (the X15 prefix glue -> DK3-a), gen_scope_name.rs key_spells_indexed_singleton and frames_static_init.rs frame_init_name_is_local_or_const (a found key's segments read, HSEG DK3 rows -> DK3-b)
 # §5.2 Q-DECLKEY DK1-5a (2026-11-25): L5 (key_under, AtKey now) and L6 (scope_text, private) CLOSED: their reads left (hier_defer/read.rs resolve_deferred_hier_call ; hier_resolve, moved in) ; L9 ports.rs elaborate_virtual_iface's two glues gone (key_in / new_key) ; L12 opened: indexed_gen_singleton's one reader outside, key_spells_indexed_singleton (DK3-b)
 # §5.2 Q-DECLKEY DK1-5b (2026-11-25): L1 (cur_prefix_text, private) and L7 (key_text, pub(super)) CLOSED, their rows deleted: names_with_pkg_var_aliases' two reads (moved in) and elaborate_package's seven (decl_keep_snapshot takes the `&NewKey`s, keys_under_cur reads the scope inside) ; L13 OPENED: names_with_pkg_var_aliases' set of bare names, read by its four callers outside (block_local_feed.rs, iface_inst.rs, instance.rs x2 ; DK3-a)
+# §5.2 Q-DECLKEY DK3-a (2026-11-26): L4 and L9 CLOSED, L11's ports.rs read left: net_name_table moved in (display_of_key_text private), bind_iface_port's prefix pair moved in as alias_iface_port (at_text deleted ; found_text read inside) — 3 rows gone ; + dynarr.rs's read of bare_name_of_net (X12: L13, the permanent class of bare declared names, q6's fifth row) — L-bridge reads 13 -> 11
+# NOT-PROMISED (one shape a line ; measured by the controls of §5.2 Q-DECLKEY DK3-a, W/scopebind/dk3a/negctl and m7):
+#  NP19-5 bare declared names leave lexscope as text (L13, the permanent class): what a caller does with a bare name — glue it under a
+#         scope text it holds — is seen by no row (a scope text outside the module is itself refused: L1 closed).
+#  NP19-6 a new OUTSIDE call of a moved fn that takes a NetId (net_is_compiler_internal, net_key_shown, bare_name_of_net) is pinned by no
+#         table as a call: control K6 (`self.net_is_compiler_internal(0)` beside bind_iface_port's alias call) and M7 m_nks_2nd (the same with
+#         `self.net_key_shown(0).is_some()`) are seen by HF by position only (bind_iface_port's site 1, e5 -> e6) ; in a fn with no HF site
+#         by none (m_x13_dyn, m_nks_dyn: dynarr.rs dyn_blocking_special, every table passes) ;
+#         bare_name_of_net's is also an L13 read, so HBR sees it as a NEW ROW (M7 m_bnn_2nd) — the read, not the NetId it is handed.
+#  NP19-7 LEAVE_PERMANENT (hbr_the_bridge_reads_are_pinned) reads SURF_LEAVE's id column only: a row given id L13 (or L0) with closes
+#         `permanent` by a table edit passes it — a deliberate edit, not an accident ; an L13 row's reader outside still needs an HBR row,
+#         an L0 row is not HBR's (the entry list skips id L0) ; and another id's closes is checked only to differ from `permanent`.
 file	fn	entry	sink	count
 block_local_feed.rs	feed_scoped_block_locals	names_with_pkg_var_aliases	LOCAL:shadow_names#3	1
 frames_static_init.rs	frame_init_name_is_local_or_const	found_text	RECV:.split	1
@@ -1507,12 +1535,10 @@ generate.rs	register_gen_task	cur_gen_rtn_key	OTHER:let-pattern	1
 iface_inst.rs	elaborate_iface_instances	names_with_pkg_var_aliases	LOCAL:shadow_names#2	1
 instance.rs	elaborate_instance	names_with_pkg_var_aliases	LOCAL:shadow_names#4	2
 package.rs	resolve_rtn_key	walk_rtn_scopes	COND	1
-ports.rs	bind_iface_port	at_text	MAC:format>LOCAL:dst_prefix#1	1
-ports.rs	bind_iface_port	found_text	MAC:format>LOCAL:src_prefix#4	1
-net_util.rs	net_name_table	display_of_key_text	ASSIGN:*slot	1
+dynarr.rs	dyn_blocking_special	bare_name_of_net	LOCAL:tid#2	1
 == HBR_COUNTS
 # LS2-d: 68 -> 66, display_prefix's and cur_context's reads moved into lexscope/disp.rs (not a bridge read) ;
-# + LEAVE L4 display_of_key_text's one site (window w6, closes at DK4) ; L0 (scope_out) is HC's, not HBR's
+# + LEAVE L4 display_of_key_text's one site (window w6 ; closed at §5.2 Q-DECLKEY DK3-a, not DK4: q5) ; L0 (scope_out) is HC's, not HBR's
 # LS4: 16 -> 12, the reads of four scope questions (struct_arm.rs, var_init.rs, frames_call/emit.rs,
 # hoist/general_query.rs) are bool entries of lexscope now (W12_SCOPEQ) ; the 12 left close at DK1
 # DK1-0 (§5.2 Q-DECLKEY): 12 -> 10, instance.rs / iface_inst.rs carry the parent scope (scope_carry, HC_CARRY_LOCAL)
@@ -1527,7 +1553,9 @@ net_util.rs	net_name_table	display_of_key_text	ASSIGN:*slot	1
 # §5.2 Q-DECLKEY DK1-4b-2 (2026-11-24): L10's four entries 47 -> 0 (closed), at_text 4 -> 3, key_text 7 -> 6, + found_text 3 (L11)
 # §5.2 Q-DECLKEY DK1-5a (2026-11-25): key_under 1 -> 0 (L5 closed), scope_text 1 -> 0 (L6 closed), at_text 3 -> 1 (L9: bind_iface_port's left, DK3-a), + indexed_gen_singleton 1 (L12)
 # §5.2 Q-DECLKEY DK1-5b (2026-11-25): cur_prefix_text 3 -> 0 (L1 closed), key_text 6 -> 0 (L7 closed), + names_with_pkg_var_aliases 4 (L13)
-{"at_text": 1, "cur_gen_rtn_key": 2, "display_of_key_text": 1, "found_text": 3, "indexed_gen_singleton": 1, "names_with_pkg_var_aliases": 4, "walk_rtn_scopes": 1}
+# §5.2 Q-DECLKEY DK3-a (2026-11-26): at_text 1 -> 0 (L9 closed), display_of_key_text 1 -> 0 (L4 closed), found_text 3 -> 2 (L11: ports.rs
+# bind_iface_port's read moved in as alias_iface_port), + bare_name_of_net 1 (L13: dynarr.rs dyn_blocking_special) — 13 -> 11
+{"bare_name_of_net": 1, "cur_gen_rtn_key": 2, "found_text": 2, "indexed_gen_singleton": 1, "names_with_pkg_var_aliases": 4, "walk_rtn_scopes": 1}
 == HC_ARGS
 # HC ARGS (LS2a ; DELTA11 R4 N-8, DELTA12 S2 r4): keyed by SURF_ENTER's to-scope rows — the token text of
 # the argument at that parameter in every call of the entry, crate-wide (lexscope included), by (file, fn,
@@ -1752,6 +1780,7 @@ fns=1 calls=17 callers=1
 # §5.2 Q-DECLKEY DK1-4a (2026-11-24): the walk moves into lexscope/walk.rs (MOVE 8, R-G15) — the two carried-scope parameters re-homed
 # §5.2 Q-DECLKEY DK1-5a (2026-11-25): hier_resolve moves into lexscope/hier.rs — its carried-scope parameter re-homed
 # §5.2 Q-DECLKEY DK2 (2026-11-26, form (c)): the four prefix entries (walk_from_net_or_refused_clk, walk_above_*) hold `prefix: &crate::ScopeRef`: + 4 rows
+# §5.2 Q-DECLKEY DK3-a (2026-11-26): + net_key_shown RET Option<Shown> (the display entry of the three by-id scans) and net_name_table RET Vec<Shown> (moved in)
 file	item	position	type	count
 cont_array.rs	WholeArrayCa.prefix	FIELD	crate::ScopeRef	1
 cont_var.rs	VarContAssign.prefix	FIELD	crate::ScopeRef	1
@@ -1794,6 +1823,8 @@ lexscope/disp.rs	Elaborator::disp_frame_path_of	RET	Shown	1
 lexscope/disp.rs	Elaborator::disp_here	RET	Shown	1
 lexscope/disp.rs	Elaborator::disp_inst_top	RET	Shown	1
 lexscope/disp.rs	Elaborator::disp_root_swap_decl_inst	RET	SavedRoot	1
+lexscope/disp.rs	Elaborator::net_key_shown	RET	Option<Shown>	1
+lexscope/disp.rs	Elaborator::net_name_table	RET	Vec<Shown>	1
 lexscope/disp.rs	Elaborator::stmt_loc_instance	RET	Shown	1
 lexscope/elab.rs	Elaborator::report_at	IN:prefix	&ScopeRef	1
 lexscope/elab.rs	Elaborator::report_at	IN:reported	&mut ReportedAt	1

@@ -298,7 +298,7 @@ impl Elaborator<'_> {
         // v6 ②: with a modport, only the LISTED members are visible through
         // the port (§25.5) and `input` members are read-only. Without one,
         // every member aliases with full access.
-        let mp_dirs: Option<BTreeMap<String, ast::PortDir>> = match &iref.modport {
+        let mp_dirs: Option<BTreeMap<String, bool>> = match &iref.modport {
             Some(mp) => {
                 let decl = self.ifaces.get(&actual).and_then(|d| {
                     d.body.iter().find_map(|it| match it {
@@ -316,38 +316,14 @@ impl Elaborator<'_> {
                 Some(
                     m.ports
                         .iter()
-                        .map(|(d, id)| (id.name.clone(), *d))
+                        .map(|(d, id)| (id.name.clone(), matches!(d, ast::PortDir::Input)))
                         .collect(),
                 )
             }
             None => None,
         };
         // Alias the visible symbols under the instance into the child port scope.
-        let src_prefix = format!("{}.", found_text(&parent_fq));
-        let dst_prefix = format!("{}.", at_text(&self.lex.at_cur(pname)));
-        let aliases: Vec<(String, u32, Option<ast::PortDir>)> = self
-            .symbols
-            .range(src_prefix.clone()..)
-            .take_while(|(k, _)| k.starts_with(&src_prefix))
-            .filter_map(|(k, &id)| {
-                let suffix = &k[src_prefix.len()..];
-                // The modport lists direct MEMBERS (single segment) — match on
-                // the first path segment so any future nested suffix follows
-                // its member's visibility.
-                let member = suffix.split('.').next().unwrap_or(suffix);
-                let dir = match &mp_dirs {
-                    Some(dirs) => Some(*dirs.get(member)?), // unlisted → invisible
-                    None => None,
-                };
-                Some((format!("{dst_prefix}{suffix}"), id, dir))
-            })
-            .collect();
-        for (k, id, dir) in aliases {
-            if matches!(dir, Some(ast::PortDir::Input)) {
-                self.modport_readonly.insert(k.clone());
-            }
-            self.symbols.insert(k, id);
-        }
+        self.alias_iface_port(&parent_fq, pname, mp_dirs.as_ref());
     }
 
     /// v6 ②: error on a WRITE that resolves through a modport `input` alias.

@@ -134,9 +134,8 @@ mod instance;
 mod instance_array;
 mod lexscope;
 use lexscope::{
-    at_same, at_text, found_text, key_in, key_same, key_show, scope_out, shown_from_spelling,
-    AtKey, DeclKey, Keyed, KeyedSet, Mark, NewKey, ReportedAt, ScopeKeyed, ScopeRef, Shown,
-    ShownCtx,
+    at_same, found_text, key_in, key_same, key_show, scope_out, shown_from_spelling, AtKey,
+    DeclKey, Keyed, KeyedSet, Mark, NewKey, ReportedAt, ScopeKeyed, ScopeRef, Shown, ShownCtx,
 };
 mod limits;
 mod lvalue;

@@ -43,8 +43,7 @@ mod walk;
 
 use key::key_text;
 pub(crate) use key::{
-    at_same, at_text, found_text, key_in, key_same, key_show, AtKey, DeclKey, Keyed, KeyedSet,
-    NewKey,
+    at_same, found_text, key_in, key_same, key_show, AtKey, DeclKey, Keyed, KeyedSet, NewKey,
 };
 
 /// An interned scope text. Private to the module: no id leaves it.

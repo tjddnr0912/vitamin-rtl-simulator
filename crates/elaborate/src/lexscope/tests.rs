@@ -97,11 +97,11 @@ fn fb_scope_swap_reenters_the_carried_scope_without_interning() {
 fn fb_key_under_and_scope_debug() {
     let mut s = Scopes::new();
     let root = s.scope_carry();
-    assert_eq!(super::at_text(&s.key_under(&root, "n")), "n");
+    assert_eq!(s.key_under(&root, "n").0, "n");
     let a = s.scope_swap_text("top.u".to_string());
     let u = s.scope_carry();
     s.scope_restore(a);
-    assert_eq!(super::at_text(&s.key_under(&u, "n")), "top.u.n");
+    assert_eq!(s.key_under(&u, "n").0, "top.u.n");
     assert_eq!(s.scope_text(&u), "top.u");
     // Debug writes no text: two different scopes print the same
     assert_eq!(format!("{root:?}"), format!("{u:?}"));
@@ -451,16 +451,16 @@ fn fb_scope_questions_truth_tables() {
 
 /// §5.2 Q-DECLKEY DK1-3: the read key a current-scope read forms (`at_cur`) probes the bytes the
 /// declaration key (`new_key`) stored in the same scope — the current scope's, not an outer one's ;
-/// a miss names the same text through `show_miss` (display), and `at_text` (L9) is that text.
+/// a miss names the same text through `show_miss` (display), and the read key's text is that text.
 #[test]
 fn fb_read_key_meets_the_declared_key() {
-    use super::{at_text, Keyed, KeyedSet};
+    use super::{Keyed, KeyedSet};
     let mut s = Scopes::new();
     let mut m: Keyed<u32> = Keyed::default();
     let mut set = KeyedSet::default();
     m.insert_new(s.new_key("a"), 1);
     assert_eq!(m.get_at(&s.at_cur("a")), Some(&1));
-    assert_eq!(at_text(&s.at_cur("a")), "a");
+    assert_eq!(s.at_cur("a").0, "a");
     assert_eq!(scope_out(s.show_miss("a")), "a");
     let r = s.scope_swap_text("top.u".to_string());
     assert_eq!(
@@ -474,7 +474,7 @@ fn fb_read_key_meets_the_declared_key() {
     assert!(m.contains_at(&s.at_cur("a")));
     assert!(set.contains_at(&s.at_cur("w")));
     assert!(!m.contains_at(&s.at_cur("b")));
-    assert_eq!(at_text(&s.at_cur("a")), "top.u.a");
+    assert_eq!(s.at_cur("a").0, "top.u.a");
     assert_eq!(scope_out(s.show_miss("b")), "top.u.b");
     s.scope_restore(r);
     assert_eq!(m.get_at(&s.at_cur("a")), Some(&1));

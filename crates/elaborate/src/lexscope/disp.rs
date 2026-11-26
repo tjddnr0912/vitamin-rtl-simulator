@@ -1,9 +1,11 @@
 //! The display chain's entries that take the Elaborator (tier E ; §5.2 Q-LEXSCOPE LS2-d): the
 //! six display fns and `enter_frame_scope_root`, moved here with their bodies and private ;
 //! the outside reaches them only through the typed shims below (RT-a: a shim wraps one call of
-//! one private fn into `Shown` / `ShownCtx` / `SavedRoot`), the one LEAVE row
-//! `display_of_key_text` (L4, text in and out, closing at DK4) and the two entries cut from
-//! call-site fragments (`stmt_loc_instance`, `disp_root_swap_decl_inst`).
+//! one private fn into `Shown` / `ShownCtx` / `SavedRoot`) and the two entries cut from
+//! call-site fragments (`stmt_loc_instance`, `disp_root_swap_decl_inst`) ; since §5.2 Q-DECLKEY
+//! DK3-a also `net_name_table` (net_util.rs's, moved whole, RET `Vec<Shown>` ; its callee
+//! `display_of_key_text` is private and LEAVE L4 is closed) and `net_key_shown` (the key of a net
+//! id as display text, for the three diagnostics that print it).
 
 use super::{wrap_ctx, wrap_root, wrap_shown, Mark, SavedRoot, Shown, ShownCtx};
 use crate::Elaborator;
@@ -220,10 +222,44 @@ impl Elaborator<'_> {
         wrap_root(self.enter_frame_scope_root(name))
     }
 
-    /// LEAVE L4 (closes at DK4): the display spelling of a storage KEY (`net_name_table`'s
-    /// net names) — key text in, display text out ; reads no lexscope state.
-    pub(crate) fn display_of_key_text(&self, key: &str) -> String {
+    /// The display spelling of a storage KEY (`net_name_table`'s net names) — key text in, display
+    /// text out ; reads no lexscope state. Private since §5.2 Q-DECLKEY DK3-a, which moved its one
+    /// caller in and closed LEAVE L4.
+    fn display_of_key_text(&self, key: &str) -> String {
         self.display_of(key)
+    }
+
+    /// Per-NetId fully-qualified name table for the VCD writer, built by inverting
+    /// the FQ-name → NetId `symbols` map (`"top.dut.q"`). A net with no symbol entry
+    /// (anonymous/implicit) falls back to `n{id}`. BTreeMap iteration is sorted, so
+    /// a net mapped by several aliases keeps the lexicographically smallest FQ name
+    /// (its canonical declaration path). Order-independent of arena order → 3-OS
+    /// stable. Computed before `finish()` (which moves `self.nets`/`self.symbols`).
+    ///
+    /// Spelled through `display_of`, so a SINGLETON generate scope (`generate if` /
+    /// `case` / a bare labelled block, stored as `label[0]`) prints as `label` — the
+    /// spelling both reference tools use and the one every `[in …]` context and `%m`
+    /// already print. Before this, one runtime diagnostic carried two spellings of
+    /// one scope on one line (`…g_sw[0].g_subword[0]…` for the net, `…g_sw.g_subword…`
+    /// for the context; reviewer §3.2, 2026-09-09), and a `--probe` path had to be
+    /// typed in the storage spelling. Loop iterations and instance-array elements
+    /// keep their index; storage keys (`symbols`) are untouched.
+    pub(crate) fn net_name_table(&self) -> Vec<Shown> {
+        let n_nets = self.nets.len();
+        let mut names = vec![String::new(); n_nets];
+        for (fq, &id) in self.symbols.iter() {
+            if let Some(slot) = names.get_mut(id as usize) {
+                if slot.is_empty() {
+                    *slot = self.display_of_key_text(fq);
+                }
+            }
+        }
+        for (i, n) in names.iter_mut().enumerate() {
+            if n.is_empty() {
+                *n = format!("n{i}");
+            }
+        }
+        names.into_iter().map(Shown).collect()
     }
 
     /// An inlined task body's display root: the DECLARING instance (display spelling) ; the
@@ -231,6 +267,16 @@ impl Elaborator<'_> {
     pub(crate) fn disp_root_swap_decl_inst(&mut self) -> SavedRoot {
         let decl_root = self.display_of(self.lex.mark_text(Mark::Inst));
         SavedRoot(self.lex.disp_root.replace(decl_root))
+    }
+
+    /// The KEY of net `net_id` as display text (§5.2 Q-DECLKEY DK3-a (i)): the first key in `symbols`' order whose value is
+    /// `net_id`, the storage spelling the three diagnostics that name a net by id have always printed (E3018 cont_var.rs, the
+    /// lvalue kind lvalue.rs, the multi-driver netdecl.rs) ; `None` when no key holds it (each caller prints `#<id>`).
+    pub(crate) fn net_key_shown(&self, net_id: u32) -> Option<Shown> {
+        self.symbols
+            .iter()
+            .find(|(_, &id)| id == net_id)
+            .map(|(n, _)| Shown(n.clone()))
     }
 
     /// The instance a statement's location record names (`record_stmt_loc`): a class

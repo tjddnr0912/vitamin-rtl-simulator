@@ -287,7 +287,7 @@ pub fn elaborate_located_params(
         clocking_outputs: std::mem::take(&mut el.clocking_outputs),
         ca_delays: std::mem::take(&mut el.ca_delays),
         ca_delay_exprs: std::mem::take(&mut el.ca_delay_exprs),
-        net_names: el.net_name_table(), // BEFORE finish() consumes `el`
+        net_names: el.net_name_table().into_iter().map(scope_out).collect(), // BEFORE finish() consumes `el`
         instances_info: std::mem::take(&mut el.instances_info)
             .into_iter()
             .map(|r| InstanceInfo {

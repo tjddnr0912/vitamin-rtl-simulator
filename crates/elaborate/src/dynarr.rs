@@ -602,12 +602,7 @@ impl Elaborator<'_> {
                                     self.fresh_ia_tmp(ew)
                                 }
                             };
-                            let tid = self
-                                .symbols
-                                .iter()
-                                .find(|(_, &v)| v == t)
-                                .map(|(k, _)| k.rsplit('.').next().unwrap_or(k).to_string())
-                                .unwrap_or_default();
+                            let tid = self.bare_name_of_net(t).unwrap_or_default();
                             let tname = ast::Ident {
                                 name: tid,
                                 span: e.span,

@@ -114,7 +114,11 @@
 //! - HDBG the identifier `debug_assertions` occurs 0 times in lexscope's files ; its
 //!   `debug_assert*!` calls by (file, fn, macro) with a count (DELTA9 N-8, DELTA10 N-g).
 //! - HBR every call of a bridge entry (SURF_LEAVE's items) outside lexscope by (file, fn,
-//!   entry, SINK) with a count, SINK as HOUT's (DELTA10 w1 ; TW-BR: it may only fall).
+//!   entry, SINK) with a count, SINK as HOUT's (DELTA10 w1 ; TW-BR: a bridge that closes at a
+//!   unit — L2 / L3 at RS1, L11 / L12 at DK3-b — may only fall ; L13, the permanent class of
+//!   bare declared names (R-K3 q6), takes a row only with the unit that names it, as
+//!   `bare_name_of_net`'s at §5.2 Q-DECLKEY DK3-a) ; and each SURF_LEAVE row closes `permanent`
+//!   exactly when its id is one of `LEAVE_PERMANENT` (L0, L13 ; NP19-7).
 //! - HC ARGS for every SURF_ENTER row of role to-scope, the token text of the argument at that
 //!   parameter in every call of the entry, crate-wide, by (file, fn, callee, tokens) with a
 //!   count (DELTA11 R4 N-8, DELTA12 S2 r4) ; the entry's name must be unique in the crate.
@@ -1395,7 +1399,7 @@ fn single_path(e: &Expr) -> Option<String> {
 /// handed to one reads a FOUND key. h6's census of lexscope's fns with a DeclKey parameter FAILS
 /// on one these lists and the `_found` suffix do not cover (H6 FOUND TAKER).
 const FOUND_FNS: &[&str] = &["key_same", "found_text"];
-const FOUND_METHODS: &[&str] = &["gen_binding_encloses"];
+const FOUND_METHODS: &[&str] = &["gen_binding_encloses", "alias_iface_port"];
 
 /// H6 (§5.2 Q-DECLKEY DK1-6 round 2): the closure a `let` binds, through a reference, a paren
 /// and a block's tail (`let c = { let p = &self.x; move |k| p.contains_found(k) };`).
@@ -6208,11 +6212,17 @@ fn hf_the_write_sites_shapes_are_pinned() {
 ///
 /// LS2-d (DELTA10 L2, DELTA11 N-1 N-2): the six display fns and `enter_frame_scope_root` are
 /// private to `lexscope` ; the outside calls the typed shims (`disp_here`, `disp_inst_top`,
-/// `disp_chain_abs`, `ctx_here`, `disp_frame_path_of`, `disp_enter_frame_root`), LEAVE L4
-/// `display_of_key_text`, the two fragment entries, the one text -> Shown entry
-/// `shown_from_spelling` and the door's one text exit `scope_out` (a call or the fn as a value
-/// handed to `map`) ; a `.plain()` call (no argument) is the exit's trait method, counted
-/// beside them (0 outside the module: HC).
+/// `disp_chain_abs`, `ctx_here`, `disp_frame_path_of`, `disp_enter_frame_root`), the two
+/// fragment entries, the one text -> Shown entry `shown_from_spelling` and the door's one
+/// text exit `scope_out` (a call or the fn as a value handed to `map`) ; a `.plain()` call (no
+/// argument) is the exit's trait method, counted beside them (0 outside the module: HC).
+/// `display_of_key_text` (LEAVE L4 until §5.2 Q-DECLKEY DK3-a) is private since: its one
+/// caller, `net_name_table`, moved into lexscope/disp.rs, where that call is HOUT's row.
+/// Since DK3-a the outside also calls two `Shown` entries of lexscope/disp.rs that are NOT
+/// HOUT's callees: `net_name_table` (api.rs, `Vec<Shown>`) and `net_key_shown` (cont_var.rs,
+/// lvalue.rs, netdecl.rs, `Option<Shown>`) ; their text leaves only through `scope_out`, whose
+/// four fn-value rows (ARG `el.net_name_table().into_iter().map`, `self.net_key_shown(..).map`)
+/// are HOUT's — a call of either not handed on to `scope_out` is no row (NP19-6, HBR's head).
 const HOUT_CALLEES: &[&str] = &[
     "display_prefix",
     "display_of",
@@ -7102,9 +7112,10 @@ fn hdbg_the_debug_only_code_is_pinned() {
 
 #[test]
 fn hbr_the_bridge_reads_are_pinned() {
-    // the bridge entries = LEAVE's items (L1 the text bridge, L2 / L3 residue R, L4 the key
-    // text window w6 from LS2-d) ; not L0, the BOUNDARY `scope_out` / `Outgoing::plain`, whose
-    // call sites are HC's (HOUT's rows with their SINK and HC_LOCAL ; DELTA10 L1)
+    // the bridge entries = LEAVE's items (since §5.2 Q-DECLKEY DK3-a: L2 / L3 residue R, L11,
+    // L12, and L13 the permanent class of bare declared names) ; not L0, the BOUNDARY
+    // `scope_out` / `Outgoing::plain`, whose call sites are HC's (HOUT's rows with their SINK and
+    // HC_LOCAL ; DELTA10 L1). LEAVE_PERMANENT: the ids whose rows close `permanent`.
     let mut entries: Vec<String> = surf_rows("SURF_LEAVE")
         .iter()
         .filter(|r| r[0] != "L0")
@@ -7141,9 +7152,11 @@ fn hbr_the_bridge_reads_are_pinned() {
         "HBR",
         &got,
         &want,
-        "a new read through a bridge (LEAVE L1-L3): TW-BR — the bridge may only fall ; name the unit, read where \
+        "a new read through a bridge (LEAVE L2 L3 L11 L12 close at a unit, L13 is permanent): TW-BR — a closing \
+         bridge may only fall, L13 takes a row only with the unit that names it ; name the unit, read where \
          the text goes (SINK), add the row",
-        "a bridge read is gone: name the unit, remove the row (L1 falls at LS3, 0 at DK1)",
+        "a bridge read is gone: name the unit, remove the row (L1 closed at DK1-5b ; L2 / L3 close at RS1, L11 / L12 \
+         at DK3-b)",
     );
     let mut by: BTreeMap<String, usize> = BTreeMap::new();
     for (k, n) in &rows {
@@ -7157,8 +7170,26 @@ fn hbr_the_bridge_reads_are_pinned() {
             tables::get("HBR_COUNTS")
         ));
     }
+    for r in surf_rows("SURF_LEAVE") {
+        let permanent = LEAVE_PERMANENT.contains(&r[0].as_str());
+        let closes = r.get(4).map(String::as_str).unwrap_or("");
+        if permanent != (closes == "permanent") {
+            msgs.push(format!(
+                "HBR LEAVE CLOSES  {} · {} · {} closes `{}` — only {LEAVE_PERMANENT:?} close \
+                 `permanent`, and each of their rows does: a permanent class is a ruling (R-K3 q6), \
+                 not a row edit",
+                r[0], r[1], r[2], closes
+            ));
+        }
+    }
     finish("HBR", &msgs);
 }
+
+/// §5.2 Q-DECLKEY DK3-a (rulings R-K3 q6, R-K19 c): the SURF_LEAVE ids that close `permanent` —
+/// L0 the BOUNDARY (`scope_out` / `Outgoing::plain`) and L13 the bare declared names of the
+/// current scope (names_with_pkg_var_aliases, bare_name_of_net). Every other id closes at a unit
+/// (checked only as not `permanent`) ; the check reads the id column alone (NP19-7, HBR's head).
+const LEAVE_PERMANENT: &[&str] = &["L0", "L13"];
 
 #[test]
 fn hc_carry_the_carried_scope_sinks_are_pinned() {

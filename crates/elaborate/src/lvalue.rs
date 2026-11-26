@@ -65,10 +65,8 @@ impl Elaborator<'_> {
             };
             if bad {
                 let name = self
-                    .symbols
-                    .iter()
-                    .find(|(_, &id)| id == c.net)
-                    .map(|(n, _)| n.clone())
+                    .net_key_shown(c.net)
+                    .map(scope_out)
                     .unwrap_or_else(|| format!("#{}", c.net));
                 let msg = if is_proc {
                     format!("procedural assignment to net `{name}` (declare it reg/logic)")
