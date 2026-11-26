@@ -32,6 +32,10 @@
 //! counted bridge), and outside lexscope it meets another key only through [`key_same`],
 //! [`DeclKey::is_formed_as`] and [`DeclKey::is_formed_at`].
 //!
+//! Each of the three key types is `#[must_use]` (§5.2 Q-DECLKEY DK2): a key formed and dropped as a
+//! statement is refused by rustc's `unused_must_use` (an error under the gate's `-D warnings`) ; the
+//! attribute does not reach a key inside an `Option` or a `Vec` (a walk's `Option<DeclKey>`).
+//!
 //! THE WINDOW (w9, DELTA14 F1): `Deref` / `DerefMut` to the map / set each store holds, so every
 //! existing use compiles as it was written (one counted door, text in and text out). It is
 //! deleted at DK3-b, where the compiler proves no text use is left. `Keyed`'s `Default` is written
@@ -87,6 +91,7 @@ impl DerefMut for KeyedSet {
 /// text, `.`, the local name — or the local name alone under the empty scope. Made only by
 /// [`Scopes::new_key`] ; no `Display`, `Deref`, `Borrow`, `From` or `Into` (ZN in `mod.rs`), so a
 /// NewKey cannot take the window's text path into a store.
+#[must_use]
 #[derive(Clone)]
 pub(crate) struct NewKey(String);
 
@@ -143,6 +148,7 @@ pub(super) fn key_text(k: &NewKey) -> &str {
 /// constructor door is the whole of `lexscope`, not this file (scope_home HKC pins the constructions per
 /// lexscope file). No `Clone`, `Display`, `Debug`, `Deref`, `Borrow`, `From` or `Into` (ZN in `mod.rs`),
 /// so it cannot take the window's text path into a store, and no `_new` entry takes it.
+#[must_use]
 pub(crate) struct AtKey(pub(super) String);
 
 /// L9 (LEAVE): an AtKey's text where it meets a text operation outside the module — one reader left,
@@ -163,8 +169,8 @@ pub(crate) fn key_in(k: &AtKey, member: &str) -> AtKey {
     AtKey(format!("{}.{}", k.0, member))
 }
 
-/// A read's key against a read's key (DK1-4b-1, P27: held.rs clk_refused_at's walk candidate against a refused
-/// clocking item's alias): the same text.
+/// A read's key against a read's key (DK1-4b-1, P27: the walk's candidate against a refused clocking item's
+/// alias, held.rs `hit_clk_refused` since §5.2 Q-DECLKEY DK2): the same text.
 #[inline]
 pub(crate) fn at_same(a: &AtKey, b: &AtKey) -> bool {
     a.0 == b.0
@@ -179,6 +185,7 @@ pub(crate) fn at_same(a: &AtKey, b: &AtKey) -> bool {
 /// (`Keyed::get_found` / `contains_found` / `index_found`, `KeyedSet::contains_found` /
 /// `extend_found`), the compares ([`key_same`], [`DeclKey::is_formed_as`], [`DeclKey::is_formed_at`]),
 /// [`found_text`] (L11) and the fns handed only a found key ; no `_new` or `_at` entry takes it.
+#[must_use]
 pub(crate) struct DeclKey(pub(super) String);
 
 /// L11 (LEAVE): a found key's text where it meets a text operation outside the module (a key's

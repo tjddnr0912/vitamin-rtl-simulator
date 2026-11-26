@@ -748,7 +748,7 @@ impl Elaborator<'_> {
         let member = &path.segments[1].name;
         // The same outward scope walk interface-PORT binding uses, so an instance
         // declared in an enclosing scope resolves exactly as it does there.
-        let Some(fq) = self.walk_scopes_key(&recv, |k| self.iface_insts.contains_at(k)) else {
+        let Some(fq) = self.walk_key_iface_inst(&recv) else {
             return false;
         };
         let iface = self.iface_insts.index_found(&fq).clone();

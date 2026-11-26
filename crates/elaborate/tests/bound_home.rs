@@ -21,8 +21,8 @@
 //!   body's calls in PRE's order: `publish_hier`, `set_meta`, `range ( self )`,
 //!   `bind_param_value`, `bind_param_range`, `guessed ( self )`, `mark_guessed`.
 //! - W5 the read lanes (BIND-1b, `bound/read.rs`), outside the home: W5a no
-//!   `walk_scopes(.., &<recv>.<map>)` over a guarded map but the value walk
-//!   `lookup_scoped` (the meta and real walks are `name_meta` / `name_real`) ; W5b no
+//!   `walk_scopes(.., &<recv>.<map>)` over a guarded map (its one row, the value walk
+//!   `lookup_scoped`, left when DK2 deleted the fn ; meta and real: `name_meta` / `name_real`) ; W5b no
 //!   closure whose body names two or more of the nine maps ; W5c no `walk_scopes_key(..)`
 //!   whose arguments spell a `<recv>.<map>.contains_at(` / `.contains_found(` /
 //!   `.contains_key(` arm (the hit is a `hit_*` rule ; `contains_at` since §5.2 Q-DECLKEY
@@ -43,11 +43,17 @@
 //!   the home are a table (`W5D_CALLS`), so a lane call dropped, added or swapped for a
 //!   neighbouring rule moves a count (battery k01-k28 ; batch 4 pins r1). What W5d does
 //!   not see is REVIEW-ONLY (batch 4 pins-judge r1): two lane calls swapped inside one
-//!   (file, fn) (ident_route.rs:99 / :122 in `bare_ident_route`), a UFCS spelling
+//!   (file, fn) (ident_route.rs:99 / :122 in `bare_ident_route` until DK2, entry calls since: NP19-1), a UFCS spelling
 //!   `Self::hit_value(self, k)`, a changed argument, a move between closures of one fn.
 //!   Also REVIEW-ONLY (batch 4 pins-judge r2, W/batch4/pins-judge2/REPORT.txt:12): two fns
 //!   of one name in one file share one key (0 of the 24 fns in `W5D_CALLS` share their name
 //!   with another fn of their file at f17a0ff6, `fn <name>` counted per file).
+//!   Since §5.2 Q-DECLKEY DK2 a walk site calls a named entry of `lexscope/walk.rs` (one per hit
+//!   set, its closure calls the lane): W5a and W5c have no row (their readers stay, a trip for a
+//!   re-added `walk_scopes` or a closure at a re-widened walk), W5b keeps two, W5d's lane rows
+//!   are the named entries' thirteen (the per-site entry is scope_home's H6 / H6A), and
+//!   `the_walk_names_no_guarded_map` (P51) counts the nine maps' field tokens in
+//!   `lexscope/walk.rs` (0).
 //! - W6 the raw primitives' callers (soundness lens N-S3c): `set_range_raw`,
 //!   `clear_range_raw` and `drop_value_raw` per (file, fn) outside the home (`W6_CALLS`:
 //!   `elaborate_package` for the package lane, the U6 replay for the raw value remove) ;
@@ -179,17 +185,14 @@ const W4_ORDER: [&str; 7] = [
 /// walks ; the value walk is `lookup_scoped`.
 #[rustfmt::skip]
 const W5A_EXCEPT: &[(&str, &str, &str, usize, &str)] = &[
-    ("crates/elaborate/src/scope.rs", "lookup_scoped", "params", 1, "the value walk, already one fn"),
+    // §5.2 Q-DECLKEY DK2: `walk_scopes` deleted ; lookup_scoped asks `walk_key_value(name)` (H6's SITE row). The reader stays (P60).
 ];
 /// W5b: a closure outside the home whose body names two or more of the nine maps,
 /// (file, fn, count, reason).
 #[rustfmt::skip]
 const W5B_EXCEPT: &[(&str, &str, usize, &str)] = &[
     ("crates/elaborate/src/decl_scope.rs", "decl_keep_snapshot", 1, "U4's `DeclKept` builder: six `get_new`s (DK1-5b), not a membership test"),
-    ("crates/elaborate/src/edge_gate.rs", "binding_encloses", 2, "`other_kind` (wide || real || str || symbols): not a rule's set, also asked alone of the value walk's key ; 2 since §5.2 Q-DECLKEY DK1-4b-1: the same four maps as `other_kind_at`, its typed twin for the walk's AtKey candidate, `other_kind` kept for the found text key (DELTA16 E1.4: the pair the key types force ; the candidate half leaves at DK2)"),
-    ("crates/elaborate/src/const_str.rs", "const_str_at", 1, "left by R7: any_const_or_net in its own order (str, real, params, wide, symbols), not the rule's"),
-    ("crates/elaborate/src/const_fn_width/fold_x.rs", "names_real_binding", 1, "left by R7, UNMEASURED: real_value_or_net in its own order ; re-pointed, its host fn's code moved (tbz -> cbz on the hit) and no cost cell counts a use"),
-    ("crates/elaborate/src/param_query.rs", "real_param_lowers_real", 1, "left by R7, UNMEASURED: real_value_or_net in its own order ; re-pointed, its host fn's code moved (tbz -> cbz on the hit) and no cost cell counts a use"),
+    ("crates/elaborate/src/edge_gate.rs", "binding_encloses", 1, "`other_kind` (wide || real || str || symbols): not a rule's set, also asked alone of the value walk's key ; 1 again since §5.2 Q-DECLKEY DK2: `other_kind_at`, its typed twin of DK1-4b-1, left with the walk's candidate (`walk_key_value_or_other_kind`), `other_kind` stays for the found text key"),
 ];
 /// W5c: a `walk_scopes_key(..)` call outside the home whose arguments spell a
 /// `<recv>.<guarded map>.contains_at(` (or `.contains_found(`, `.contains_key(`) arm instead of a
@@ -197,12 +200,7 @@ const W5B_EXCEPT: &[(&str, &str, usize, &str)] = &[
 /// (file, fn, count, reason).
 #[rustfmt::skip]
 const W5C_EXCEPT: &[(&str, &str, usize, &str)] = &[
-    ("crates/elaborate/src/const_array.rs", "const_array_ref_of_base", 1, "array_const_vals || params || symbols: not a rule's set"),
-    ("crates/elaborate/src/const_str.rs", "const_str_at", 1, "left by R7: any_const_or_net in its own order (str, real, params, wide, symbols)"),
-    ("crates/elaborate/src/edge_gate.rs", "binding_encloses", 1, "left by R7: params || other_kind_at(k) (`other_kind`'s typed twin since §5.2 Q-DECLKEY DK1-4b-1), any_const_or_net in another order"),
-    ("crates/elaborate/src/hier_defer/write.rs", "every_name_resolves", 1, "left by R7: symbols || params, value_or_net in the other order"),
-    ("crates/elaborate/src/const_fn_width/fold_x.rs", "names_real_binding", 1, "left by R7, UNMEASURED: real_value_or_net in its own order ; re-pointed, its host fn's code moved (tbz -> cbz on the hit) and no cost cell counts a use"),
-    ("crates/elaborate/src/param_query.rs", "real_param_lowers_real", 1, "left by R7, UNMEASURED: real_value_or_net in its own order ; re-pointed, its host fn's code moved (tbz -> cbz on the hit) and no cost cell counts a use"),
+    // §5.2 Q-DECLKEY DK2: a walk site calls a named entry ; the six multi-map closures are lanes of bound/read.rs. The reader stays.
 ];
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -656,7 +654,7 @@ fn the_read_lanes_are_named() {
 }
 
 /// The read lanes of `bound/read.rs` (W5d).
-const READ_LANES: [&str; 9] = [
+const READ_LANES: [&str; 15] = [
     "name_meta",
     "name_real",
     "hit_value",
@@ -666,6 +664,12 @@ const READ_LANES: [&str; 9] = [
     "hit_real_value_or_net",
     "hit_any_const",
     "hit_any_const_or_net",
+    "hit_meta",
+    "hit_real",
+    "hit_array_const_value_or_net",
+    "hit_str_real_value_wide_or_net",
+    "hit_value_or_other_kind",
+    "hit_net_or_value",
 ];
 
 /// W5d: (lane, file, fn, calls) outside the home, any receiver (`self`, `me`), a closure
@@ -674,22 +678,20 @@ const READ_LANES: [&str; 9] = [
 /// argument, a move between closures of one fn ; two fns of one name in one file.
 #[rustfmt::skip]
 const W5D_CALLS: &[(&str, &str, &str, usize)] = &[
-    ("hit_any_const", "crates/elaborate/src/const_bound.rs", "unfoldable_reason_in", 1),
-    ("hit_any_const_or_net", "crates/elaborate/src/ident_route.rs", "bare_ident_route", 1),
-    ("hit_real_value_or_net", "crates/elaborate/src/param_query.rs", "real_param_is_non_integral", 1),
-    ("hit_value", "crates/elaborate/src/array_geom.rs", "shape_bits", 1),
-    ("hit_value", "crates/elaborate/src/edge_gate.rs", "binding_encloses", 1),
-    ("hit_value", "crates/elaborate/src/ident_route.rs", "ast_reads_guessed_param", 1),
-    ("hit_value", "crates/elaborate/src/ident_route.rs", "bare_ident_route", 1),
-    ("hit_value_or_net", "crates/elaborate/src/const_decl_width.rs", "narrow_param_decl_width", 1),
-    ("hit_value_or_net", "crates/elaborate/src/const_wide.rs", "narrow_param_bits", 1),
-    ("hit_value_or_net", "crates/elaborate/src/expr_special.rs", "bits_of_view", 1),
-    ("hit_value_or_net", "crates/elaborate/src/params.rs", "param_sel_range", 1),
-    ("hit_wide", "crates/elaborate/src/const_eval.rs", "wide_param_name_in", 1),
-    ("hit_wide", "crates/elaborate/src/edge_gate.rs", "variable_named_in", 1),
-    ("hit_wide", "crates/elaborate/src/edge_gate.rs", "wide_param_named_in", 1),
-    ("hit_wide_value_or_net", "crates/elaborate/src/const_wide.rs", "wide_name_bits", 1),
-    ("hit_wide_value_or_net", "crates/elaborate/src/edge_gate.rs", "wide_lsb_range_of", 1),
+    // §5.2 Q-DECLKEY DK2: each hit lane is called by one named entry's closure ; the per-site entry is scope_home's H6 / H6A (16 site rows -> 13).
+    ("hit_any_const", "crates/elaborate/src/lexscope/walk.rs", "walk_key_any_const", 1),
+    ("hit_any_const_or_net", "crates/elaborate/src/lexscope/walk.rs", "walk_key_any_const_or_net", 1),
+    ("hit_array_const_value_or_net", "crates/elaborate/src/lexscope/walk.rs", "walk_key_array_const_value_or_net", 1),
+    ("hit_meta", "crates/elaborate/src/lexscope/walk.rs", "walk_key_meta", 1),
+    ("hit_net_or_value", "crates/elaborate/src/lexscope/walk.rs", "walk_key_net_or_value", 1),
+    ("hit_real", "crates/elaborate/src/lexscope/walk.rs", "walk_key_real", 1),
+    ("hit_real_value_or_net", "crates/elaborate/src/lexscope/walk.rs", "walk_key_real_value_or_net", 1),
+    ("hit_str_real_value_wide_or_net", "crates/elaborate/src/lexscope/walk.rs", "walk_key_str_real_value_wide_or_net", 1),
+    ("hit_value", "crates/elaborate/src/lexscope/walk.rs", "walk_key_value", 1),
+    ("hit_value_or_net", "crates/elaborate/src/lexscope/walk.rs", "walk_key_value_or_net", 1),
+    ("hit_value_or_other_kind", "crates/elaborate/src/lexscope/walk.rs", "walk_key_value_or_other_kind", 1),
+    ("hit_wide", "crates/elaborate/src/lexscope/walk.rs", "walk_key_wide", 1),
+    ("hit_wide_value_or_net", "crates/elaborate/src/lexscope/walk.rs", "walk_key_wide_value_or_net", 1),
     ("name_meta", "crates/elaborate/src/const_bound.rs", "ast_const_leaves_min32", 1),
     ("name_meta", "crates/elaborate/src/const_eval.rs", "const_expr_signed", 1),
     ("name_meta", "crates/elaborate/src/const_fn.rs", "const_placement_wide", 1),
@@ -755,6 +757,30 @@ fn want_table(rows: &[(&str, &str, &str, usize)]) -> BTreeMap<(String, String, S
     rows.iter()
         .map(|(l, f, k, n)| ((l.to_string(), f.to_string(), k.to_string()), *n))
         .collect()
+}
+
+/// P51 (§5.2 Q-DECLKEY DK2): the scope walk's file names none of the nine maps as a field
+/// (`field_at`, this file's own walker: a doc line is no token), so no named entry's closure and
+/// no helper of the file probes one inline ; an entry reaches one only through a `hit_*` lane
+/// (scope_home's H6A, `H6 ARM BLIND`, `H6 HIT HOME`).
+#[test]
+fn the_walk_names_no_guarded_map() {
+    let root = workspace_root();
+    let mut n = 0;
+    let mut files = 0;
+    for (rel, src) in src_files(&root) {
+        if rel != "crates/elaborate/src/lexscope/walk.rs" {
+            continue;
+        }
+        files += 1;
+        let t = tokens(&src);
+        n += (0..t.len()).filter(|&i| field_at(&t, i, &NINE)).count();
+    }
+    assert_eq!(
+        (files, n),
+        (1, 0),
+        "P51: lexscope/walk.rs names a guarded map as a field (or is not read) -- a hit set over one of the nine is a `hit_*` lane of {HOME}"
+    );
 }
 
 #[test]

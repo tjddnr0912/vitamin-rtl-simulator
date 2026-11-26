@@ -562,7 +562,7 @@ impl Elaborator<'_> {
     pub(crate) fn dotted_hit_is_pkg_alias(&self, joined: &str) -> bool {
         !self.pkg_var_aliases.is_empty()
             && self
-                .walk_scopes_key(joined, |k| self.symbols.contains_at(k))
+                .walk_key_net(joined)
                 .is_some_and(|k| self.pkg_var_aliases.contains_found(&k))
     }
 
@@ -576,12 +576,9 @@ impl Elaborator<'_> {
     pub(crate) fn bare_hit_is_shadowed_pkg_alias(&self, name: &str) -> bool {
         !self.pkg_var_aliases.is_empty()
             && self
-                .walk_scopes_key(name, |k| self.symbols.contains_at(k))
+                .walk_key_net(name)
                 .is_some_and(|k| self.pkg_var_aliases.contains_found(&k))
-            && (self.lookup_scoped(name).is_some()
-                || self
-                    .walk_scopes_key(name, |k| self.genvar_decls.contains_at(k))
-                    .is_some())
+            && (self.lookup_scoped(name).is_some() || self.walk_key_genvar(name).is_some())
     }
 
     /// Does `base` (a part/indexed-select base) peel through ≥1 array-element

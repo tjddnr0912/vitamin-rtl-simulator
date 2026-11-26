@@ -273,7 +273,7 @@ impl Elaborator<'_> {
         // declared in the enclosing module body. The walk runs in the PARENT
         // scope (cur_prefix is the child's during port binding).
         let saved_for_lookup = self.lex.scope_swap(parent_prefix);
-        let found = self.walk_scopes_key(&inst_name, |k| self.iface_insts.contains_at(k));
+        let found = self.walk_key_iface_inst(&inst_name);
         self.lex.scope_restore(saved_for_lookup);
         let Some(parent_fq) = found else {
             self.error(
@@ -352,7 +352,7 @@ impl Elaborator<'_> {
 
     /// v6 ②: error on a WRITE that resolves through a modport `input` alias.
     /// Called once per lvalue root; mirrors the symbol lookup exactly via
-    /// [`Self::walk_scopes_key`], so name-level granularity is preserved (the
+    /// `walk_scopes_key` (through `walk_key_net`), so name-level granularity is preserved (the
     /// same net stays writable through the parent or an `output` modport).
     pub(crate) fn check_modport_write(&mut self, path: &ast::HierPath) {
         if self.modport_readonly.is_empty() {
@@ -364,7 +364,7 @@ impl Elaborator<'_> {
             .map(|s| s.name.as_str())
             .collect::<Vec<_>>()
             .join(".");
-        let key = self.walk_scopes_key(&joined, |k| self.symbols.contains_at(k));
+        let key = self.walk_key_net(&joined);
         if let Some(k) = key {
             if self.modport_readonly.contains_found(&k) {
                 self.error(
@@ -606,10 +606,7 @@ impl Elaborator<'_> {
                     if v.iter().any(|c| &c.name.name == pname) {
                         continue; // explicitly named (incl. an open `.p()`)
                     }
-                    if self
-                        .walk_scopes_key(pname, |k| self.symbols.contains_at(k))
-                        .is_some()
-                    {
+                    if self.walk_key_net(pname).is_some() {
                         synth.push(pname.clone());
                     } else {
                         missing.push(pname.clone());

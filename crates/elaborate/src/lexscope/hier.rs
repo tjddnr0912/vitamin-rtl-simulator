@@ -35,7 +35,7 @@ impl Elaborator<'_> {
     /// conditional / `case` / bare labelled block is a SINGLETON: its name is the bare
     /// label (`gi.x`), and `gi[0].x` is not. vita stores BOTH as `label[idx]`
     /// (`elaborate_gen_scoped` tags a singleton `label[0]` so `is_gen_scope_segment`
-    /// recognizes it and `walk_scopes` resolves outer nets through it), so a one-trip
+    /// recognizes it and `walk_scopes_key` resolves outer nets through it), so a one-trip
     /// loop and a conditional block leave exactly the same keys — only the two label
     /// sets separate them.
     ///

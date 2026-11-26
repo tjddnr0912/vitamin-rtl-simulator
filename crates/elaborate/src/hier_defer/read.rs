@@ -420,10 +420,8 @@ impl Elaborator<'_> {
                 // call inside a generate block). Walk outward over the saved prefix the
                 // way `walk_scopes_key` walks over `cur_prefix`.
                 let label_ty = if enum_method && !recv_is_net {
-                    self.scoped_key_at_or_above(&d.prefix, &d.path[0], |k| {
-                        self.enum_label_types.contains_at(k)
-                    })
-                    .and_then(|k| self.enum_label_types.get_found(&k).cloned())
+                    self.walk_above_enum_label_type(&d.prefix, &d.path[0])
+                        .and_then(|k| self.enum_label_types.get_found(&k).cloned())
                 } else {
                     None
                 };

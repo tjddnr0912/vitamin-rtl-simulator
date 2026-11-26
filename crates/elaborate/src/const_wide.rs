@@ -1269,7 +1269,7 @@ impl Elaborator<'_> {
         }
         // Re-derive the innermost binding key over the SAME combined set the value
         // lookup walks, so a shadowing net wins here exactly as it does there.
-        let key = self.walk_scopes_key(n, |k| self.hit_value_or_net(k))?;
+        let key = self.walk_key_value_or_net(n)?;
         let (lo, w, ascending) = self.param_range.get_found(&key).copied()?;
         if lo != 0 || ascending {
             return None;
@@ -1388,7 +1388,7 @@ impl Elaborator<'_> {
             return None;
         };
         if let [seg] = path.segments.as_slice() {
-            if let Some(key) = self.walk_scopes_key(&seg.name, |k| self.hit_wide_value_or_net(k)) {
+            if let Some(key) = self.walk_key_wide_value_or_net(&seg.name) {
                 if let Some(cv) = self.wide_param_bits.get_found(&key) {
                     return Some((cv.bits.clone(), cv.width, cv.signed));
                 }

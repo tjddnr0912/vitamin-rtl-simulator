@@ -645,7 +645,7 @@ impl Elaborator<'_> {
     /// generate block's own only when `at` lies in that block; anything else — a
     /// routine's own local, or a name `params` does not bind here — never.
     fn binding_encloses(&self, name: &str, at: ast::Span) -> bool {
-        let Some(key) = self.walk_scopes_key(name, |k| self.hit_value(k)) else {
+        let Some(key) = self.walk_key_value(name) else {
             return false;
         };
         let other_kind = |k: &DeclKey| {
@@ -654,14 +654,7 @@ impl Elaborator<'_> {
                 || self.str_param_raw.contains_found(k)
                 || self.symbols.contains_found(k)
         };
-        let other_kind_at = |k: &AtKey| {
-            self.wide_param_bits.contains_at(k)
-                || self.real_param_val.contains_at(k)
-                || self.str_param_raw.contains_at(k)
-                || self.symbols.contains_at(k)
-        };
-        let innermost =
-            self.walk_scopes_key(name, |k| self.params.contains_at(k) || other_kind_at(k));
+        let innermost = self.walk_key_value_or_other_kind(name);
         if other_kind(&key) || !innermost.as_ref().is_some_and(|i| key_same(i, &key)) {
             return false;
         }
@@ -1406,8 +1399,7 @@ impl Elaborator<'_> {
             };
             let n = &seg.name;
             // the classification `nonconst_bound_reason` makes for a declaration bound
-            let constant = self.lookup_scoped(n).is_some()
-                || self.walk_scopes_key(n, |k| self.hit_wide(k)).is_some();
+            let constant = self.lookup_scoped(n).is_some() || self.walk_key_wide(n).is_some();
             // a scalar net only: an unpacked array here may be a constant array
             // parameter, which this classification cannot tell from a variable
             let scalar_net = self
@@ -1444,10 +1436,7 @@ impl Elaborator<'_> {
         Self::first_in(e, &mut |x| {
             if let ast::ExprKind::Ident(p) = &x.kind {
                 if let [seg] = p.segments.as_slice() {
-                    if self
-                        .walk_scopes_key(&seg.name, |k| self.hit_wide(k))
-                        .is_some()
-                    {
+                    if self.walk_key_wide(&seg.name).is_some() {
                         return Some(format!("`{}`", seg.name));
                     }
                 }
@@ -1481,7 +1470,7 @@ impl Elaborator<'_> {
     }
 
     fn wide_lsb_range_of(&self, n: &str) -> Option<String> {
-        let key = self.walk_scopes_key(n, |k| self.hit_wide_value_or_net(k))?;
+        let key = self.walk_key_wide_value_or_net(n)?;
         let text = |(lo, w, asc): DeclRange| {
             let hi = lo + i64::from(w) - 1;
             if asc {

@@ -515,11 +515,7 @@ impl Elaborator<'_> {
         match &e.kind {
             IntLit { .. } => true,
             Ident(p) => match p.segments.as_slice() {
-                [seg] => self
-                    .walk_scopes_key(&seg.name, |k| {
-                        self.symbols.contains_at(k) || self.params.contains_at(k)
-                    })
-                    .is_some(),
+                [seg] => self.walk_key_net_or_value(&seg.name).is_some(),
                 _ => false,
             },
             Paren { inner } => self.every_name_resolves(inner),

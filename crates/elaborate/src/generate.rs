@@ -446,7 +446,7 @@ impl Elaborator<'_> {
             Some(l) => {
                 // A generate-if/case/block is a SINGLETON scope — tag it `label[0]`
                 // (mirroring generate-for's `label[idx]`) so `is_gen_scope_segment`
-                // recognizes it as a GENERATE scope and `walk_scopes` resolves outer
+                // recognizes it as a GENERATE scope and `walk_scopes_key` resolves outer
                 // nets THROUGH it (a plain `label` would be read as an instance
                 // boundary, stopping the outward walk → `t.g.y` undeclared).
                 let seg = format!("{}[0]", l.name);

@@ -67,7 +67,7 @@ impl Elaborator<'_> {
     /// Outward walk over the GENERATE scopes enclosing the current position,
     /// innermost first, returning the first composed routine key `hit` accepts.
     ///
-    /// This is the routine-table twin of [`Self::walk_scopes_key`], and it is a
+    /// This is the routine-table twin of `walk_scopes_key` (lexscope/walk.rs), and it is a
     /// separate walk for one reason: `func_table` is MODULE-local (taken and
     /// restored per instance), so its keys are module-relative while `cur_prefix`
     /// is absolute. The walk therefore runs over `cur_prefix` minus `inst_prefix`
@@ -111,10 +111,7 @@ impl Elaborator<'_> {
     /// describes (mark [`Mark::DeclPos`])?
     pub(crate) fn walk_hits_decl_pos(&self, name: &str) -> bool {
         let own_key = self.decl_pos_key(name);
-        self.walk_scopes_key(name, |k| self.symbols.contains_at(k))
-            .as_ref()
-            .map(found_text)
-            == Some(own_key.as_str())
+        self.walk_key_net(name).as_ref().map(found_text) == Some(own_key.as_str())
     }
 
     /// The same check's block-local exemption: is the key `name` forms under the scope

@@ -712,7 +712,7 @@ impl Elaborator<'_> {
                     self.check_param_decl_range(p);
                     // N5: a string-valued parameter/localparam (`localparam string S =
                     // "abc"`, or the untyped `localparam S = "abc"`). It has no i64
-                    // value, so record its raw literal (FQ-keyed, persistent — walk_scopes
+                    // value, so record its raw literal (FQ-keyed, persistent — walk_scopes_key
                     // only matches from the declaring prefix) and skip the numeric fold.
                     if let Some(raw) = self.param_str_or_folded(p, false) {
                         let key = self.lex.new_key(&p.name.name);

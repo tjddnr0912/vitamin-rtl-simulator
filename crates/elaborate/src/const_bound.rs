@@ -731,7 +731,7 @@ impl Elaborator<'_> {
             if let ast::ExprKind::Ident(p) = &e.kind {
                 if p.segments.len() == 1 && !self.cond_names_ok(e) {
                     let n = &p.segments[0].name;
-                    let param = self.walk_scopes_key(n, |k| self.hit_any_const(k)).is_some();
+                    let param = self.walk_key_any_const(n).is_some();
                     let carrier = self
                         .cond_census
                         .get(&self.cur_module)

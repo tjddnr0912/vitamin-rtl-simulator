@@ -12,22 +12,10 @@ impl Elaborator<'_> {
     /// INSTANCE boundary (a plain-identifier segment) so a child instance never
     /// sees a parent module's param by bare name. Innermost binding wins.
     pub(crate) fn lookup_scoped(&self, name: &str) -> Option<i64> {
-        self.walk_scopes(name, &self.params)
+        self.walk_key_value(name)
+            .and_then(|k| self.params.get_found(&k).copied())
     }
 
-    /// Shared outward scope walk over a FQ-keyed `BTreeMap`. Looks up `name` in
-    /// the current scope, then each enclosing generate-block scope, stopping at
-    /// the first instance boundary. Used for both params/genvars and the symbol
-    /// (net) table so the visibility rule is identical for each.
-    pub(crate) fn walk_scopes<T: Copy>(&self, name: &str, table: &Keyed<T>) -> Option<T> {
-        self.walk_scopes_key(name, |k| table.contains_at(k))
-            .and_then(|k| table.get_found(&k).copied())
-    }
-
-    /// The key-returning core of [`Self::walk_scopes`] — ONE source of truth
-    /// for the visibility rule, so key-level consumers (the modport
-    /// read-only check, the iface-instance lookup) can never drift from the
-    /// value-level lookups.
     /// Does a HOISTED procedural block-local at `key` cover a reader at `at`? — i.e.
     /// is the reader lexically inside a block that declares it?
     ///
@@ -441,7 +429,7 @@ impl Elaborator<'_> {
         if let Some(net) = self.pkg_body_var(name) {
             return Some(net);
         }
-        let key = self.walk_scopes_key(name, |k| self.symbols.contains_at(k))?;
+        let key = self.walk_key_net(name)?;
         // IEEE 1800 §27.5 (`indexed_gen_singleton`), in the one walk every net reader
         // shares: a net inside a conditional / `case` / bare labelled generate block is
         // STORED under `label[0].…`, and this flat walk reached it from source text

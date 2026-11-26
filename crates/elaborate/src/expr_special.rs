@@ -852,14 +852,12 @@ impl Elaborator<'_> {
                     // package parameter binds at the module key the flattened local
                     // also uses — is the object `$bits` names; the value read already
                     // prefers it (`bare_ident_route`'s shadow test, mirrored here).
-                    let local_shadows = me
-                        .walk_scopes_key(name, |k| me.hit_value_or_net(k))
-                        .is_some_and(|key| {
-                            me.symbols.contains_found(&key)
-                                && (me.block_local_declared_at(&key, e.span)
-                                    || (!me.params.contains_found(&key)
-                                        && me.block_local_covers(&key, e.span)))
-                        });
+                    let local_shadows = me.walk_key_value_or_net(name).is_some_and(|key| {
+                        me.symbols.contains_found(&key)
+                            && (me.block_local_declared_at(&key, e.span)
+                                || (!me.params.contains_found(&key)
+                                    && me.block_local_covers(&key, e.span)))
+                    });
                     if !local_shadows && me.lookup_scoped(name).is_some() {
                         // A TYPED param/localparam has a declared width (`logic
                         // [11:0] P` ⇒ 12); `$bits` must report THAT, not the

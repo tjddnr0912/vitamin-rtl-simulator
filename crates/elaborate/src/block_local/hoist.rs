@@ -233,9 +233,7 @@ impl Elaborator<'_> {
         // prefix is not the scope the import bound at.
         let shadows_module = d.names.iter().any(|n| {
             self.local_decl_names.contains(&n.name.name)
-                || self
-                    .walk_scopes_key(&n.name.name, |k| self.pkg_var_aliases.contains_at(k))
-                    .is_some()
+                || self.walk_key_pkg_var_alias(&n.name.name).is_some()
         });
         // Decl-ANY, matching `gather_auto_block_locals` and `block_local_scope_seg`.
         let static_init = d.lifetime != Some(true) && d.names.iter().any(|n| n.init.is_some());

@@ -23,7 +23,16 @@
 //!   make: an opener (`replace` / `take` / `swap`), a struct literal, and one site per fn
 //!   for the assignments no opener of an enclosing block covers ; the kind per site is a
 //!   hand column (u0 T2.txt:281-315).
-//! - H6 the scope-walk call sites: every call of the walk family (`walk_scopes_key`,
+//! - H6 the scope-walk call sites (since §5.2 Q-DECLKEY DK2 a site calls a NAMED ENTRY of
+//!   `lexscope/walk.rs`, one per hit set: the entry set is computed from that file (E-1c: every
+//!   non-private fn but `is_gen_scope_segment`, each ONE call of one of the four generic walks
+//!   with a closure literal last, rule `H6 ENTRY FORM`), a site's hit text is its entry's arm,
+//!   table H6A ; rules `H6 ARM BLIND`, `H6 ENTRY UNUSED`, `H6 HIT HOME` ; REVIEW-ONLY: an entry
+//!   called by UFCS or through a fn value, a macro body, a lane's body beyond its fields (`&&`
+//!   for `||`, a negation, another verb than `contains_at`), a guard, a negation or a formed key
+//!   inside an entry's closure (NP19-4: its BODY hash is the pin), a field probed twice in one
+//!   lane (once in `order`), the compare inside `hit_clk_refused`): every call of the walk family
+//!   (`walk_scopes_key`,
 //!   `_shadowed`, `_from`, `scoped_key_at_or_above`, `walk_scopes`, `walk_rtn_scopes`,
 //!   `hier_resolve`, `decl_probe_key`, and the family's own `walk_scopes_key_inner` /
 //!   `walk_out_from`), by (file, fn, entry, hit text) with a count ; the hit text is what
@@ -440,7 +449,9 @@ const CARRIERS: &[&str] = &[
     "ConcurrentAssert",
 ];
 
-/// H6: the walk family's entries ; the hit argument's place counted from the end.
+/// H6: the walk family's entries ; the hit argument's place counted from the end. Since §5.2
+/// Q-DECLKEY DK2 the four generic walks are private to lexscope/walk.rs: a site calls one of the
+/// 23 named entries, which walk_call takes by name through `named_entry` (E-1c), not from this list.
 const WALK_ENTRIES: &[(&str, usize)] = &[
     ("walk_scopes_key", 1),
     ("walk_scopes_key_shadowed", 1),
@@ -453,7 +464,9 @@ const WALK_ENTRIES: &[(&str, usize)] = &[
     ("walk_scopes_key_inner", 2),
     ("walk_out_from", 3),
 ];
-/// H6: the five entries whose call sites are THE walk census (51).
+/// H6: the five entries whose call sites were THE walk census (51) until §5.2 Q-DECLKEY DK2 ;
+/// since DK2 the 51 sites call the named entries (`named_entry`, E-1c) and these names' calls
+/// are the entries' own, in lexscope/walk.rs (H6A's rows, not SITE rows).
 const WALK_SITE_ENTRIES: &[&str] = &[
     "walk_scopes_key",
     "walk_scopes_key_shadowed",
@@ -473,8 +486,17 @@ const WALK_FAMILY: &[&str] = &[
 ];
 /// H6: a receiver that is the `Elaborator`.
 const RECV: &[&str] = &["self", "me", "this"];
+/// H6 (§5.2 Q-DECLKEY DK2, E-1c ; judge3 R6): the four generic walks, private to `lexscope/walk.rs`
+/// since DK2, by NAME (not by their privacy: a `pub(super)` on one would drop it from a set read
+/// off visibility). A named entry is ONE call of one of them.
+const WALK_KINDS: &[&str] = &[
+    "walk_scopes_key",
+    "walk_scopes_key_shadowed",
+    "walk_scopes_key_from",
+    "scoped_key_at_or_above",
+];
 /// H6: a probe of a local table (`contains_at`: a Keyed / KeyedSet probed by an AtKey, the walk's
-/// candidate since §5.2 Q-DECLKEY DK1-4b-1 — walk_scopes' `table.contains_at(k)` ; the `_found`
+/// candidate since §5.2 Q-DECLKEY DK1-4b-1 — walk_scopes' `table.contains_at(k)` until DK2 deleted it ; the `_found`
 /// verbs: a store probed by the key a walk FOUND, a DeclKey since DK1-4b-2).
 const PROBE_METHODS: &[&str] = &[
     "contains_key",
@@ -898,6 +920,15 @@ impl Pass<'_> {
     }
 
     fn walk_call(&mut self, name: &str, args: &[&Expr]) {
+        // §5.2 Q-DECLKEY DK2 (E-1c): a named entry is a walk entry with no hit argument — the
+        // entry IS the hit, its probes the arm of the closure it hands on (E-2c)
+        if let Some(e) = named_entry(name) {
+            let probes = e.probes.clone();
+            if let Some(c) = self.cur() {
+                c.walk_calls.push((name.to_string(), probes));
+            }
+            return;
+        }
         let Some(&(_, from_end)) = WALK_ENTRIES.iter().find(|(n, _)| *n == name) else {
             return;
         };
@@ -910,6 +941,210 @@ impl Pass<'_> {
             c.walk_calls.push((name.to_string(), probes));
         }
     }
+}
+
+/// H6 / H6A (§5.2 Q-DECLKEY DK2, E-1c / E-2c): a named entry of `lexscope/walk.rs` — its kind (the
+/// generic walk it calls) and its arm (`probes_of` the closure it hands on, in source order).
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct NamedEntry {
+    kind: String,
+    probes: Vec<String>,
+}
+
+/// H6: the named entries, by name, and the messages of their rules.
+type EntrySet = (BTreeMap<String, NamedEntry>, Vec<String>);
+
+/// H6 (§5.2 Q-DECLKEY DK2, E-1c): the named entries of one walk file and the messages of rules
+/// `H6 ENTRY FORM` (A1c with P71: EVERY fn of the file whose visibility is not private, but
+/// `is_gen_scope_segment`, has a body of ONE expression, a method call on `self` of one of
+/// WALK_KINDS whose last argument is a one-parameter closure literal — no `let`, no `if`, no second
+/// call, no named fn handed on, no inner walk called directly) and `H6 ARM BLIND` (A2, on that
+/// closure's body: its probe list is not empty ; every method call on the receiver is a `hit_*`
+/// lane and every call on a receiver's field is `contains_at`).
+fn entries_of(rel: &str, file: &syn::File) -> EntrySet {
+    struct Blind(Vec<String>);
+    impl<'ast> Visit<'ast> for Blind {
+        fn visit_expr_method_call(&mut self, m: &'ast syn::ExprMethodCall) {
+            let meth = m.method.to_string();
+            if is_recv(&m.receiver) && !meth.starts_with("hit_") {
+                self.0.push(format!(
+                    "a method of the receiver that is no `hit_*` lane: `{meth}`"
+                ));
+            }
+            if let Expr::Field(f) = &*m.receiver {
+                if is_recv(&f.base) && meth != "contains_at" {
+                    self.0
+                        .push(format!("a field read by `{meth}`, not `contains_at`"));
+                }
+            }
+            visit::visit_expr_method_call(self, m);
+        }
+    }
+    struct V<'r> {
+        rel: &'r str,
+        out: BTreeMap<String, NamedEntry>,
+        msgs: Vec<String>,
+    }
+    impl V<'_> {
+        fn read(&mut self, vis: &syn::Visibility, sig: &syn::Signature, block: &syn::Block) {
+            let name = sig.ident.to_string();
+            if matches!(vis, syn::Visibility::Inherited) || name == "is_gen_scope_segment" {
+                return;
+            }
+            if !entry_sig(sig) {
+                self.msgs.push(format!(
+                    "H6 ENTRY FORM  {} · {name}: a non-private fn of the walk's file whose signature is not an entry's \
+                     — `(&self, [prefix: &crate::ScopeRef,] name: &str) -> Option<DeclKey>`, no generic, no where \
+                     clause, no other parameter (a predicate parameter hands the hit set back to the caller)",
+                    self.rel
+                ));
+                return;
+            }
+            let form = match block.stmts.as_slice() {
+                [syn::Stmt::Expr(Expr::MethodCall(m), None)] => {
+                    let kind = m.method.to_string();
+                    let on_self = matches!(&*m.receiver, Expr::Path(p)
+                        if p.qself.is_none() && p.path.is_ident("self"));
+                    match m.args.last() {
+                        Some(Expr::Closure(c))
+                            if on_self
+                                && m.turbofish.is_none()
+                                && c.inputs.len() == 1
+                                && WALK_KINDS.contains(&kind.as_str()) =>
+                        {
+                            Some((kind, c))
+                        }
+                        _ => None,
+                    }
+                }
+                _ => None,
+            };
+            let Some((kind, c)) = form else {
+                self.msgs.push(format!(
+                    "H6 ENTRY FORM  {} · {name}: a non-private fn of the walk's file whose body is not ONE call \
+                     `self.<walk>(.., |k| ..)` of one of the four generic walks ({}) with a one-parameter closure \
+                     literal last — a named entry is that call alone (no `let`, no `if`, no second call, no named fn, \
+                     no inner walk), and a non-private fn of this file is a named entry or `is_gen_scope_segment`",
+                    self.rel,
+                    WALK_KINDS.join(", ")
+                ));
+                return;
+            };
+            let probes = probes_of(&Expr::Closure(c.clone()));
+            let mut b = Blind(Vec::new());
+            b.visit_expr(&c.body);
+            if probes.is_empty() {
+                b.0.push("no probe".to_string());
+            }
+            for why in b.0 {
+                self.msgs.push(format!(
+                    "H6 ARM BLIND  {} · {name}: {why} — an entry's closure is `<recv>.<field>.contains_at(k)` \
+                     or a `hit_*` lane call, so its stores can be read",
+                    self.rel
+                ));
+            }
+            if self
+                .out
+                .insert(name.clone(), NamedEntry { kind, probes })
+                .is_some()
+            {
+                self.msgs.push(format!(
+                    "H6 ENTRY FORM  {} · {name}: two entries of one name",
+                    self.rel
+                ));
+            }
+        }
+    }
+    impl<'ast> Visit<'ast> for V<'_> {
+        fn visit_impl_item_fn(&mut self, f: &'ast syn::ImplItemFn) {
+            self.read(&f.vis, &f.sig, &f.block);
+            visit::visit_impl_item_fn(self, f);
+        }
+        fn visit_item_fn(&mut self, f: &'ast syn::ItemFn) {
+            self.read(&f.vis, &f.sig, &f.block);
+            visit::visit_item_fn(self, f);
+        }
+    }
+    let mut v = V {
+        rel,
+        out: BTreeMap::new(),
+        msgs: Vec::new(),
+    };
+    v.visit_file(file);
+    (v.out, v.msgs)
+}
+
+/// H6 (E-1c, A1c's signature clause): `(&self, [prefix: &crate::ScopeRef,] name: &str) ->
+/// Option<DeclKey>`, no generic, no where clause, not const / async / unsafe.
+fn entry_sig(sig: &syn::Signature) -> bool {
+    fn path_is(t: &syn::Type, want: &[&str]) -> bool {
+        matches!(t, syn::Type::Path(p) if p.qself.is_none()
+            && p.path.leading_colon.is_none()
+            && p.path.segments.len() == want.len()
+            && p.path.segments.iter().zip(want).all(|(s, w)| s.ident == w
+                && matches!(s.arguments, syn::PathArguments::None)))
+    }
+    fn arg_is(a: &syn::FnArg, name: &str, want: &[&str]) -> bool {
+        let syn::FnArg::Typed(t) = a else {
+            return false;
+        };
+        matches!(&*t.pat, syn::Pat::Ident(i) if i.ident == name && i.by_ref.is_none()
+            && i.mutability.is_none() && i.subpat.is_none())
+            && matches!(&*t.ty, syn::Type::Reference(r) if r.mutability.is_none()
+                && r.lifetime.is_none() && path_is(&r.elem, want))
+    }
+    let recv = matches!(sig.inputs.first(), Some(syn::FnArg::Receiver(r))
+        if r.reference.as_ref().is_some_and(|(_, l)| l.is_none())
+            && r.mutability.is_none() && r.colon_token.is_none());
+    let rest: Vec<&syn::FnArg> = sig.inputs.iter().skip(1).collect();
+    let args = match rest.as_slice() {
+        [n] => arg_is(n, "name", &["str"]),
+        [p, n] => arg_is(p, "prefix", &["crate", "ScopeRef"]) && arg_is(n, "name", &["str"]),
+        _ => false,
+    };
+    let ret = match &sig.output {
+        syn::ReturnType::Type(_, t) => match &**t {
+            syn::Type::Path(p) if p.qself.is_none() && p.path.segments.len() == 1 => {
+                let s = &p.path.segments[0];
+                s.ident == "Option"
+                    && matches!(&s.arguments, syn::PathArguments::AngleBracketed(a)
+                        if a.args.len() == 1
+                            && matches!(&a.args[0], syn::GenericArgument::Type(t) if path_is(t, &["DeclKey"])))
+            }
+            _ => false,
+        },
+        syn::ReturnType::Default => false,
+    };
+    recv && args
+        && ret
+        && sig.generics.params.is_empty()
+        && sig.generics.where_clause.is_none()
+        && sig.constness.is_none()
+        && sig.asyncness.is_none()
+        && sig.unsafety.is_none()
+        && sig.abi.is_none()
+        && sig.variadic.is_none()
+}
+
+/// H6 (E-1c): the named entries of SRC/lexscope/walk.rs, read once per test binary ; every name list
+/// keyed on a walk's method name (WALK_ENTRIES, WALK_SITE_ENTRIES, COMP_WALK as the entry's kind,
+/// MINT_CALLS, HH_WALK) also takes these names (P68), so a 24th entry is an H6A row, not a list
+/// someone forgot.
+fn named_entries() -> &'static EntrySet {
+    static E: std::sync::OnceLock<EntrySet> = std::sync::OnceLock::new();
+    E.get_or_init(|| {
+        let p = src_dir().join("lexscope/walk.rs");
+        let text =
+            std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("read {}: {e}", p.display()));
+        let f = syn::parse_file(&text)
+            .unwrap_or_else(|e| panic!("syn cannot parse {}: {e}", p.display()));
+        entries_of("lexscope/walk.rs", &f)
+    })
+}
+
+/// H6 (E-1c): the named entry `name`, if it is one.
+fn named_entry(name: &str) -> Option<&'static NamedEntry> {
+    named_entries().0.get(name)
 }
 
 /// The funnel's openers (LS2a, §5.2 Q-LEXSCOPE): `<recv>.lex.<entry>(..)` moves the current
@@ -1608,6 +1843,11 @@ impl<'ast> Visit<'ast> for Pass<'_> {
             self.visit_expr(&m.receiver);
             if COMP_WALK.contains(&meth.as_str()) {
                 self.ask("W", meth.clone(), arg0);
+            } else if let Some(e) = named_entry(&meth) {
+                // §5.2 Q-DECLKEY DK2 (R-K14 (a)): a named entry is asked as its KIND, the generic
+                // walk it calls (fq's two forms count as fq the same way) ; NP19-3: two entries of
+                // one kind on one argument are one consult, as two closures of one walk were
+                self.ask("W", e.kind.clone(), arg0);
             } else if COMP_STACK.contains(&meth.as_str()) {
                 self.ask("S", meth.clone(), arg0);
             }
@@ -2148,7 +2388,12 @@ fn h6_rows(c: &Census) -> Vec<(String, String, String, usize)> {
         .collect();
     let mut agg: BTreeMap<String, (String, String, usize, usize)> = BTreeMap::new();
     for r in &c.fns {
+        // §5.2 Q-DECLKEY DK2 (E-2c): a named entry's own call of its walk is its arm, H6A's row
+        let arm_fn = r.file == "lexscope/walk.rs" && named_entry(&r.simple).is_some();
         for (entry, probes) in &r.walk_calls {
+            if arm_fn && WALK_KINDS.contains(&entry.as_str()) {
+                continue;
+            }
             let text = if probes.is_empty() {
                 "?".to_string()
             } else {
@@ -2175,7 +2420,7 @@ fn h6_rows(c: &Census) -> Vec<(String, String, String, usize)> {
             let set = set.into_iter().collect::<Vec<_>>().join("+");
             let class = if WALK_FAMILY.contains(&r.simple.as_str()) && entry != "decl_probe_key" {
                 "INTERNAL"
-            } else if WALK_SITE_ENTRIES.contains(&entry.as_str()) {
+            } else if WALK_SITE_ENTRIES.contains(&entry.as_str()) || named_entry(entry).is_some() {
                 "SITE"
             } else {
                 match entry.as_str() {
@@ -2325,6 +2570,79 @@ fn h6_the_walk_call_sites_are_pinned() {
         probes_of(&syn::parse_str::<Expr>("&hit").expect("ref")),
         ["hit"]
     );
+    // §5.2 Q-DECLKEY DK2 (E-1c, A1c with P71, A2): the named entries of a walk file
+    let entry_file = |items: &str| {
+        let f: syn::File = syn::parse_str(&format!("impl E {{ {items} }}")).expect("entry file");
+        entries_of("p.rs", &f)
+    };
+    let (e, m) = entry_file(
+        "pub(crate) fn walk_key_v(&self, name: &str) -> Option<DeclKey> { \
+         self.walk_scopes_key(name, |k| self.hit_value(k)) } \
+         pub(crate) fn walk_above_l(&self, prefix: &crate::ScopeRef, name: &str) -> Option<DeclKey> { \
+         self.scoped_key_at_or_above(prefix, name, |k| self.labels.contains_at(k) || self.hit_x(k)) } \
+         fn walk_scopes_key(&self, name: &str, hit: impl Fn(&AtKey) -> bool) -> Option<DeclKey> { \
+         self.walk_scopes_key_inner(name, hit, false) } \
+         pub(super) fn is_gen_scope_segment(seg: &str) -> bool { seg.contains('[') }",
+    );
+    assert!(m.is_empty(), "{m:?}");
+    assert_eq!(
+        e.into_iter()
+            .map(|(n, x)| (n, x.kind, x.probes))
+            .collect::<Vec<_>>(),
+        [
+            (
+                "walk_above_l".to_string(),
+                "scoped_key_at_or_above".to_string(),
+                vec!["labels".to_string(), "hit_x".to_string()]
+            ),
+            (
+                "walk_key_v".to_string(),
+                "walk_scopes_key".to_string(),
+                vec!["hit_value".to_string()]
+            ),
+        ]
+    );
+    let head = "(&self, name: &str) -> Option<DeclKey>";
+    for (body, rule) in [
+        ("let n = name; self.walk_scopes_key(n, |k| self.hit_value(k))", "H6 ENTRY FORM"),
+        ("if name.is_empty() { None } else { self.walk_scopes_key(name, |k| self.hit_value(k)) }", "H6 ENTRY FORM"),
+        ("self.walk_scopes_key(name, Self::hit_value)", "H6 ENTRY FORM"),
+        ("self.walk_scopes_key(name, |k| self.hit_value(k)).or(None)", "H6 ENTRY FORM"),
+        ("self.walk_scopes_key_inner(name, |k| self.hit_value(k), false)", "H6 ENTRY FORM"),
+        ("self.helper(name)", "H6 ENTRY FORM"),
+        ("me.walk_scopes_key(name, |k| self.hit_value(k))", "H6 ENTRY FORM"),
+        ("self.walk_scopes_key(name, |k| self.is_x(k))", "H6 ARM BLIND"),
+        ("self.walk_scopes_key(name, |k| self.symbols.contains_key(k))", "H6 ARM BLIND"),
+        ("self.walk_scopes_key(name, |_k| true)", "H6 ARM BLIND"),
+    ] {
+        for vis in ["pub(crate)", "pub(super)", "pub"] {
+            let (_, m) = entry_file(&format!("{vis} fn a{head} {{ {body} }}"));
+            assert!(m.iter().any(|x| x.starts_with(rule)), "{vis} {body}: {m:?}");
+        }
+    }
+    // A1c's signature clause (DELTA19C judge4 B3): an entry's signature is fixed
+    let body = "self.walk_scopes_key(name, |k| self.hit_value(k))";
+    for head in [
+        "<F: Fn(&AtKey) -> bool>(&self, name: &str) -> Option<DeclKey>",
+        "(&self, name: &str) -> Option<DeclKey> where Self: Sized",
+        "(&self, name: &str, hit: impl Fn(&AtKey) -> bool) -> Option<DeclKey>",
+        "(&mut self, name: &str) -> Option<DeclKey>",
+        "(&self, name: &str) -> bool",
+        "(&self, name: String) -> Option<DeclKey>",
+        "(&self, prefix: &ScopeRef, name: &str) -> Option<DeclKey>",
+        "(&self, name: &str, prefix: &crate::ScopeRef) -> Option<DeclKey>",
+    ] {
+        let (e, m) = entry_file(&format!("pub(super) fn a{head} {{ {body} }}"));
+        assert!(
+            e.is_empty()
+                && m.iter()
+                    .any(|x| x.starts_with("H6 ENTRY FORM") && x.contains("signature")),
+            "{head}: {m:?}"
+        );
+    }
+    // a private fn of the file is no entry and no rule's (the four walks, their helpers)
+    let (e, m) = entry_file(&format!("fn a{head} {{ self.helper(name) }}"));
+    assert!(e.is_empty() && m.is_empty(), "{e:?} {m:?}");
 
     let c = run_census();
     let rows = h6_rows(&c);
@@ -2356,9 +2674,128 @@ fn h6_the_walk_call_sites_are_pinned() {
         &got,
         &want,
         "a new scope-walk call (or a new hit): name the unit that adds it, read the hit's maps (a new map set is a new \
-         `Hit` value for Q-DECLKEY DK2), add the row",
+         named entry of lexscope/walk.rs since §5.2 Q-DECLKEY DK2), add the row",
         "a scope-walk call is gone: name the unit, remove the row",
     );
+    // §5.2 Q-DECLKEY DK2: the entry rules (A1c / P71, A2) and H6A (E-2c), one row per named entry:
+    // its kind, its arm's probes in order, the order with each `hit_*` lane's own fields in source
+    // order, the store set, the SITE calls ; A4: an entry no SITE calls
+    let (entries, entry_msgs) = named_entries();
+    msgs.extend(entry_msgs.iter().cloned());
+    let self_probes: BTreeMap<&str, &Vec<String>> = c
+        .fns
+        .iter()
+        .filter(|r| r.simple.starts_with("hit_"))
+        .map(|r| (r.simple.as_str(), &r.self_probes))
+        .collect();
+    let mut sites: BTreeMap<String, usize> = BTreeMap::new();
+    for (k, class, v, _) in &rows {
+        let entry = k.split('\t').nth(2).unwrap_or("");
+        if class == "SITE" && entries.contains_key(entry) {
+            let n: usize = v
+                .split('\t')
+                .nth(2)
+                .and_then(|x| x.parse().ok())
+                .unwrap_or(0);
+            *sites.entry(entry.to_string()).or_default() += n;
+        }
+    }
+    let mut a_got: BTreeMap<String, String> = BTreeMap::new();
+    let mut a_dump: Vec<String> = Vec::new();
+    let (mut a_texts, mut a_sets) = (BTreeSet::new(), BTreeSet::new());
+    for (name, e) in entries {
+        let text = e.probes.join("|");
+        let order = e
+            .probes
+            .iter()
+            .map(|p| {
+                self_probes
+                    .get(p.as_str())
+                    .map_or(p.clone(), |fs| fs.join("|"))
+            })
+            .collect::<Vec<_>>()
+            .join("|");
+        let mut set: BTreeSet<String> = BTreeSet::new();
+        let mut todo = e.probes.clone();
+        let mut seen: BTreeSet<String> = BTreeSet::new();
+        while let Some(p) = todo.pop() {
+            if !seen.insert(p.clone()) {
+                continue;
+            }
+            match self_probes.get(p.as_str()) {
+                Some(fs) => todo.extend(fs.iter().cloned()),
+                None => {
+                    set.insert(p);
+                }
+            }
+        }
+        let set = set.into_iter().collect::<Vec<_>>().join("+");
+        let n = sites.get(name).copied().unwrap_or(0);
+        if n == 0 {
+            msgs.push(format!(
+                "H6 ENTRY UNUSED  lexscope/walk.rs · {name}: no SITE row calls the entry — remove it \
+                 (rustc's dead_code says the same)"
+            ));
+        }
+        a_texts.insert(text.clone());
+        a_sets.insert(set.clone());
+        a_dump.push(format!("{name}\t{}\t{text}\t{order}\t{set}\t{n}", e.kind));
+        a_got.insert(
+            name.clone(),
+            format!("{}\t{text}\t{order}\t{set}\t{n}", e.kind),
+        );
+    }
+    dump("H6A", "entry\tkind\tarm_text\torder\tset\tsites", &a_dump);
+    let mut a_want = BTreeMap::new();
+    for row in table(&tables::get("H6A")) {
+        assert_eq!(
+            row.len(),
+            6,
+            "H6A table row has {} columns, not 6: {row:?}",
+            row.len()
+        );
+        a_want.insert(row[0].clone(), row[1..].join("\t"));
+    }
+    msgs.extend(diff_rows(
+        "H6A",
+        &a_got,
+        &a_want,
+        "a new named entry of lexscope/walk.rs (a new hit set): name the unit, read its stores, add the row",
+        "a named entry is gone: name the unit, remove the row",
+    ));
+    let a_counts = format!(
+        "entries {} arm_texts {} sets {}",
+        entries.len(),
+        a_texts.len(),
+        a_sets.len()
+    );
+    if a_counts != tables::get("H6A_COUNTS") {
+        msgs.push(format!(
+            "H6A COUNTS table [{}] now [{a_counts}]",
+            tables::get("H6A_COUNTS")
+        ));
+    }
+    // A6: every `hit_*` fn of the crate is defined once, in SRC/bound/read.rs, but hit_clk_refused
+    let mut hit_defs: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+    for r in c.fns.iter().filter(|r| r.simple.starts_with("hit_")) {
+        hit_defs
+            .entry(r.simple.as_str())
+            .or_default()
+            .push(r.file.as_str());
+    }
+    for (name, files) in &hit_defs {
+        let home = if *name == "hit_clk_refused" {
+            "held.rs"
+        } else {
+            "bound/read.rs"
+        };
+        if files.len() != 1 || files[0] != home {
+            msgs.push(format!(
+                "H6 HIT HOME  {name}: defined in {files:?}, not once in {home} — a `hit_*` lane lives in \
+                 bound/read.rs (hit_fns is keyed by simple name: a second fn of one name would be read as one)"
+            ));
+        }
+    }
     // §5.2 Q-DECLKEY DK1-6 round 2: two local closures of one name in one fn when a probe list
     // of that fn calls `name()` (its expansion would read the later closure only)
     for r in &c.fns {
@@ -3016,7 +3453,8 @@ impl Pass2<'_> {
                 c.entries.push(name.to_string());
             }
         }
-        if MINT_CALLS.contains(&name) {
+        // §5.2 Q-DECLKEY DK2 (E-1c): a named entry mints as the walk it calls did
+        if MINT_CALLS.contains(&name) || named_entry(name).is_some() {
             self.mint("call", name);
         }
         if name == "is_gen_scope_segment" {
@@ -3903,7 +4341,9 @@ fn hh_the_current_prefix_reads_are_pinned() {
     let c = run_census2();
     let mut agg: BTreeMap<String, (BTreeMap<String, usize>, usize)> = BTreeMap::new();
     for r in &c.fns {
-        let walks = HH_WALK.iter().any(|w| r.calls.contains(*w));
+        // §5.2 Q-DECLKEY DK2 (E-1c): a named entry's call makes a read a composite step as its walk's did
+        let walks = HH_WALK.iter().any(|w| r.calls.contains(*w))
+            || r.calls.iter().any(|n| named_entry(n).is_some());
         for (store, op, mint) in &r.reads {
             let others = r.reads.iter().any(|(s, _, m)| m == mint && s != store);
             let role = if walks || others {

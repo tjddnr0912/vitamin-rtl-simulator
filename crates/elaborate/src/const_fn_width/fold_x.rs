@@ -48,11 +48,7 @@ impl Elaborator<'_> {
                 !envw.contains_key(n)
                     && (self.names_imported_real(e)
                         || self
-                            .walk_scopes_key(n, |k| {
-                                self.real_param_val.contains_at(k)
-                                    || self.params.contains_at(k)
-                                    || self.symbols.contains_at(k)
-                            })
+                            .walk_key_real_value_or_net(n)
                             .is_some_and(|k| self.real_param_val.contains_found(&k)))
             }
             ast::ExprKind::PkgScoped { pkg, name } => self

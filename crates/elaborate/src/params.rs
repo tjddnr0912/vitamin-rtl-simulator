@@ -871,12 +871,12 @@ impl Elaborator<'_> {
         Some(f.decl_range())
     }
 
-    /// If `base` is a bare param/localparam Ident with a recorded non-zero-LSB
-    /// declared range, return `(lo, width, ascending)` — resolved by the SAME
-    /// `walk_scopes` as the param's value (`lookup_scoped`) and meta (`param_meta`),
-    /// so the offset range can never drift from the value lookup. Drives the
-    /// offset-normalization param arms in `norm_offset_if_net` / `base_net_ascending`
-    /// / `norm_offset_ascending`, mirroring a net's `norm_offset_for_net`.
+    /// If `base` is a bare param/localparam Ident with a recorded non-zero-LSB declared range,
+    /// return `(lo, width, ascending)` — resolved by the SAME walk, `walk_scopes_key` (here as
+    /// `walk_key_value_or_net`), as the param's value (`lookup_scoped`: `walk_key_value`) and
+    /// meta (`param_meta`: `walk_key_meta`), so the offset range can never drift from the value
+    /// lookup. Drives the offset-normalization param arms in `norm_offset_if_net` /
+    /// `base_net_ascending` / `norm_offset_ascending`, mirroring a net's `norm_offset_for_net`.
     /// Strip parentheses from a select's base: `(pk::B)[15:8]` names the object
     /// `pk::B[15:8]` names. See [`Self::param_sel_range`] for why that matters.
     pub(crate) fn peel_parens(e: &ast::Expr) -> &ast::Expr {
@@ -932,11 +932,11 @@ impl Elaborator<'_> {
         // Re-derive the SAME innermost binding key the VALUE resolves to — a shadowing
         // inner net/local (`symbols`) or generate/zero-LSB param (`params`) must WIN —
         // then use the declared range ONLY if that exact key is a recorded non-zero-LSB
-        // param. An independent `walk_scopes(&param_range)` would silently skip a shadow
+        // param. An independent walk over `param_range` alone would silently skip a shadow
         // (`param_range` is a SUBSET of `params`, populated only for non-zero-LSB params
         // at a couple of decl sites) and drift outward to an OUTER param, normalizing
         // the offset against the wrong LSB while the value came from the inner binding.
-        let key = self.walk_scopes_key(seg, |k| self.hit_value_or_net(k))?;
+        let key = self.walk_key_value_or_net(seg)?;
         self.param_range.get_found(&key).copied()
     }
 

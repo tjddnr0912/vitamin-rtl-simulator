@@ -118,39 +118,40 @@ sites 26 {"CONSTRUCTOR": 1, "DEFINITION": 1, "DIAGNOSTIC": 7, "LOOKUP": 2, "PARE
 # move |k: &DeclKey| .. };`) is a local / found-key closure ; an untyped closure whose parameter goes to found_text / key_same /
 # gen_binding_encloses or a `_found` entry reads a FOUND key (FOUND_FNS / FOUND_METHODS ; every lexscope fn with a DeclKey parameter must be
 # one: `H6 FOUND TAKER`) ; two local closures bound to ONE name in one fn while a probe calls `name()` FAIL (`H6 DUP LOCAL`) ; none on this tree.
+# §5.2 Q-DECLKEY DK2 (2026-11-26, form (c)): a site calls a NAMED ENTRY of lexscope/walk.rs, one per hit set (E-1c ; the entry column), its hit text the entry's arm (E-2c, table H6A) ; the 51 SITE rows' hit_set stands but held.rs clk_refused_at's (`at_same()` was the deleted local closure's free call ; a `hit_*` lane is read by its fields: clk_refused+symbols) ; site_texts 25 -> 23 (one text per entry), site_sets 20 ; walk_scopes deleted (its INTERNAL row gone) ; an entry's own walk call is its arm, H6A's row, not a SITE
 file	fn	entry	hit_text	class	hit_set	calls
-array_geom.rs	shape_bits	walk_scopes_key	hit_value	SITE	params	1
-block_local/hoist.rs	hoist_one_block_local	walk_scopes_key	pkg_var_aliases	SITE	pkg_var_aliases	1
-bound/read.rs	name_meta	walk_scopes	param_meta	SITE	param_meta	1
-bound/read.rs	name_real	walk_scopes	real_param_val	SITE	real_param_val	1
-const_array.rs	const_array_ref_of_base	walk_scopes_key	array_const_vals|params|symbols	SITE	array_const_vals+params+symbols	1
-const_array.rs	const_array_ref_of_base	walk_scopes_key	pkg_var_aliases	SITE	pkg_var_aliases	1
-const_bound.rs	unfoldable_reason_in	walk_scopes_key	hit_any_const	SITE	params+real_param_val+str_param_raw+wide_param_bits	1
-const_decl_width.rs	narrow_param_decl_width	walk_scopes_key	hit_value_or_net	SITE	params+symbols	1
-const_eval.rs	array_param_init_pattern	walk_scopes_key	symbols	SITE	symbols	1
-const_eval.rs	wide_param_name_in	walk_scopes_key	hit_wide	SITE	wide_param_bits	1
-const_fn_width/fold_x.rs	names_real_binding	walk_scopes_key	real_param_val|params|symbols	SITE	params+real_param_val+symbols	1
-const_str.rs	const_str_at	walk_scopes_key	str_param_raw|real_param_val|params|wide_param_bits|symbols	SITE	params+real_param_val+str_param_raw+symbols+wide_param_bits	1
-const_wide.rs	narrow_param_bits	walk_scopes_key	hit_value_or_net	SITE	params+symbols	1
-const_wide.rs	wide_name_bits	walk_scopes_key	hit_wide_value_or_net	SITE	params+symbols+wide_param_bits	1
-decl_collide.rs	modport_call_refused	walk_scopes_key	iface_insts	SITE	iface_insts	1
-dynarr.rs	dyn_handle	walk_scopes_key_shadowed	fixed_string_dyn_key	SITE	fixed_string_dyn_key	1
+array_geom.rs	shape_bits	walk_key_value	hit_value	SITE	params	1
+block_local/hoist.rs	hoist_one_block_local	walk_key_pkg_var_alias	pkg_var_aliases	SITE	pkg_var_aliases	1
+bound/read.rs	name_meta	walk_key_meta	hit_meta	SITE	param_meta	1
+bound/read.rs	name_real	walk_key_real	hit_real	SITE	real_param_val	1
+const_array.rs	const_array_ref_of_base	walk_key_array_const_value_or_net	hit_array_const_value_or_net	SITE	array_const_vals+params+symbols	1
+const_array.rs	const_array_ref_of_base	walk_key_pkg_var_alias	pkg_var_aliases	SITE	pkg_var_aliases	1
+const_bound.rs	unfoldable_reason_in	walk_key_any_const	hit_any_const	SITE	params+real_param_val+str_param_raw+wide_param_bits	1
+const_decl_width.rs	narrow_param_decl_width	walk_key_value_or_net	hit_value_or_net	SITE	params+symbols	1
+const_eval.rs	array_param_init_pattern	walk_key_net	symbols	SITE	symbols	1
+const_eval.rs	wide_param_name_in	walk_key_wide	hit_wide	SITE	wide_param_bits	1
+const_fn_width/fold_x.rs	names_real_binding	walk_key_real_value_or_net	hit_real_value_or_net	SITE	params+real_param_val+symbols	1
+const_str.rs	const_str_at	walk_key_str_real_value_wide_or_net	hit_str_real_value_wide_or_net	SITE	params+real_param_val+str_param_raw+symbols+wide_param_bits	1
+const_wide.rs	narrow_param_bits	walk_key_value_or_net	hit_value_or_net	SITE	params+symbols	1
+const_wide.rs	wide_name_bits	walk_key_wide_value_or_net	hit_wide_value_or_net	SITE	params+symbols+wide_param_bits	1
+decl_collide.rs	modport_call_refused	walk_key_iface_inst	iface_insts	SITE	iface_insts	1
+dynarr.rs	dyn_handle	walk_shadowed_fixed_string_dyn	fixed_string_dyn_key	SITE	fixed_string_dyn_key	1
 edge_gate.rs	binding_encloses	other_kind()	wide_param_bits|real_param_val|str_param_raw|symbols	FOUND	real_param_val+str_param_raw+symbols+wide_param_bits	1
-edge_gate.rs	binding_encloses	walk_scopes_key	hit_value	SITE	params	1
-edge_gate.rs	binding_encloses	walk_scopes_key	params|other_kind_at()	SITE	params+real_param_val+str_param_raw+symbols+wide_param_bits	1
-edge_gate.rs	variable_named_in	walk_scopes_key	hit_wide	SITE	wide_param_bits	1
-edge_gate.rs	wide_lsb_range_of	walk_scopes_key	hit_wide_value_or_net	SITE	params+symbols+wide_param_bits	1
-edge_gate.rs	wide_param_named_in	walk_scopes_key	hit_wide	SITE	wide_param_bits	1
-expr_special.rs	bits_of_view	walk_scopes_key	hit_value_or_net	SITE	params+symbols	1
-frames_static_init.rs	admitted_local_keys	walk_scopes_key	symbols	SITE	symbols	1
-frames_static_init.rs	declined_local_keys	walk_scopes_key	symbols	SITE	symbols	1
-frames_static_init.rs	emit_frame_static_prologue	walk_scopes_key	symbols	SITE	symbols	1
-frames_static_init.rs	expr_reads_admitted	walk_scopes_key	symbols	SITE	symbols	1
-frames_static_init.rs	frame_init_name_is_local_or_const	walk_scopes_key	symbols	SITE	symbols	1
-gen_scope_name.rs	gen_spelling_hint	scoped_key_at_or_above	gen_loop_labels	SITE	gen_loop_labels	1
-gen_scope_name.rs	gen_spelling_hint	scoped_key_at_or_above	gen_singleton_labels	SITE	gen_singleton_labels	1
+edge_gate.rs	binding_encloses	walk_key_value	hit_value	SITE	params	1
+edge_gate.rs	binding_encloses	walk_key_value_or_other_kind	hit_value_or_other_kind	SITE	params+real_param_val+str_param_raw+symbols+wide_param_bits	1
+edge_gate.rs	variable_named_in	walk_key_wide	hit_wide	SITE	wide_param_bits	1
+edge_gate.rs	wide_lsb_range_of	walk_key_wide_value_or_net	hit_wide_value_or_net	SITE	params+symbols+wide_param_bits	1
+edge_gate.rs	wide_param_named_in	walk_key_wide	hit_wide	SITE	wide_param_bits	1
+expr_special.rs	bits_of_view	walk_key_value_or_net	hit_value_or_net	SITE	params+symbols	1
+frames_static_init.rs	admitted_local_keys	walk_key_net	symbols	SITE	symbols	1
+frames_static_init.rs	declined_local_keys	walk_key_net	symbols	SITE	symbols	1
+frames_static_init.rs	emit_frame_static_prologue	walk_key_net	symbols	SITE	symbols	1
+frames_static_init.rs	expr_reads_admitted	walk_key_net	symbols	SITE	symbols	1
+frames_static_init.rs	frame_init_name_is_local_or_const	walk_key_net	symbols	SITE	symbols	1
+gen_scope_name.rs	gen_spelling_hint	walk_above_gen_loop_label	gen_loop_labels	SITE	gen_loop_labels	1
+gen_scope_name.rs	gen_spelling_hint	walk_above_gen_singleton_label	gen_singleton_labels	SITE	gen_singleton_labels	1
 held.rs	clk_refused_at	refused()	clk_refused	FOUND	clk_refused	1
-held.rs	clk_refused_at	walk_scopes_key_from	symbols|refused_at()	SITE	at_same()+clk_refused+symbols	1
+held.rs	clk_refused_at	walk_from_net_or_refused_clk	symbols|hit_clk_refused	SITE	clk_refused+symbols	1
 hier.rs	hier_lookup	hier_resolve	symbols	HIER	symbols	1
 hier.rs	hier_lookup_param	hier_resolve	hier_params	HIER	hier_params	1
 hier.rs	hier_lookup_param_meta	hier_resolve	param_meta	HIER	param_meta	1
@@ -158,41 +159,88 @@ hier.rs	hier_lookup_wide_param	hier_resolve	wide_param_bits	HIER	wide_param_bits
 hier_defer/bits.rs	build_hier_param_select	hier_resolve	hier_param_range	HIER	hier_param_range	1
 hier_defer/func_call.rs	resolve_deferred_hier_func_call_one	hier_resolve	hier_funcs	HIER	hier_funcs	1
 hier_defer/read.rs	resolve_deferred_hier_call	hier_resolve	hier_funcs	HIER	hier_funcs	1
-hier_defer/read.rs	resolve_deferred_hier_call	scoped_key_at_or_above	enum_label_types	SITE	enum_label_types	1
+hier_defer/read.rs	resolve_deferred_hier_call	walk_above_enum_label_type	enum_label_types	SITE	enum_label_types	1
 hier_defer/read.rs	resolve_one_deferred_hier_sel	hier_resolve	fixed_string_dyn_key	HIER	fixed_string_dyn_key	1
 hier_defer/task_call.rs	resolve_deferred_hier_task_call	hier_resolve	hier_tasks	HIER	hier_tasks	1
-hier_defer/write.rs	every_name_resolves	walk_scopes_key	symbols|params	SITE	params+symbols	1
+hier_defer/write.rs	every_name_resolves	walk_key_net_or_value	hit_net_or_value	SITE	params+symbols	1
 hier_defer/write.rs	resolve_deferred_hier_sel_write	hier_resolve	fixed_string_dyn_key	HIER	fixed_string_dyn_key	1
-ident_route.rs	ast_reads_guessed_param	walk_scopes_key	hit_value	SITE	params	1
-ident_route.rs	bare_ident_route	walk_scopes_key	hit_any_const_or_net	SITE	params+real_param_val+str_param_raw+symbols+wide_param_bits	1
-ident_route.rs	bare_ident_route	walk_scopes_key	hit_value	SITE	params	1
-lexscope/elab.rs	walk_hits_decl_pos	walk_scopes_key	symbols	SITE	symbols	1
+ident_route.rs	ast_reads_guessed_param	walk_key_value	hit_value	SITE	params	1
+ident_route.rs	bare_ident_route	walk_key_any_const_or_net	hit_any_const_or_net	SITE	params+real_param_val+str_param_raw+symbols+wide_param_bits	1
+ident_route.rs	bare_ident_route	walk_key_value	hit_value	SITE	params	1
+lexscope/elab.rs	walk_hits_decl_pos	walk_key_net	symbols	SITE	symbols	1
 lexscope/walk.rs	walk_scopes_key	walk_scopes_key_inner	hit	INTERNAL	hit	1
 lexscope/walk.rs	walk_scopes_key_from	walk_out_from	hit	INTERNAL	hit	1
 lexscope/walk.rs	walk_scopes_key_inner	decl_probe_key	hit	PROBE	hit	1
 lexscope/walk.rs	walk_scopes_key_inner	walk_out_from	hit	INTERNAL	hit	1
 lexscope/walk.rs	walk_scopes_key_shadowed	walk_scopes_key_inner	hit	INTERNAL	hit	1
-lvalue.rs	collect_lval_chunks	walk_scopes_key_shadowed	string_array_elems	SITE	string_array_elems	1
-package.rs	bare_hit_is_shadowed_pkg_alias	walk_scopes_key	genvar_decls	SITE	genvar_decls	1
-package.rs	bare_hit_is_shadowed_pkg_alias	walk_scopes_key	symbols	SITE	symbols	1
-package.rs	dotted_hit_is_pkg_alias	walk_scopes_key	symbols	SITE	symbols	1
+lvalue.rs	collect_lval_chunks	walk_shadowed_string_array_elem	string_array_elems	SITE	string_array_elems	1
+package.rs	bare_hit_is_shadowed_pkg_alias	walk_key_genvar	genvar_decls	SITE	genvar_decls	1
+package.rs	bare_hit_is_shadowed_pkg_alias	walk_key_net	symbols	SITE	symbols	1
+package.rs	dotted_hit_is_pkg_alias	walk_key_net	symbols	SITE	symbols	1
 package.rs	resolve_rtn_key	walk_rtn_scopes	func_table|task_table	RTN	func_table+task_table	1
-param_query.rs	real_param_is_non_integral	walk_scopes_key	hit_real_value_or_net	SITE	params+real_param_val+symbols	1
-param_query.rs	real_param_lowers_real	walk_scopes_key	real_param_val|params|symbols	SITE	params+real_param_val+symbols	1
-params.rs	param_sel_range	walk_scopes_key	hit_value_or_net	SITE	params+symbols	1
-ports.rs	bind_iface_port	walk_scopes_key	iface_insts	SITE	iface_insts	1
-ports.rs	check_modport_write	walk_scopes_key	symbols	SITE	symbols	1
-ports.rs	wire_ports	walk_scopes_key	symbols	SITE	symbols	1
-scope.rs	lookup_net_scoped	walk_scopes_key	symbols	SITE	symbols	1
-scope.rs	lookup_scoped	walk_scopes	params	SITE	params	1
-scope.rs	walk_scopes	walk_scopes_key	table	INTERNAL	table	1
-strings.rs	is_string_array_base	walk_scopes_key_shadowed	string_array_elems	SITE	string_array_elems	1
-strings.rs	string_array_elem_net	walk_scopes_key_shadowed	string_array_elems	SITE	string_array_elems	1
-struct_arm.rs	struct_arm_rhs	walk_scopes_key	symbols	SITE	symbols	1
+param_query.rs	real_param_is_non_integral	walk_key_real_value_or_net	hit_real_value_or_net	SITE	params+real_param_val+symbols	1
+param_query.rs	real_param_lowers_real	walk_key_real_value_or_net	hit_real_value_or_net	SITE	params+real_param_val+symbols	1
+params.rs	param_sel_range	walk_key_value_or_net	hit_value_or_net	SITE	params+symbols	1
+ports.rs	bind_iface_port	walk_key_iface_inst	iface_insts	SITE	iface_insts	1
+ports.rs	check_modport_write	walk_key_net	symbols	SITE	symbols	1
+ports.rs	wire_ports	walk_key_net	symbols	SITE	symbols	1
+scope.rs	lookup_net_scoped	walk_key_net	symbols	SITE	symbols	1
+scope.rs	lookup_scoped	walk_key_value	hit_value	SITE	params	1
+strings.rs	is_string_array_base	walk_shadowed_string_array_elem	string_array_elems	SITE	string_array_elems	1
+strings.rs	string_array_elem_net	walk_shadowed_string_array_elem	string_array_elems	SITE	string_array_elems	1
+struct_arm.rs	struct_arm_rhs	walk_key_net	symbols	SITE	symbols	1
 == H6_COUNTS
-{"FOUND": 2, "HIER": 10, "INTERNAL": 5, "PROBE": 1, "RTN": 1, "SITE": 51} site_texts 25 site_sets 20
+{"FOUND": 2, "HIER": 10, "INTERNAL": 4, "PROBE": 1, "RTN": 1, "SITE": 51} site_texts 23 site_sets 20
+== H6A
+# H6A (§5.2 Q-DECLKEY DK2, form (c), E-2c ; DELTA19C J2 L1, q26): one row per NAMED ENTRY of lexscope/walk.rs (E-1c: a non-private fn
+# of the file that is ONE call of one of the four generic walks with a closure literal last) — the entry ; kind = the walk it calls ;
+# arm_text = probes_of(its closure) in source order ; order = the arm text with each `hit_*` lane replaced by its own fields in source
+# order (the `||` order a site spelled before DK2) ; set = the store set ; sites = the H6 SITE calls of the entry. Rules in the h6 test:
+# H6 ENTRY FORM (A1c with P71: every non-private fn of the file but is_gen_scope_segment), H6 ARM BLIND (A2, on the closure), H6 ENTRY
+# UNUSED (A4), H6 HIT HOME (A6). Not seen (REVIEW-ONLY, scope_home.rs head ; NP19-4): a guard, a negation or a formed key inside an
+# entry's closure (its SURF_BODY hash is the pin), `&&` for `||` or a negation inside a lane, a field probed twice in one lane.
+# NOT-PROMISED (one shape a line ; measured by the negative controls of plan19/s8b M7 and §5.2 Q-DECLKEY DK2's M7, W/scopebind/dk2/m7/SUMMARY.txt):
+#  NP19-1 two entry calls of one fn swapped (ident_route.rs bare_ident_route's walk_key_any_const_or_net :99 / walk_key_value :122, control swap_ir exchanges the two):
+#         every table passes ; H6 counts each entry per fn and holds no order (behaviour pins only).
+#  NP19-2 a guard or a helper added in a LANE's body (bound/read.rs, held.rs: outside the file set, no SURF_BODY hash): np2b `&& self.zz_guard()`,
+#         np2c a nested fn negating at_same in hit_clk_refused, np2d `self.clk_refused.len() < 2 &&` pass every table ; np2a (the lane through a
+#         private helper) moves H6 + H6A. The same three shapes inside an ENTRY's closure ARE seen: e2b H6 ARM BLIND + SURF BODY, e2c H6 + H6A +
+#         SURF BODY, e2d H6 ARM BLIND + SURF BODY / OUT-C / OUT-F.
+#  NP19-4 a guard, a negation or a formed key inside an entry's closure passes A1c / A2 ; SURF_BODY moves at least: g1 (`if name.starts_with('$')`)
+#         HSEG + BODY + OUT-C, g2 (`!self.symbols.contains_at(k)`) BODY only, g3 (`&& !name.is_empty()`) BODY + OUT-C, g4 (`AtKey(name.to_string())`)
+#         H6 + H6A + HKC + BODY.
+entry	kind	arm_text	order	set	sites
+walk_above_enum_label_type	scoped_key_at_or_above	enum_label_types	enum_label_types	enum_label_types	1
+walk_above_gen_loop_label	scoped_key_at_or_above	gen_loop_labels	gen_loop_labels	gen_loop_labels	1
+walk_above_gen_singleton_label	scoped_key_at_or_above	gen_singleton_labels	gen_singleton_labels	gen_singleton_labels	1
+walk_from_net_or_refused_clk	walk_scopes_key_from	symbols|hit_clk_refused	symbols|clk_refused	clk_refused+symbols	1
+walk_key_any_const	walk_scopes_key	hit_any_const	str_param_raw|real_param_val|params|wide_param_bits	params+real_param_val+str_param_raw+wide_param_bits	1
+walk_key_any_const_or_net	walk_scopes_key	hit_any_const_or_net	str_param_raw|wide_param_bits|real_param_val|params|symbols	params+real_param_val+str_param_raw+symbols+wide_param_bits	1
+walk_key_array_const_value_or_net	walk_scopes_key	hit_array_const_value_or_net	array_const_vals|params|symbols	array_const_vals+params+symbols	1
+walk_key_genvar	walk_scopes_key	genvar_decls	genvar_decls	genvar_decls	1
+walk_key_iface_inst	walk_scopes_key	iface_insts	iface_insts	iface_insts	2
+walk_key_meta	walk_scopes_key	hit_meta	param_meta	param_meta	1
+walk_key_net	walk_scopes_key	symbols	symbols	symbols	13
+walk_key_net_or_value	walk_scopes_key	hit_net_or_value	symbols|params	params+symbols	1
+walk_key_pkg_var_alias	walk_scopes_key	pkg_var_aliases	pkg_var_aliases	pkg_var_aliases	2
+walk_key_real	walk_scopes_key	hit_real	real_param_val	real_param_val	1
+walk_key_real_value_or_net	walk_scopes_key	hit_real_value_or_net	real_param_val|params|symbols	params+real_param_val+symbols	3
+walk_key_str_real_value_wide_or_net	walk_scopes_key	hit_str_real_value_wide_or_net	str_param_raw|real_param_val|params|wide_param_bits|symbols	params+real_param_val+str_param_raw+symbols+wide_param_bits	1
+walk_key_value	walk_scopes_key	hit_value	params	params	5
+walk_key_value_or_net	walk_scopes_key	hit_value_or_net	params|symbols	params+symbols	4
+walk_key_value_or_other_kind	walk_scopes_key	hit_value_or_other_kind	params|wide_param_bits|real_param_val|str_param_raw|symbols	params+real_param_val+str_param_raw+symbols+wide_param_bits	1
+walk_key_wide	walk_scopes_key	hit_wide	wide_param_bits	wide_param_bits	3
+walk_key_wide_value_or_net	walk_scopes_key	hit_wide_value_or_net	wide_param_bits|params|symbols	params+symbols+wide_param_bits	2
+walk_shadowed_fixed_string_dyn	walk_scopes_key_shadowed	fixed_string_dyn_key	fixed_string_dyn_key	fixed_string_dyn_key	1
+walk_shadowed_string_array_elem	walk_scopes_key_shadowed	string_array_elems	string_array_elems	string_array_elems	3
+== H6A_COUNTS
+entries 23 arm_texts 23 sets 20
 == H6C
 # H6c: g2b composites.tsv (103 ; class codes in g2b/tools/mk_composites.py).
+# NOT-PROMISED (one shape a line ; measured as NP19-1 is, H6A's head):
+#  NP19-3 two entries of one KIND (the private walk an entry calls: COMP_WALK records the kind) on one argument in one fn are one H6C kind:
+#         n13cii (walk_key_net(name) added in edge_gate.rs binding_encloses beside walk_key_value) moves H6 and HM, no H6C row ; n13ci (an entry
+#         of another kind, walk_shadowed_string_array_elem) adds the H6C row.
 file	fn	tier	class
 arrays.rs	expr_array_chain	D	SAME
 arrays.rs	lval_array_chain	D	SAME
@@ -490,8 +538,9 @@ lets 155 fns 85 untyped 30 readers 26
 # §5.2 Q-DECLKEY DK1-5a (2026-11-25): the five movers' 11 mint rows re-homed to lexscope/hier.rs (kind, count, TAG kept) ; key_in (key.rs) `<k>.<member>` NEW, key ; ports.rs elaborate_virtual_iface fmt 2 -> 1: the src glue is key_in's, the dst `format!("{vif}.{m}")` is handed to new_key (the 4th composite mint, DELTA17 F4: vif = the handle's declared name, m = a member name of the interface declaration) — totals unchanged
 # §5.2 Q-DECLKEY DK1-5b (2026-11-25): decl_keep_snapshot's `format!("{prefix}.")` (the package scope's text and its dot) is keys_under_cur's (lexscope/mod.rs ; TAG scope kept) — every mint of the snapshot is inside the module [DK1-6 (2026-11-25): ROUND 1's form, never built — the round-2 line below is the built state (newreads N9 (b))]
 # §5.2 Q-DECLKEY DK1-5b round 2 (2026-11-25, the cost trip on the package path): that `format!` is gone: the prefix test reads the current text and the byte after it (`k.starts_with(prefix)` and `as_bytes()[prefix.len()] == b'.'`), no `<prefix>.` text is formed ; its HM row `keys_under_cur fmt format 1` is gone
+# §5.2 Q-DECLKEY DK2 (2026-11-26, form (c)): the 51 walk calls call their NAMED ENTRY (MINT_CALLS knows the 23 by E-1c ; TAG key as the walk rows) — 46 site rows re-keyed (the five two-walk fns split 2 -> 1+1), walk_scopes' `call walk_scopes_key` row gone, + 23 rows `lexscope/walk.rs <entry> call <its walk> 1 key`
 file	fn	kind	name	count	TAG
-array_geom.rs	shape_bits	call	walk_scopes_key	1	key
+array_geom.rs	shape_bits	call	walk_key_value	1	key
 arrays.rs	expr_array_chain	join	join	1	spelling
 arrays.rs	lval_array_chain	join	join	1	spelling
 arrays.rs	lval_array_view	join	join	1	spelling
@@ -499,48 +548,50 @@ arrays.rs	whole_name_net	join	join	1	spelling
 ast_query.rs	count_reads_runtime_net	join	join	1	spelling
 ast_query.rs	expr_reads_net	join	join	1	spelling
 block_local/hoist.rs	hoist_block_local_nets	fmt	format	1	segment
-block_local/hoist.rs	hoist_one_block_local	call	walk_scopes_key	1	key
+block_local/hoist.rs	hoist_one_block_local	call	walk_key_pkg_var_alias	1	key
 block_local/hoist.rs	hoist_one_block_local	fmt	format	1	segment
 block_local/proofs.rs	callee_side_member_name	fmt-tempname	format	1	spelling
 block_local_class.rs	block_local_scope_prefix	derived-fn	block_local_scope_prefix	1	segment
 block_local_class.rs	block_local_scope_prefix	fmt	format	1	segment
 block_local_class.rs	block_local_scope_prefix	join	join	1	segment
 block_local_class.rs	block_local_scope_seg	fmt	format	1	segment
-bound/read.rs	name_meta	call	walk_scopes	1	key
-bound/read.rs	name_real	call	walk_scopes	1	key
+bound/read.rs	name_meta	call	walk_key_meta	1	key
+bound/read.rs	name_real	call	walk_key_real	1	key
 class_lower.rs	lower_class_method_body	fmt	format	2	display=1+segment=1
 classes.rs	reserve_class_method	fmt	format	2	display=1+segment=1
-const_array.rs	const_array_ref_of_base	call	walk_scopes_key	2	key
+const_array.rs	const_array_ref_of_base	call	walk_key_array_const_value_or_net	1	key
+const_array.rs	const_array_ref_of_base	call	walk_key_pkg_var_alias	1	key
 const_bound.rs	expr_brief	join	join	1	spelling
 const_bound.rs	plain	join	join	1	spelling
-const_bound.rs	unfoldable_reason_in	call	walk_scopes_key	1	key
-const_decl_width.rs	narrow_param_decl_width	call	walk_scopes_key	1	key
-const_eval.rs	array_param_init_pattern	call	walk_scopes_key	1	key
+const_bound.rs	unfoldable_reason_in	call	walk_key_any_const	1	key
+const_decl_width.rs	narrow_param_decl_width	call	walk_key_value_or_net	1	key
+const_eval.rs	array_param_init_pattern	call	walk_key_net	1	key
 const_eval.rs	deny_clocking_input_arg	join	join	1	spelling
 const_eval.rs	nonconst_bound_reason	join	join	1	spelling
-const_eval.rs	wide_param_name_in	call	walk_scopes_key	1	key
-const_fn_width/fold_x.rs	names_real_binding	call	walk_scopes_key	1	key
+const_eval.rs	wide_param_name_in	call	walk_key_wide	1	key
+const_fn_width/fold_x.rs	names_real_binding	call	walk_key_real_value_or_net	1	key
 const_level_header.rs	event_term_text	join	join	2	spelling
 const_level_header.rs	t0_pulse_net	fmt-tempname	format	1	spelling
 const_level_header.rs	task_enable_blocker	join	join	1	spelling
-const_str.rs	const_str_at	call	walk_scopes_key	1	key
-const_wide.rs	narrow_param_bits	call	walk_scopes_key	1	key
-const_wide.rs	wide_name_bits	call	walk_scopes_key	1	key
-decl_collide.rs	modport_call_refused	call	walk_scopes_key	1	key
+const_str.rs	const_str_at	call	walk_key_str_real_value_wide_or_net	1	key
+const_wide.rs	narrow_param_bits	call	walk_key_value_or_net	1	key
+const_wide.rs	wide_name_bits	call	walk_key_wide_value_or_net	1	key
+decl_collide.rs	modport_call_refused	call	walk_key_iface_inst	1	key
 dynarr.rs	dyn_blocking_special	fmt-tempname	format	1	spelling
-dynarr.rs	dyn_handle	call	walk_scopes_key_shadowed	1	key
+dynarr.rs	dyn_handle	call	walk_shadowed_fixed_string_dyn	1	key
 dynarr.rs	fresh_dyn_temp_named	fmt-tempname	format	1	spelling
 dynarr_method.rs	lower_dyn_method_stmt	fmt-tempname	format	1	spelling
-edge_gate.rs	binding_encloses	call	walk_scopes_key	2	key
+edge_gate.rs	binding_encloses	call	walk_key_value	1	key
+edge_gate.rs	binding_encloses	call	walk_key_value_or_other_kind	1	key
 edge_gate.rs	hier_name_in	join	join	1	spelling
-edge_gate.rs	variable_named_in	call	walk_scopes_key	1	key
-edge_gate.rs	wide_lsb_range_of	call	walk_scopes_key	1	key
-edge_gate.rs	wide_param_named_in	call	walk_scopes_key	1	key
+edge_gate.rs	variable_named_in	call	walk_key_wide	1	key
+edge_gate.rs	wide_lsb_range_of	call	walk_key_wide_value_or_net	1	key
+edge_gate.rs	wide_param_named_in	call	walk_key_wide	1	key
 elab_task.rs	elab_task_message	fmt-tempname	format	1	display
 events.rs	level_select_net	fmt-tempname	format	2	spelling
 events.rs	sens_event_net	join	join	2	spelling
 expr_main.rs	lower_expr_ungated	join	join	1	spelling
-expr_special.rs	bits_of_view	call	walk_scopes_key	1	key
+expr_special.rs	bits_of_view	call	walk_key_value_or_net	1	key
 expr_special.rs	lower_bits_fold	join	join	1	spelling
 frames_body.rs	lower_frame_body_inner_lower_frame_func_body	fmt	format	1	segment
 frames_body.rs	lower_frame_body_inner_lower_frame_task_body	fmt	format	1	segment
@@ -552,21 +603,22 @@ frames_reserve.rs	reserve_frame_func	fmt	format	1	segment
 frames_reserve.rs	reserve_frame_repeat_counters	fmt-tempname	format	1	spelling
 frames_reserve.rs	reserve_frame_static_guard	fmt-tempname	format	1	spelling
 frames_reserve.rs	reserve_frame_task	fmt	format	1	segment
-frames_static_init.rs	admitted_local_keys	call	walk_scopes_key	1	key
+frames_static_init.rs	admitted_local_keys	call	walk_key_net	1	key
 frames_static_init.rs	block_wrap_prefix	derived-fn	block_wrap_prefix	1	segment
 frames_static_init.rs	block_wrap_prefix	join	join	1	segment
 frames_static_init.rs	block_wrap_seg	derived-fn	block_wrap_seg	1	segment
 frames_static_init.rs	block_wrap_seg	fmt	format	1	segment
-frames_static_init.rs	declined_local_keys	call	walk_scopes_key	1	key
-frames_static_init.rs	emit_frame_static_prologue	call	walk_scopes_key	1	key
-frames_static_init.rs	expr_reads_admitted	call	walk_scopes_key	1	key
-frames_static_init.rs	frame_init_name_is_local_or_const	call	walk_scopes_key	1	key
-gen_scope_name.rs	gen_spelling_hint	call	scoped_key_at_or_above	2	key
+frames_static_init.rs	declined_local_keys	call	walk_key_net	1	key
+frames_static_init.rs	emit_frame_static_prologue	call	walk_key_net	1	key
+frames_static_init.rs	expr_reads_admitted	call	walk_key_net	1	key
+frames_static_init.rs	frame_init_name_is_local_or_const	call	walk_key_net	1	key
+gen_scope_name.rs	gen_spelling_hint	call	walk_above_gen_loop_label	1	key
+gen_scope_name.rs	gen_spelling_hint	call	walk_above_gen_singleton_label	1	key
 gen_scope_name.rs	gen_spelling_hint	join	join	2	display=1+spelling=1
 gen_scope_name.rs	key_spells_indexed_singleton	call	indexed_gen_singleton	1	key
 gen_scope_name.rs	key_spells_indexed_singleton	derived-fn	key_spells_indexed_singleton	1	key
 gen_scope_name.rs	key_spells_indexed_singleton	join	join	1	key
-held.rs	clk_refused_at	call	walk_scopes_key_from	1	key
+held.rs	clk_refused_at	call	walk_from_net_or_refused_clk	1	key
 held.rs	clk_refused_at	join	join	1	spelling
 held.rs	deny_refused_clocking_input_arg	join	join	1	display
 held.rs	fresh_capture_for	fmt-tempname	format	1	spelling
@@ -588,14 +640,14 @@ hier_defer/func_call.rs	resolve_deferred_hier_func_call_one	call	hier_resolve	1	
 hier_defer/func_call.rs	resolve_deferred_hier_func_call_one	join	join	4	spelling
 hier_defer/read.rs	resolve_deferred_hier	join	join	5	spelling
 hier_defer/read.rs	resolve_deferred_hier_call	call	hier_resolve	1	key
-hier_defer/read.rs	resolve_deferred_hier_call	call	scoped_key_at_or_above	1	key
+hier_defer/read.rs	resolve_deferred_hier_call	call	walk_above_enum_label_type	1	key
 hier_defer/read.rs	resolve_deferred_hier_call	join	join	7	spelling
 hier_defer/read.rs	resolve_one_deferred_hier_sel	call	hier_resolve	1	key
 hier_defer/read.rs	resolve_one_deferred_hier_sel	join	join	3	spelling
 hier_defer/task_call.rs	resolve_deferred_hier_task_call	call	hier_resolve	1	key
 hier_defer/task_call.rs	resolve_deferred_hier_task_call	fmt-tempname	format	1	spelling
 hier_defer/task_call.rs	resolve_deferred_hier_task_call	join	join	7	spelling
-hier_defer/write.rs	every_name_resolves	call	walk_scopes_key	1	key
+hier_defer/write.rs	every_name_resolves	call	walk_key_net_or_value	1	key
 hier_defer/write.rs	resolve_deferred_hier_sel_write	call	hier_resolve	1	key
 hier_defer/write.rs	resolve_deferred_hier_sel_write	join	join	1	spelling
 hier_defer/write.rs	resolve_deferred_hier_write	join	join	4	spelling
@@ -603,8 +655,9 @@ hier_leaf_shape.rs	error_hier_shape_mismatch	join	join	1	spelling
 hoist/general.rs	emit_pre_call_snapshot	fmt-tempname	format	1	spelling
 hoist/general.rs	fresh_bool_temp	fmt-tempname	format	1	spelling
 hoist/special.rs	fresh_rhs_only_tmp	fmt-tempname	format	1	spelling
-ident_route.rs	ast_reads_guessed_param	call	walk_scopes_key	1	key
-ident_route.rs	bare_ident_route	call	walk_scopes_key	2	key
+ident_route.rs	ast_reads_guessed_param	call	walk_key_value	1	key
+ident_route.rs	bare_ident_route	call	walk_key_any_const_or_net	1	key
+ident_route.rs	bare_ident_route	call	walk_key_value	1	key
 inline_task.rs	inline_static_task	fmt	format	1	segment
 lexscope/disp.rs	display_of	derived-fn	display_of	1	display
 lexscope/disp.rs	display_of	fmt	format	1	display
@@ -629,7 +682,7 @@ lexscope/elab.rs	gen_rtn_key	push	push_str	2	key
 lexscope/elab.rs	scoped_init_key	curp	cur_prefix_text().to_string()	1	scope
 lexscope/elab.rs	scoped_init_key	derived-fn	scoped_init_key	1	scope
 lexscope/elab.rs	scoped_init_key	fmt	format	1	scope
-lexscope/elab.rs	walk_hits_decl_pos	call	walk_scopes_key	1	key
+lexscope/elab.rs	walk_hits_decl_pos	call	walk_key_net	1	key
 lexscope/elab.rs	walk_rtn_scopes	call	gen_rtn_key	1	key
 lexscope/hier.rs	hier_key_within	call	indexed_gen_singleton	1	key
 lexscope/hier.rs	hier_key_within	call	singleton_scope_key	2	key
@@ -656,6 +709,27 @@ lexscope/mod.rs	scope_enter	push	push	1	scope
 lexscope/mod.rs	scope_swap_pkg	fmt	format	1	scope
 lexscope/walk.rs	decl_probe_key	fmt	write	1	key
 lexscope/walk.rs	scoped_key_at_or_above	fmt	format	1	key
+lexscope/walk.rs	walk_above_enum_label_type	call	scoped_key_at_or_above	1	key
+lexscope/walk.rs	walk_above_gen_loop_label	call	scoped_key_at_or_above	1	key
+lexscope/walk.rs	walk_above_gen_singleton_label	call	scoped_key_at_or_above	1	key
+lexscope/walk.rs	walk_from_net_or_refused_clk	call	walk_scopes_key_from	1	key
+lexscope/walk.rs	walk_key_any_const	call	walk_scopes_key	1	key
+lexscope/walk.rs	walk_key_any_const_or_net	call	walk_scopes_key	1	key
+lexscope/walk.rs	walk_key_array_const_value_or_net	call	walk_scopes_key	1	key
+lexscope/walk.rs	walk_key_genvar	call	walk_scopes_key	1	key
+lexscope/walk.rs	walk_key_iface_inst	call	walk_scopes_key	1	key
+lexscope/walk.rs	walk_key_meta	call	walk_scopes_key	1	key
+lexscope/walk.rs	walk_key_net	call	walk_scopes_key	1	key
+lexscope/walk.rs	walk_key_net_or_value	call	walk_scopes_key	1	key
+lexscope/walk.rs	walk_key_pkg_var_alias	call	walk_scopes_key	1	key
+lexscope/walk.rs	walk_key_real	call	walk_scopes_key	1	key
+lexscope/walk.rs	walk_key_real_value_or_net	call	walk_scopes_key	1	key
+lexscope/walk.rs	walk_key_str_real_value_wide_or_net	call	walk_scopes_key	1	key
+lexscope/walk.rs	walk_key_value	call	walk_scopes_key	1	key
+lexscope/walk.rs	walk_key_value_or_net	call	walk_scopes_key	1	key
+lexscope/walk.rs	walk_key_value_or_other_kind	call	walk_scopes_key	1	key
+lexscope/walk.rs	walk_key_wide	call	walk_scopes_key	1	key
+lexscope/walk.rs	walk_key_wide_value_or_net	call	walk_scopes_key	1	key
 lexscope/walk.rs	walk_out_from	fmt	write	1	key
 lexscope/walk.rs	walk_out_from	push	push_str	1	key
 lexscope/walk.rs	walk_scopes_key	call	walk_scopes_key_inner	1	key
@@ -663,45 +737,47 @@ lexscope/walk.rs	walk_scopes_key_from	call	walk_out_from	1	key
 lexscope/walk.rs	walk_scopes_key_inner	call	decl_probe_key	1	key
 lexscope/walk.rs	walk_scopes_key_inner	call	walk_out_from	1	key
 lexscope/walk.rs	walk_scopes_key_shadowed	call	walk_scopes_key_inner	1	key
-lvalue.rs	collect_lval_chunks	call	walk_scopes_key_shadowed	1	key
+lexscope/walk.rs	walk_shadowed_fixed_string_dyn	call	walk_scopes_key_shadowed	1	key
+lexscope/walk.rs	walk_shadowed_string_array_elem	call	walk_scopes_key_shadowed	1	key
+lvalue.rs	collect_lval_chunks	call	walk_shadowed_string_array_elem	1	key
 lvalue.rs	collect_lval_chunks	join	join	2	spelling
 netdecl.rs	elaborate_netvar_decl_inner	fmt-tempname	format	1	spelling
-package.rs	bare_hit_is_shadowed_pkg_alias	call	walk_scopes_key	2	key
-package.rs	dotted_hit_is_pkg_alias	call	walk_scopes_key	1	key
+package.rs	bare_hit_is_shadowed_pkg_alias	call	walk_key_genvar	1	key
+package.rs	bare_hit_is_shadowed_pkg_alias	call	walk_key_net	1	key
+package.rs	dotted_hit_is_pkg_alias	call	walk_key_net	1	key
 package.rs	resolve_rtn_key	call	walk_rtn_scopes	1	key
 package.rs	resolve_rtn_key	derived-fn	resolve_rtn_key	1	key
 packed.rs	expr_packed_chain	join	join	1	spelling
 packed_lval.rs	lval_packed_chain	join	join	1	spelling
-param_query.rs	real_param_is_non_integral	call	walk_scopes_key	1	key
-param_query.rs	real_param_lowers_real	call	walk_scopes_key	1	key
-params.rs	param_sel_range	call	walk_scopes_key	1	key
-ports.rs	bind_iface_port	call	walk_scopes_key	1	key
+param_query.rs	real_param_is_non_integral	call	walk_key_real_value_or_net	1	key
+param_query.rs	real_param_lowers_real	call	walk_key_real_value_or_net	1	key
+params.rs	param_sel_range	call	walk_key_value_or_net	1	key
+ports.rs	bind_iface_port	call	walk_key_iface_inst	1	key
 ports.rs	bind_iface_port	fmt	format	2	scope
-ports.rs	check_modport_write	call	walk_scopes_key	1	key
+ports.rs	check_modport_write	call	walk_key_net	1	key
 ports.rs	check_modport_write	join	join	1	spelling
 ports.rs	elaborate_virtual_iface	fmt	format	1	key
 ports.rs	iface_member_net	join	join	1	spelling
-ports.rs	wire_ports	call	walk_scopes_key	1	key
+ports.rs	wire_ports	call	walk_key_net	1	key
 readmem_assoc.rs	readmem_assoc_target	join	join	1	spelling
 scope.rs	lookup_dotted_net	join	join	1	spelling
-scope.rs	lookup_net_scoped	call	walk_scopes_key	1	key
-scope.rs	lookup_scoped	call	walk_scopes	1	key
-scope.rs	walk_scopes	call	walk_scopes_key	1	key
+scope.rs	lookup_net_scoped	call	walk_key_net	1	key
+scope.rs	lookup_scoped	call	walk_key_value	1	key
 stmt_flow.rs	fresh_case_tmp	fmt-tempname	format	1	spelling
 stmt_flow.rs	fresh_ia_tmp	fmt-tempname	format	1	spelling
 stmt_flow.rs	lower_repeat	fmt-tempname	format	1	spelling
 stmt_main.rs	lower_stmt_inner	join	join	2	spelling
 string_array_route.rs	route_fixed_string_array	fmt-tempname	format	1	spelling
 strings.rs	fresh_string_temp	fmt-tempname	format	1	spelling
-strings.rs	is_string_array_base	call	walk_scopes_key_shadowed	1	key
-strings.rs	string_array_elem_net	call	walk_scopes_key_shadowed	1	key
-struct_arm.rs	struct_arm_rhs	call	walk_scopes_key	1	key
+strings.rs	is_string_array_base	call	walk_shadowed_string_array_elem	1	key
+strings.rs	string_array_elem_net	call	walk_shadowed_string_array_elem	1	key
+struct_arm.rs	struct_arm_rhs	call	walk_key_net	1	key
 sva_clocking.rs	lower_clocking_blocks	fmt	format	3	spelling
 sva_clocking.rs	lower_clocking_blocks	join	join	2	spelling
 systask.rs	lower_systask	join	join	1	spelling
 systask.rs	unformatted_call_proxy	join	join	1	spelling
 == HM_COUNTS
-mints 260 kinds {"call": 79, "curp": 5, "derived-fn": 11, "fmt": 46, "fmt-tempname": 25, "join": 87, "push": 7} tags {"display": 21, "key": 100, "scope": 17, "segment": 17, "spelling": 105}
+mints 282 kinds {"call": 101, "curp": 5, "derived-fn": 11, "fmt": 46, "fmt-tempname": 25, "join": 87, "push": 7} tags {"display": 21, "key": 122, "scope": 17, "segment": 17, "spelling": 105}
 == HS_STORES
 # HS: the store set — every `Elaborator` field whose type is a map / set keyed by `String`
 # (through Option / RefCell / Rc / Box / Bound) ; g3 name_keyed_fields.txt's 86 less its
@@ -716,6 +792,7 @@ all_clocking_names array_const_meta array_const_vals  array_param_overrides bind
 # KIND = scans.tsv's hand kind ; ENTRY = g4/c/entries.tsv's SCAN entry (a pin of the disposition).
 # §5.2 Q-DECLKEY DK1-5a (2026-11-25): is_hier_scope moves into lexscope/hier.rs, private (R-J2) — its three range scans re-homed ; ENTRY X16 -> w9:DK3-b (DELTA18 G2.2: X16 is no entry to build, the scans are in-module window uses, DK3-b's list, T9)
 # §5.2 Q-DECLKEY DK1-5b (2026-11-25): names_with_pkg_var_aliases moves into lexscope/elab.rs (MOVE 1): its X18 scan re-homed ; X19, the HAND row of the parameter scan, re-homed to lexscope/mod.rs keys_under_cur (the `keys` it orders is the list decl_keep_snapshot hands in ; plan18/s7 S7-J4 (y): accepted, counts unchanged) — the scan the header names as decl_scope.rs:377 is that one
+# §5.2 Q-DECLKEY DK2 (2026-11-26, form (c)): clk_refused_at's candidate scan moves into held.rs hit_clk_refused (walk_from_net_or_refused_clk's closure calls it) — a second HAND row, X24 names both scans (DELTA19B I2 L4 ; R7) ; clk_refused_at's row stands for `refused`
 file	fn	store	method	count	KIND	ENTRY
 classes.rs	register_classes	class_table	iter	1	KEY-BLIND	Z2-values
 cont_var.rs	cont_var_name	symbols	iter	1	PRINT/DUMP	DK4-show
@@ -730,6 +807,7 @@ frames_classify.rs	build_frame_set	func_table	keys	1	KEY-BLIND	Z2-values
 frames_classify.rs	build_task_frame_set	task_table	for	2	KEY-BLIND	Z2-values
 frames_classify.rs	net_is_compiler_internal	symbols	iter	1	TEXT-SCAN-ANSWERS	X13
 held.rs	clk_refused_at	clk_refused	iter	1	HAND:TEXT-SCAN-ANSWERS	X24
+held.rs	hit_clk_refused	clk_refused	iter	1	HAND:TEXT-SCAN-ANSWERS	X24
 lexscope/elab.rs	names_with_pkg_var_aliases	pkg_var_aliases	keys	1	TEXT-SCAN-ANSWERS	X18
 lexscope/hier.rs	is_hier_scope	hier_params	range	1	TEXT-SCAN-ANSWERS	w9:DK3-b
 lexscope/hier.rs	is_hier_scope	symbols	range	1	TEXT-SCAN-ANSWERS	w9:DK3-b
@@ -744,7 +822,7 @@ pkg_body_scope.rs	imported_routine_bodies	rtn_pkg	keys	1	KEY-BLIND	Z2-values
 pkg_body_scope.rs	imported_routine_bodies	task_table	keys	1	TEXT-SCAN-ANSWERS	X14-RS1
 ports.rs	bind_iface_port	symbols	range	1	TEXT-SCAN-ANSWERS	X15
 == HS_COUNTS
-stores 81 scans 28 kinds {"KEY-BLIND": 13, "PRINT/DUMP": 4, "TEXT-SCAN-ANSWERS": 11}
+stores 81 scans 29 kinds {"KEY-BLIND": 13, "PRINT/DUMP": 4, "TEXT-SCAN-ANSWERS": 12}
 == HH
 # HH: the current-prefix reads (g3 k4_reads.tsv, 59) — a probe (get / contains_key / contains / range /
 # get_mut, or an index) of a field or a fn-local table whose key argument is an `fq` call or a `let` holding
@@ -1456,6 +1534,7 @@ net_util.rs	net_name_table	display_of_key_text	ASSIGN:*slot	1
 # callee, the argument's tokens) with a count. A changed argument is a changed row.
 # §5.2 Q-DECLKEY DK1-4a (2026-11-24): the walk moves into lexscope/walk.rs (MOVE 8, R-G15) — scoped_key_at_or_above and walk_scopes_key_from take a carried scope inside the module: their 3 call rows (4 calls) ; scope_text's 2 calls in them gone
 # §5.2 Q-DECLKEY DK1-5a (2026-11-25): hier_resolve moves into lexscope/hier.rs and takes a carried scope (`prefix: &ScopeRef`) as a module entry: its 10 callers' rows (hier.rs 4, hier_defer/ 6 ; the argument tokens unchanged) ; its own scope_is_pkg / scope_text calls re-homed
+# §5.2 Q-DECLKEY DK2 (2026-11-26, form (c)): the three to-scope walk calls call their entry (gen_spelling_hint's 2 split into two entries) and the four prefix entries hand `prefix` on to their walk inside lexscope/walk.rs: GONE 3, NEW 8
 file	fn	callee	arg	count
 block_local/hoist.rs	collect_block_local_decl_inits	push_block_local_init	scope	2
 block_local/hoist.rs	hoist_block_local_nets	with_scope	&seg	1
@@ -1479,10 +1558,11 @@ frames_reserve.rs	reserve_frame_task	with_scope	&scope_seg	1
 frames_reserve.rs	with_rtn_decl_scope	scope_swap	&scope	1
 frames_static_init.rs	emit_frame_static_prologue	with_scope	&seg	2
 frames_static_init.rs	emit_frame_static_prologue	with_scope	seg	3
-gen_scope_name.rs	gen_spelling_hint	scoped_key_at_or_above	prefix	2
+gen_scope_name.rs	gen_spelling_hint	walk_above_gen_loop_label	prefix	1
+gen_scope_name.rs	gen_spelling_hint	walk_above_gen_singleton_label	prefix	1
 generate.rs	elaborate_gen_item	with_scope	&block_prefix	1
 generate.rs	elaborate_gen_scoped	with_scope	&seg	1
-held.rs	clk_refused_at	walk_scopes_key_from	prefix	1
+held.rs	clk_refused_at	walk_from_net_or_refused_clk	prefix	1
 held.rs	report_clk_refused	scope_swap	prefix	1
 hier.rs	hier_lookup	hier_resolve	prefix	1
 hier.rs	hier_lookup_param	hier_resolve	prefix	1
@@ -1492,7 +1572,7 @@ hier_defer/bits.rs	build_hier_param_select	hier_resolve	&d.prefix	1
 hier_defer/func_call.rs	resolve_deferred_hier_func_call_one	hier_resolve	&d.prefix	1
 hier_defer/read.rs	resolve_deferred_hier_call	hier_resolve	&d.prefix	1
 hier_defer/read.rs	resolve_deferred_hier_call	key_under	&d.prefix	1
-hier_defer/read.rs	resolve_deferred_hier_call	scoped_key_at_or_above	&d.prefix	1
+hier_defer/read.rs	resolve_deferred_hier_call	walk_above_enum_label_type	&d.prefix	1
 hier_defer/read.rs	resolve_one_deferred_hier_sel	hier_resolve	&d.prefix	1
 hier_defer/task_call.rs	resolve_deferred_hier_task_call	hier_resolve	&d.prefix	1
 hier_defer/write.rs	resolve_deferred_hier_sel_write	hier_resolve	&d.prefix	1
@@ -1532,6 +1612,10 @@ lexscope/mod.rs	scope_enter	scope_swap_text	new_prefix	1
 lexscope/mod.rs	scope_swap_empty	scope_swap_text	String::new()	1
 lexscope/mod.rs	scope_swap_pkg	scope_swap_text	format!("$pkg${pkg}")	1
 lexscope/mod.rs	swap_to_mark	scope_swap	&at	1
+lexscope/walk.rs	walk_above_enum_label_type	scoped_key_at_or_above	prefix	1
+lexscope/walk.rs	walk_above_gen_loop_label	scoped_key_at_or_above	prefix	1
+lexscope/walk.rs	walk_above_gen_singleton_label	scoped_key_at_or_above	prefix	1
+lexscope/walk.rs	walk_from_net_or_refused_clk	walk_scopes_key_from	prefix	1
 package.rs	elaborate_package	scope_swap_pkg	&pkg	1
 ports.rs	bind_iface_port	scope_swap	parent_prefix	1
 ports.rs	wire_array_port	scope_swap	parent_prefix	1
@@ -1541,7 +1625,7 @@ stmt_main.rs	lower_stmt_inner	with_scope	&seg	1
 string_array_route.rs	route_fixed_string_array	push_block_local_init	None	1
 sva_check.rs	materialize_sva_checkers	scope_swap	&sva.scope	1
 == HC_ARGS_COUNTS
-{"entry_under_cur": 1, "hier_resolve": 10, "key_under": 1, "mark_exchange": 2, "mark_put": 6, "mark_swap": 4, "push_block_local_init": 3, "put_at": 2, "report_at": 2, "scope_child": 4, "scope_is_pkg": 1, "scope_repoint": 4, "scope_shown": 1, "scope_swap": 16, "scope_swap_pkg": 2, "scope_swap_text": 5, "scope_text": 3, "scoped_key_at_or_above": 3, "take_at": 3, "walk_scopes_key_from": 1, "with_scope": 21}
+{"entry_under_cur": 1, "hier_resolve": 10, "key_under": 1, "mark_exchange": 2, "mark_put": 6, "mark_swap": 4, "push_block_local_init": 3, "put_at": 2, "report_at": 2, "scope_child": 4, "scope_is_pkg": 1, "scope_repoint": 4, "scope_shown": 1, "scope_swap": 16, "scope_swap_pkg": 2, "scope_swap_text": 5, "scope_text": 3, "scoped_key_at_or_above": 3, "take_at": 3, "walk_above_enum_label_type": 1, "walk_above_gen_loop_label": 1, "walk_above_gen_singleton_label": 1, "walk_from_net_or_refused_clk": 1, "walk_scopes_key_from": 1, "with_scope": 21}
 == HC_LOCAL
 # HC (LS2-d ; DELTA9 J1 (2), DELTA11 N-2 (a)): the LOCAL sinks of `scope_out` (summed over HOUT's
 # scope_out rows) are the five `context` locals ; `plain`, the exit's trait method, is called
@@ -1667,6 +1751,7 @@ fns=1 calls=17 callers=1
 # text is a new HOLDERS row or a new HOUT / HC row — there is no third place for it.
 # §5.2 Q-DECLKEY DK1-4a (2026-11-24): the walk moves into lexscope/walk.rs (MOVE 8, R-G15) — the two carried-scope parameters re-homed
 # §5.2 Q-DECLKEY DK1-5a (2026-11-25): hier_resolve moves into lexscope/hier.rs — its carried-scope parameter re-homed
+# §5.2 Q-DECLKEY DK2 (2026-11-26, form (c)): the four prefix entries (walk_from_net_or_refused_clk, walk_above_*) hold `prefix: &crate::ScopeRef`: + 4 rows
 file	item	position	type	count
 cont_array.rs	WholeArrayCa.prefix	FIELD	crate::ScopeRef	1
 cont_var.rs	VarContAssign.prefix	FIELD	crate::ScopeRef	1
@@ -1725,10 +1810,10 @@ lexscope/mod.rs	ScopeKeyed::take_at	IN:at	&ScopeRef	1
 lexscope/mod.rs	ScopeKeyed::take_at	IN:s	&Scopes	1
 lexscope/mod.rs	Scopes::cur_shown	RET	Shown	1
 lexscope/mod.rs	Scopes::cur_shown_quoted_or	RET	Shown	1
-lexscope/mod.rs	Scopes::disp_restore_chain	IN:saved	SavedChain	1
 lexscope/mod.rs	Scopes::disp_chain_swap_single	RET	SavedChain	1
 lexscope/mod.rs	Scopes::disp_chain_take	RET	SavedChain	1
 lexscope/mod.rs	Scopes::disp_class_method_swap	RET	SavedMethod	1
+lexscope/mod.rs	Scopes::disp_restore_chain	IN:saved	SavedChain	1
 lexscope/mod.rs	Scopes::disp_restore_method	IN:saved	SavedMethod	1
 lexscope/mod.rs	Scopes::disp_restore_root	IN:saved	SavedRoot	1
 lexscope/mod.rs	Scopes::disp_root_swap_empty	RET	SavedRoot	1
@@ -1762,6 +1847,10 @@ lexscope/mod.rs	wrap_ctx	RET	ShownCtx	1
 lexscope/mod.rs	wrap_root	RET	SavedRoot	1
 lexscope/mod.rs	wrap_shown	RET	Shown	1
 lexscope/walk.rs	Elaborator::scoped_key_at_or_above	IN:prefix	&crate::ScopeRef	1
+lexscope/walk.rs	Elaborator::walk_above_enum_label_type	IN:prefix	&crate::ScopeRef	1
+lexscope/walk.rs	Elaborator::walk_above_gen_loop_label	IN:prefix	&crate::ScopeRef	1
+lexscope/walk.rs	Elaborator::walk_above_gen_singleton_label	IN:prefix	&crate::ScopeRef	1
+lexscope/walk.rs	Elaborator::walk_from_net_or_refused_clk	IN:prefix	&crate::ScopeRef	1
 lexscope/walk.rs	Elaborator::walk_scopes_key_from	IN:prefix	&crate::ScopeRef	1
 lib.rs	Elaborator.defparams	FIELD	ScopeKeyed<Vec<DefparamOverride>>	1
 lib.rs	Elaborator.expr_scopes	FIELD	std::collections::BTreeMap<u32, lexscope::Shown>	1

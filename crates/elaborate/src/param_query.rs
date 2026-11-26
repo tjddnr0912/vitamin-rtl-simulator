@@ -61,7 +61,7 @@ impl Elaborator<'_> {
     /// would match an OUTER real param even when an inner net / numeric param shadows
     /// it, resolving one name two different ways.
     pub(crate) fn real_param_is_non_integral(&self, name: &str) -> bool {
-        let Some(key) = self.walk_scopes_key(name, |k| self.hit_real_value_or_net(k)) else {
+        let Some(key) = self.walk_key_real_value_or_net(name) else {
             return false;
         };
         self.real_param_val.contains_found(&key) && !self.params.contains_found(&key)
@@ -80,12 +80,8 @@ impl Elaborator<'_> {
     /// differently. Asking the wrong one let a real count reach `ir::Expr::Replicate`
     /// and emit 2^24 bits at exit 0. Same predicate, two resolvers: pick by consumer.
     pub(crate) fn real_param_lowers_real(&self, name: &str) -> bool {
-        self.walk_scopes_key(name, |k| {
-            self.real_param_val.contains_at(k)
-                || self.params.contains_at(k)
-                || self.symbols.contains_at(k)
-        })
-        .is_some_and(|k| self.real_param_val.contains_found(&k))
+        self.walk_key_real_value_or_net(name)
+            .is_some_and(|k| self.real_param_val.contains_found(&k))
     }
 
     /// Is `e` an EXPLICIT real→integral conversion whose integer value this constant
@@ -602,7 +598,7 @@ impl Elaborator<'_> {
     /// gives it — or `None` if any one of them cannot be proved.
     ///
     /// ⚠️ WHY THIS IS NOT `param_meta`. `const_self_width`'s `Ident` arm falls back
-    /// to `walk_scopes(name, &self.param_meta)`, and `param_meta` holds the width a
+    /// to `name_meta(name)` (the walk over `param_meta`), and `param_meta` holds the width a
     /// parameter's VALUE was inferred at, which for an untyped parameter is 32 and
     /// for an OVERRIDDEN one can be stale. Laundering that through this gate is what
     /// made `#(.P(W8 + 1'b0))` bind at 32 where both oracles bind at 8.

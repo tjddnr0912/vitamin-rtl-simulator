@@ -855,9 +855,9 @@ struct Elaborator<'s> {
     // the struct/interface `dbase`). `bind_param_range` inserts ANY declared range
     // (a zero-LSB one too) and clears it for an undeclared one, so an absent entry
     // means the classic `[N:0]`/zero-LSB raw offset OR a width that is not a declared
-    // fact (RANGE-ABSENT, two meanings: `bound/mod.rs`). Written only in `bound/`.
-    // Parallel-keyed to `param_meta` and resolved by the SAME `walk_scopes`, so the
-    // offset range can never drift from the value/meta lookups. elaborate-LOCAL.
+    // fact (RANGE-ABSENT, two meanings: `bound/mod.rs`). Written only in `bound/`. Parallel-keyed
+    // to `param_meta`, resolved by the SAME walk (`walk_scopes_key`, as `walk_key_value_or_net`),
+    // so the offset range can never drift from the value/meta lookups. elaborate-LOCAL.
     param_range: Bound<Keyed<DeclRange>>,
     // §2 🆕 M ⓒ: the PERSISTENT twin of `param_range` for a HIERARCHICAL select
     // (`u.N[7:4]` on `parameter [11:4] N`), written and cleared exactly where
@@ -1055,7 +1055,7 @@ struct Elaborator<'s> {
     // name → def (OWNED clone), populated per-module from ModuleItem::Func/Task in
     // `elaborate_instance` BEFORE lowering that module's logic. Cleared/restored
     // per instance scope so a child module never sees a parent's functions by bare
-    // name (matches the per-instance net isolation of `walk_scopes`). Cloning the
+    // name (matches the per-instance net isolation of `walk_scopes_key`). Cloning the
     // small defs sidesteps threading an AST lifetime through the whole driver; the
     // tables are point-queried only (BTreeMap), never iterated into arena order.
     func_table: BTreeMap<String, ast::FunctionDef>,

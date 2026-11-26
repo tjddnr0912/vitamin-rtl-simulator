@@ -100,7 +100,7 @@ zn	d8f9c54aafb2a97e923fc75a6a47a199be52921f7246d60927f08b10862815cf
 == SURF_PRESENT
 present
 == SURF_COUNTS
-present=present files=7 rows=205 out_types=30 e_fns=42 text_flows=63
+present=present files=7 rows=235 out_types=29 e_fns=65 text_flows=63
 == SURF_ROWS
 # the computed surface: one row per OUT position / IN text parameter / type / impl / use
 # §5.2 Q-DECLKEY DK1-4a (2026-11-24): the walk's 18 rows at lexscope/walk.rs (L10 8, ENTER 5, CB 4, PASS 1)
@@ -298,26 +298,55 @@ lexscope/mod.rs	K	FN	Scopes::swap_to_mark	RET	Saved	PASS	-
 lexscope/mod.rs	K	FN	scope_out	RET	T::Plain	LEAVE:L0	-
 lexscope/mod.rs	K	FN	shown_from_spelling	IN:s	String	ENTER:to-display	-
 lexscope/mod.rs	K	FN	shown_from_spelling	RET	Shown	PASS	-
-lexscope/walk.rs	E	FN	Elaborator::scoped_key_at_or_above	CB:hit	impl Fn(&AtKey) -> bool	CB:probe:the caller's tables for one composed key	-
-lexscope/walk.rs	E	FN	Elaborator::scoped_key_at_or_above	CB:hit.0	&AtKey	PASS	REF
-lexscope/walk.rs	E	FN	Elaborator::scoped_key_at_or_above	IN:name	&str	ENTER:lookup	-
-lexscope/walk.rs	E	FN	Elaborator::scoped_key_at_or_above	RET	Option<DeclKey>	CARD:hit:the declaration key the walk found	-
-lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key	CB:hit	impl Fn(&AtKey) -> bool	CB:probe:the caller's tables for one composed key	-
-lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key	CB:hit.0	&AtKey	PASS	REF
-lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key	IN:name	&str	ENTER:lookup	-
-lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key	RET	Option<DeclKey>	CARD:hit:the declaration key the walk found	-
-lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key_from	CB:hit	impl Fn(&AtKey) -> bool	CB:probe:the caller's tables for one composed key	-
-lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key_from	CB:hit.0	&AtKey	PASS	REF
-lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key_from	IN:name	&str	ENTER:lookup	-
-lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key_from	RET	Option<DeclKey>	CARD:hit:the declaration key the walk found	-
-lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key_shadowed	CB:hit	impl Fn(&AtKey) -> bool	CB:probe:the caller's tables for one composed key	-
-lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key_shadowed	CB:hit.0	&AtKey	PASS	REF
-lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key_shadowed	IN:name	&str	ENTER:lookup	-
-lexscope/walk.rs	E	FN	Elaborator::walk_scopes_key_shadowed	RET	Option<DeclKey>	CARD:hit:the declaration key the walk found	-
+lexscope/walk.rs	E	FN	Elaborator::walk_above_enum_label_type	IN:name	&str	ENTER:lookup	-
+lexscope/walk.rs	E	FN	Elaborator::walk_above_enum_label_type	RET	Option<DeclKey>	CARD:hit:the declaration key the walk found	-
+lexscope/walk.rs	E	FN	Elaborator::walk_above_gen_loop_label	IN:name	&str	ENTER:lookup	-
+lexscope/walk.rs	E	FN	Elaborator::walk_above_gen_loop_label	RET	Option<DeclKey>	CARD:hit:the declaration key the walk found	-
+lexscope/walk.rs	E	FN	Elaborator::walk_above_gen_singleton_label	IN:name	&str	ENTER:lookup	-
+lexscope/walk.rs	E	FN	Elaborator::walk_above_gen_singleton_label	RET	Option<DeclKey>	CARD:hit:the declaration key the walk found	-
+lexscope/walk.rs	E	FN	Elaborator::walk_from_net_or_refused_clk	IN:name	&str	ENTER:lookup	-
+lexscope/walk.rs	E	FN	Elaborator::walk_from_net_or_refused_clk	RET	Option<DeclKey>	CARD:hit:the declaration key the walk found	-
+lexscope/walk.rs	E	FN	Elaborator::walk_key_any_const	IN:name	&str	ENTER:lookup	-
+lexscope/walk.rs	E	FN	Elaborator::walk_key_any_const	RET	Option<DeclKey>	CARD:hit:the declaration key the walk found	-
+lexscope/walk.rs	E	FN	Elaborator::walk_key_any_const_or_net	IN:name	&str	ENTER:lookup	-
+lexscope/walk.rs	E	FN	Elaborator::walk_key_any_const_or_net	RET	Option<DeclKey>	CARD:hit:the declaration key the walk found	-
+lexscope/walk.rs	E	FN	Elaborator::walk_key_array_const_value_or_net	IN:name	&str	ENTER:lookup	-
+lexscope/walk.rs	E	FN	Elaborator::walk_key_array_const_value_or_net	RET	Option<DeclKey>	CARD:hit:the declaration key the walk found	-
+lexscope/walk.rs	E	FN	Elaborator::walk_key_genvar	IN:name	&str	ENTER:lookup	-
+lexscope/walk.rs	E	FN	Elaborator::walk_key_genvar	RET	Option<DeclKey>	CARD:hit:the declaration key the walk found	-
+lexscope/walk.rs	E	FN	Elaborator::walk_key_iface_inst	IN:name	&str	ENTER:lookup	-
+lexscope/walk.rs	E	FN	Elaborator::walk_key_iface_inst	RET	Option<DeclKey>	CARD:hit:the declaration key the walk found	-
+lexscope/walk.rs	E	FN	Elaborator::walk_key_meta	IN:name	&str	ENTER:lookup	-
+lexscope/walk.rs	E	FN	Elaborator::walk_key_meta	RET	Option<DeclKey>	CARD:hit:the declaration key the walk found	-
+lexscope/walk.rs	E	FN	Elaborator::walk_key_net	IN:name	&str	ENTER:lookup	-
+lexscope/walk.rs	E	FN	Elaborator::walk_key_net	RET	Option<DeclKey>	CARD:hit:the declaration key the walk found	-
+lexscope/walk.rs	E	FN	Elaborator::walk_key_net_or_value	IN:name	&str	ENTER:lookup	-
+lexscope/walk.rs	E	FN	Elaborator::walk_key_net_or_value	RET	Option<DeclKey>	CARD:hit:the declaration key the walk found	-
+lexscope/walk.rs	E	FN	Elaborator::walk_key_pkg_var_alias	IN:name	&str	ENTER:lookup	-
+lexscope/walk.rs	E	FN	Elaborator::walk_key_pkg_var_alias	RET	Option<DeclKey>	CARD:hit:the declaration key the walk found	-
+lexscope/walk.rs	E	FN	Elaborator::walk_key_real	IN:name	&str	ENTER:lookup	-
+lexscope/walk.rs	E	FN	Elaborator::walk_key_real	RET	Option<DeclKey>	CARD:hit:the declaration key the walk found	-
+lexscope/walk.rs	E	FN	Elaborator::walk_key_real_value_or_net	IN:name	&str	ENTER:lookup	-
+lexscope/walk.rs	E	FN	Elaborator::walk_key_real_value_or_net	RET	Option<DeclKey>	CARD:hit:the declaration key the walk found	-
+lexscope/walk.rs	E	FN	Elaborator::walk_key_str_real_value_wide_or_net	IN:name	&str	ENTER:lookup	-
+lexscope/walk.rs	E	FN	Elaborator::walk_key_str_real_value_wide_or_net	RET	Option<DeclKey>	CARD:hit:the declaration key the walk found	-
+lexscope/walk.rs	E	FN	Elaborator::walk_key_value	IN:name	&str	ENTER:lookup	-
+lexscope/walk.rs	E	FN	Elaborator::walk_key_value	RET	Option<DeclKey>	CARD:hit:the declaration key the walk found	-
+lexscope/walk.rs	E	FN	Elaborator::walk_key_value_or_net	IN:name	&str	ENTER:lookup	-
+lexscope/walk.rs	E	FN	Elaborator::walk_key_value_or_net	RET	Option<DeclKey>	CARD:hit:the declaration key the walk found	-
+lexscope/walk.rs	E	FN	Elaborator::walk_key_value_or_other_kind	IN:name	&str	ENTER:lookup	-
+lexscope/walk.rs	E	FN	Elaborator::walk_key_value_or_other_kind	RET	Option<DeclKey>	CARD:hit:the declaration key the walk found	-
+lexscope/walk.rs	E	FN	Elaborator::walk_key_wide	IN:name	&str	ENTER:lookup	-
+lexscope/walk.rs	E	FN	Elaborator::walk_key_wide	RET	Option<DeclKey>	CARD:hit:the declaration key the walk found	-
+lexscope/walk.rs	E	FN	Elaborator::walk_key_wide_value_or_net	IN:name	&str	ENTER:lookup	-
+lexscope/walk.rs	E	FN	Elaborator::walk_key_wide_value_or_net	RET	Option<DeclKey>	CARD:hit:the declaration key the walk found	-
+lexscope/walk.rs	E	FN	Elaborator::walk_shadowed_fixed_string_dyn	IN:name	&str	ENTER:lookup	-
+lexscope/walk.rs	E	FN	Elaborator::walk_shadowed_fixed_string_dyn	RET	Option<DeclKey>	CARD:hit:the declaration key the walk found	-
+lexscope/walk.rs	E	FN	Elaborator::walk_shadowed_string_array_elem	IN:name	&str	ENTER:lookup	-
+lexscope/walk.rs	E	FN	Elaborator::walk_shadowed_string_array_elem	RET	Option<DeclKey>	CARD:hit:the declaration key the walk found	-
 == SURF_OUT_TYPES
 # SURF_OUT_TYPES, the closed list J1 asked for: the distinct normalised OUT types
 type
-&AtKey
 &V
 &mut V
 &str
@@ -380,6 +409,7 @@ L12	Elaborator::indexed_gen_singleton	RET	Option<String>	DK3-b
 # §5.2 Q-DECLKEY DK1-4b-2 (2026-11-24): Scopes::gen_binding_encloses takes the walk's found key (`&DeclKey`): its `key` row deleted (no text in)
 # §5.2 Q-DECLKEY DK1-5a (2026-11-25): hier_resolve `path` (the dotted path the resolver composes keys from) and `table` (the caller's text-keyed leaf map, window w9: retyped at DK3-b, DELTA18 T4) ; indexed_gen_singleton `level` / `seg` (the scope text and the source segment its label key is formed from) ; key_in `member` (an interface member's name) — lookup
 # §5.2 Q-DECLKEY DK1-5b (2026-11-25): names_with_pkg_var_aliases `names` (the scope's own declared names, copied into the set it returns) — lookup (`carried` is refused: the body reads it, `.clone()`)
+# §5.2 Q-DECLKEY DK2 (2026-11-26, form (c)): the four walks are private: their `name` rows gone ; the 23 named entries' `name` (lookup, TEXT str) rows added by the pass
 item	param	role	holds
 Elaborator::names_with_pkg_var_aliases	names	lookup	TEXT String
 Elaborator::with_scope	seg	to-scope	TEXT str
@@ -415,15 +445,34 @@ Scopes::cur_shown_quoted_or	none	to-display	TEXT str
 Scopes::new_key	local	lookup	TEXT str
 Scopes::at_cur	local	lookup	TEXT str
 Scopes::show_miss	local	to-display	TEXT str
-Elaborator::scoped_key_at_or_above	name	lookup	TEXT str
-Elaborator::walk_scopes_key	name	lookup	TEXT str
-Elaborator::walk_scopes_key_from	name	lookup	TEXT str
-Elaborator::walk_scopes_key_shadowed	name	lookup	TEXT str
 Elaborator::hier_resolve	path	lookup	TEXT String
 Elaborator::hier_resolve	table	lookup	TEXT String
 Elaborator::indexed_gen_singleton	level	lookup	TEXT str
 Elaborator::indexed_gen_singleton	seg	lookup	TEXT str
 key_in	member	lookup	TEXT str
+Elaborator::walk_above_enum_label_type	name	lookup	TEXT str
+Elaborator::walk_above_gen_loop_label	name	lookup	TEXT str
+Elaborator::walk_above_gen_singleton_label	name	lookup	TEXT str
+Elaborator::walk_from_net_or_refused_clk	name	lookup	TEXT str
+Elaborator::walk_key_any_const	name	lookup	TEXT str
+Elaborator::walk_key_any_const_or_net	name	lookup	TEXT str
+Elaborator::walk_key_array_const_value_or_net	name	lookup	TEXT str
+Elaborator::walk_key_genvar	name	lookup	TEXT str
+Elaborator::walk_key_iface_inst	name	lookup	TEXT str
+Elaborator::walk_key_meta	name	lookup	TEXT str
+Elaborator::walk_key_net	name	lookup	TEXT str
+Elaborator::walk_key_net_or_value	name	lookup	TEXT str
+Elaborator::walk_key_pkg_var_alias	name	lookup	TEXT str
+Elaborator::walk_key_real	name	lookup	TEXT str
+Elaborator::walk_key_real_value_or_net	name	lookup	TEXT str
+Elaborator::walk_key_str_real_value_wide_or_net	name	lookup	TEXT str
+Elaborator::walk_key_value	name	lookup	TEXT str
+Elaborator::walk_key_value_or_net	name	lookup	TEXT str
+Elaborator::walk_key_value_or_other_kind	name	lookup	TEXT str
+Elaborator::walk_key_wide	name	lookup	TEXT str
+Elaborator::walk_key_wide_value_or_net	name	lookup	TEXT str
+Elaborator::walk_shadowed_fixed_string_dyn	name	lookup	TEXT str
+Elaborator::walk_shadowed_string_array_elem	name	lookup	TEXT str
 == SURF_WINDOW
 # WINDOW (§5.2 Q-DECLKEY DK1-1 ; DELTA14 F1 / D2 w9, R-F1, R-F10, premise10 N10-9 / NP10-1): a trait impl off
 # ALLOWED_IMPLS admitted for the ONE type a row names, the trait one of WINDOW_TRAITS (Deref, DerefMut) ; each row
@@ -461,6 +510,7 @@ ShownCtx	Vec<diag::Frame>
 # §5.2 Q-DECLKEY DK1-4b-2 (2026-11-24): the walk returns a DeclKey — `DeclKey` OUT-C rows (scoped_key_at_or_above, walk_out_from, walk_scopes_key_inner: the scratch moved into the found key) ; walk_hits_decl_pos reads the found key through found_text (`.as_ref` + `.map` for `.as_deref`) ; L10 is deleted: the nine flows text:LEAVE-L10 -> text:DeclKey (the text these ops form leaves in the found key, whose text leaves the module only through L11)
 # §5.2 Q-DECLKEY DK1-5a (2026-11-25): the five moved fns' rows (lexscope/hier.rs ; is_hier_scope private, its own rows, R-J7 d: a call to an in-module fn is no OUT-C row, so no `.is_hier_scope` row exists) ; flow `in` but hier_resolve's `.cloned` (payload: the table's value) and indexed_gen_singleton's label key (text:LEAVE-L12) ; `Self::gen_seg_label = 1` (indexed_gen_singleton) is the ONE call from these bodies to a fn outside the module with a text argument: its own IN `seg` passed through, flow `in` (R-J7 a) — NOT pinned by class until DK1-6 (SURF_OUTCALL, R-J7 c): this row is change detection only ; §5.2 Q-DECLKEY DK1-6 (2026-11-25): the class pin is SURF_OUTCALL's row `Elaborator::indexed_gen_singleton · Elaborator::gen_seg_label · 1 · in` (E2: gen_seg_label takes `&str`, so `none` is refused ; the row's `in` is hand, NOT-PROMISED: no data flow) ; this OUT-C row stays change detection
 # §5.2 Q-DECLKEY DK1-5b (2026-11-25): names_with_pkg_var_aliases' rows (moved to lexscope/elab.rs): flow text:LEAVE-L13 where the op forms or hands the text of the set it returns (the two `.clone`s of `names`, the alias keys' `.keys`, the `.rsplit_once` / `.as_str` that cut the bare name, `.to_string`, `.insert`), `in` for the bool tests and the store read ; it calls no fn outside the module (move_census calls_outside=0)
+# §5.2 Q-DECLKEY DK2 (2026-11-26, form (c)): the 23 named entries' FN / OUT-F / OUT-C rows, flow `in` (the walk's candidate AtKey, read by each store's `contains_at` or by a lane) ; the four walks' rows stand ; a site's closure rows leave with the closure
 item	kind	name	count	flow
 Elaborator::assert_block_local_inits_drained	FN	-	-	-
 Elaborator::assert_block_local_inits_drained	OUT-C	.chain	1	text:error
@@ -708,13 +758,62 @@ Elaborator::stmt_loc_instance	OUT-C	.to_string	1	text:Shown
 Elaborator::stmt_loc_instance	OUT-C	.unwrap_or	1	text:Shown
 Elaborator::stmt_loc_instance	OUT-C	Shown	1	text:Shown
 Elaborator::stmt_loc_instance	OUT-M	format	1	text:Shown
+Elaborator::walk_above_enum_label_type	FN	-	-	-
+Elaborator::walk_above_enum_label_type	OUT-C	.contains_at	1	in
+Elaborator::walk_above_enum_label_type	OUT-F	enum_label_types	1	in
+Elaborator::walk_above_gen_loop_label	FN	-	-	-
+Elaborator::walk_above_gen_loop_label	OUT-C	.contains_at	1	in
+Elaborator::walk_above_gen_loop_label	OUT-F	gen_loop_labels	1	in
+Elaborator::walk_above_gen_singleton_label	FN	-	-	-
+Elaborator::walk_above_gen_singleton_label	OUT-C	.contains_at	1	in
+Elaborator::walk_above_gen_singleton_label	OUT-F	gen_singleton_labels	1	in
+Elaborator::walk_from_net_or_refused_clk	FN	-	-	-
+Elaborator::walk_from_net_or_refused_clk	OUT-C	.contains_at	1	in
+Elaborator::walk_from_net_or_refused_clk	OUT-C	.hit_clk_refused	1	in
+Elaborator::walk_from_net_or_refused_clk	OUT-F	symbols	1	in
 Elaborator::walk_hits_decl_pos	FN	-	-	-
 Elaborator::walk_hits_decl_pos	OUT-C	.as_ref	1	in
 Elaborator::walk_hits_decl_pos	OUT-C	.as_str	1	in
-Elaborator::walk_hits_decl_pos	OUT-C	.contains_at	1	in
 Elaborator::walk_hits_decl_pos	OUT-C	.map	1	in
 Elaborator::walk_hits_decl_pos	OUT-C	Some	1	in
-Elaborator::walk_hits_decl_pos	OUT-F	symbols	1	in
+Elaborator::walk_key_any_const	FN	-	-	-
+Elaborator::walk_key_any_const	OUT-C	.hit_any_const	1	in
+Elaborator::walk_key_any_const_or_net	FN	-	-	-
+Elaborator::walk_key_any_const_or_net	OUT-C	.hit_any_const_or_net	1	in
+Elaborator::walk_key_array_const_value_or_net	FN	-	-	-
+Elaborator::walk_key_array_const_value_or_net	OUT-C	.hit_array_const_value_or_net	1	in
+Elaborator::walk_key_genvar	FN	-	-	-
+Elaborator::walk_key_genvar	OUT-C	.contains_at	1	in
+Elaborator::walk_key_genvar	OUT-F	genvar_decls	1	in
+Elaborator::walk_key_iface_inst	FN	-	-	-
+Elaborator::walk_key_iface_inst	OUT-C	.contains_at	1	in
+Elaborator::walk_key_iface_inst	OUT-F	iface_insts	1	in
+Elaborator::walk_key_meta	FN	-	-	-
+Elaborator::walk_key_meta	OUT-C	.hit_meta	1	in
+Elaborator::walk_key_net	FN	-	-	-
+Elaborator::walk_key_net	OUT-C	.contains_at	1	in
+Elaborator::walk_key_net	OUT-F	symbols	1	in
+Elaborator::walk_key_net_or_value	FN	-	-	-
+Elaborator::walk_key_net_or_value	OUT-C	.hit_net_or_value	1	in
+Elaborator::walk_key_pkg_var_alias	FN	-	-	-
+Elaborator::walk_key_pkg_var_alias	OUT-C	.contains_at	1	in
+Elaborator::walk_key_pkg_var_alias	OUT-F	pkg_var_aliases	1	in
+Elaborator::walk_key_real	FN	-	-	-
+Elaborator::walk_key_real	OUT-C	.hit_real	1	in
+Elaborator::walk_key_real_value_or_net	FN	-	-	-
+Elaborator::walk_key_real_value_or_net	OUT-C	.hit_real_value_or_net	1	in
+Elaborator::walk_key_str_real_value_wide_or_net	FN	-	-	-
+Elaborator::walk_key_str_real_value_wide_or_net	OUT-C	.hit_str_real_value_wide_or_net	1	in
+Elaborator::walk_key_value	FN	-	-	-
+Elaborator::walk_key_value	OUT-C	.hit_value	1	in
+Elaborator::walk_key_value_or_net	FN	-	-	-
+Elaborator::walk_key_value_or_net	OUT-C	.hit_value_or_net	1	in
+Elaborator::walk_key_value_or_other_kind	FN	-	-	-
+Elaborator::walk_key_value_or_other_kind	OUT-C	.hit_value_or_other_kind	1	in
+Elaborator::walk_key_wide	FN	-	-	-
+Elaborator::walk_key_wide	OUT-C	.hit_wide	1	in
+Elaborator::walk_key_wide_value_or_net	FN	-	-	-
+Elaborator::walk_key_wide_value_or_net	OUT-C	.hit_wide_value_or_net	1	in
 Elaborator::walk_out_from	FN	-	-	-
 Elaborator::walk_out_from	OUT-C	.clear	1	in
 Elaborator::walk_out_from	OUT-C	.contains_at	1	in
@@ -748,6 +847,12 @@ Elaborator::walk_scopes_key_inner	OUT-C	DeclKey	1	text:DeclKey
 Elaborator::walk_scopes_key_inner	OUT-C	Some	1	text:DeclKey
 Elaborator::walk_scopes_key_inner	OUT-C	String::new	1	in
 Elaborator::walk_scopes_key_shadowed	FN	-	-	-
+Elaborator::walk_shadowed_fixed_string_dyn	FN	-	-	-
+Elaborator::walk_shadowed_fixed_string_dyn	OUT-C	.contains_at	1	in
+Elaborator::walk_shadowed_fixed_string_dyn	OUT-F	fixed_string_dyn_key	1	in
+Elaborator::walk_shadowed_string_array_elem	FN	-	-	-
+Elaborator::walk_shadowed_string_array_elem	OUT-C	.contains_at	1	in
+Elaborator::walk_shadowed_string_array_elem	OUT-F	string_array_elems	1	in
 Elaborator::with_scope	FN	-	-	-
 Elaborator::with_scope	OUT-C	.scope_enter	1	in
 Elaborator::with_scope	OUT-C	.scope_restore	1	in
@@ -797,6 +902,7 @@ Elaborator::with_scope	OUT-C	f	1	payload
 #  N13 a deliberate wrapper that hides the callee: a module fn that forwards to the outside fn (its own call is the row, in the wrapper).
 #  N14 `type StrMap = BTreeMap<String, u32>; crate::f(m)` with `m: &StrMap`, or `&Keyed<V>`: a parameter whose text type sits behind a
 #      `type` alias or a wrapper type is no text parameter (aliases are not followed) — the row's class reads `none`.
+# §5.2 Q-DECLKEY DK2 (2026-11-26, form (c)): each named entry whose closure calls a lane calls it out of the file set (13 `hit_*` lanes of bound/read.rs and held.rs hit_clk_refused), SELF x1, every callee `(&self, k: &AtKey) -> bool`: class none (DELTA19B P50) ; self 7 -> 21, rows 8 -> 22
 item	callee	count	class	closes
 Elaborator::assert_block_local_inits_drained	Elaborator::error	1	error	-
 Elaborator::decl_probe_key	.declares	1	in	-
@@ -805,6 +911,20 @@ Elaborator::frame_path	Elaborator::rtn_key_bare	1	in	-
 Elaborator::indexed_gen_singleton	Elaborator::gen_seg_label	1	in	-
 Elaborator::report_at	Elaborator::error	1	error	-
 Elaborator::report_at	Elaborator::error_at	1	error	-
+Elaborator::walk_from_net_or_refused_clk	Elaborator::hit_clk_refused	1	none	-
+Elaborator::walk_key_any_const	Elaborator::hit_any_const	1	none	-
+Elaborator::walk_key_any_const_or_net	Elaborator::hit_any_const_or_net	1	none	-
+Elaborator::walk_key_array_const_value_or_net	Elaborator::hit_array_const_value_or_net	1	none	-
+Elaborator::walk_key_meta	Elaborator::hit_meta	1	none	-
+Elaborator::walk_key_net_or_value	Elaborator::hit_net_or_value	1	none	-
+Elaborator::walk_key_real	Elaborator::hit_real	1	none	-
+Elaborator::walk_key_real_value_or_net	Elaborator::hit_real_value_or_net	1	none	-
+Elaborator::walk_key_str_real_value_wide_or_net	Elaborator::hit_str_real_value_wide_or_net	1	none	-
+Elaborator::walk_key_value	Elaborator::hit_value	1	none	-
+Elaborator::walk_key_value_or_net	Elaborator::hit_value_or_net	1	none	-
+Elaborator::walk_key_value_or_other_kind	Elaborator::hit_value_or_other_kind	1	none	-
+Elaborator::walk_key_wide	Elaborator::hit_wide	1	none	-
+Elaborator::walk_key_wide_value_or_net	Elaborator::hit_wide_value_or_net	1	none	-
 Scopes::gen_binding_encloses	span_holds	2	none	-
 == SURF_OUTCALL_BLIND
 # OUTCALL's blind list (§5.2 Q-DECLKEY DK1-6): a method name both a std type and a fn defined outside the file set carry — a call
@@ -827,7 +947,7 @@ Elaborator::error
 Elaborator::error_at
 == SURF_OUTCALL_COUNTS
 # calls by style (SELF / RECV / FREE), (item, callee) rows, the blind list's names used and their calls
-self=7 recv=1 free=2 rows=8 blind_names=1 blind_calls=41
+self=21 recv=1 free=2 rows=22 blind_names=1 blind_calls=41
 == SURF_CARD
 # CARD (DELTA11 R2): an OUT position holding Option / Vec / a slice / an array / two or more
 # `bool`, with MEANS (hand): caller | hit:<question> | list:<what> ; a missing row FAILS CARD,
@@ -835,11 +955,8 @@ self=7 recv=1 free=2 rows=8 blind_names=1 blind_calls=41
 # §5.2 Q-DECLKEY DK1-4b-2 (2026-11-24): the four walk entries' RET `Option<DeclKey>` (the key found, or none) ; Keyed::get_found (as get_at)
 # §5.2 Q-DECLKEY DK1-5a (2026-11-25): hier_resolve RET Option<V> (the leaf table's value under the resolved key, or none)
 # §5.2 Q-DECLKEY DK1-5b (2026-11-25): keys_under_cur RET Vec<&NewKey> (the package fold's saved keys under the current scope, each once, in key-text order: the order decl_keep_snapshot records and decl_keep_restore replays)
+# §5.2 Q-DECLKEY DK2 (2026-11-26, form (c)): the four walks are private: their RET rows gone ; the 23 named entries' RET Option<DeclKey> rows added by the pass, means as the walks'
 item	position	type	means
-Elaborator::scoped_key_at_or_above	RET	Option<DeclKey>	hit:the declaration key the walk found
-Elaborator::walk_scopes_key	RET	Option<DeclKey>	hit:the declaration key the walk found
-Elaborator::walk_scopes_key_from	RET	Option<DeclKey>	hit:the declaration key the walk found
-Elaborator::walk_scopes_key_shadowed	RET	Option<DeclKey>	hit:the declaration key the walk found
 Keyed::get_found	RET	Option<&V>	hit:a value stored under the key
 ScopeKeyed::take_at	RET	Option<V>	hit:a value stored at the carried scope
 ScopeKeyed::drain_keys_shown	RET	Vec<Shown>	list:the scopes still holding a value
@@ -849,18 +966,38 @@ Keyed::insert_new	RET	Option<V>	hit:the value the key held before the insert
 Keyed::remove_new	RET	Option<V>	hit:the value the key held
 Elaborator::hier_resolve	RET	Option<V>	hit:the value the leaf table holds under the resolved key
 Scopes::keys_under_cur	RET	Vec<&NewKey>	list:the saved keys formed under the current scope, each once, in key-text order
+Elaborator::walk_above_enum_label_type	RET	Option<DeclKey>	hit:the declaration key the walk found
+Elaborator::walk_above_gen_loop_label	RET	Option<DeclKey>	hit:the declaration key the walk found
+Elaborator::walk_above_gen_singleton_label	RET	Option<DeclKey>	hit:the declaration key the walk found
+Elaborator::walk_from_net_or_refused_clk	RET	Option<DeclKey>	hit:the declaration key the walk found
+Elaborator::walk_key_any_const	RET	Option<DeclKey>	hit:the declaration key the walk found
+Elaborator::walk_key_any_const_or_net	RET	Option<DeclKey>	hit:the declaration key the walk found
+Elaborator::walk_key_array_const_value_or_net	RET	Option<DeclKey>	hit:the declaration key the walk found
+Elaborator::walk_key_genvar	RET	Option<DeclKey>	hit:the declaration key the walk found
+Elaborator::walk_key_iface_inst	RET	Option<DeclKey>	hit:the declaration key the walk found
+Elaborator::walk_key_meta	RET	Option<DeclKey>	hit:the declaration key the walk found
+Elaborator::walk_key_net	RET	Option<DeclKey>	hit:the declaration key the walk found
+Elaborator::walk_key_net_or_value	RET	Option<DeclKey>	hit:the declaration key the walk found
+Elaborator::walk_key_pkg_var_alias	RET	Option<DeclKey>	hit:the declaration key the walk found
+Elaborator::walk_key_real	RET	Option<DeclKey>	hit:the declaration key the walk found
+Elaborator::walk_key_real_value_or_net	RET	Option<DeclKey>	hit:the declaration key the walk found
+Elaborator::walk_key_str_real_value_wide_or_net	RET	Option<DeclKey>	hit:the declaration key the walk found
+Elaborator::walk_key_value	RET	Option<DeclKey>	hit:the declaration key the walk found
+Elaborator::walk_key_value_or_net	RET	Option<DeclKey>	hit:the declaration key the walk found
+Elaborator::walk_key_value_or_other_kind	RET	Option<DeclKey>	hit:the declaration key the walk found
+Elaborator::walk_key_wide	RET	Option<DeclKey>	hit:the declaration key the walk found
+Elaborator::walk_key_wide_value_or_net	RET	Option<DeclKey>	hit:the declaration key the walk found
+Elaborator::walk_shadowed_fixed_string_dyn	RET	Option<DeclKey>	hit:the declaration key the walk found
+Elaborator::walk_shadowed_string_array_elem	RET	Option<DeclKey>	hit:the declaration key the walk found
 == SURF_CB
 # CB (DELTA11 R2): a callback parameter of a surface item, kind Fn | FnMut | FnOnce | fn, its
 # argument types, CALLS (hand): once (FnOnce) | per:<what> | probe:<what>. First rows at LS2a.
 # §5.2 Q-DECLKEY DK1-4a (2026-11-24): the four walk entries' `hit`, called once per scope level the walk visits
 # §5.2 Q-DECLKEY DK1-4b-1 (2026-11-24): the four walk entries' `hit` takes the candidate as an `&AtKey` (`hit.0`: PASS REF, open until DK2)
+# §5.2 Q-DECLKEY DK2 (2026-11-26, form (c)): the four walks are private (off the surface): their four rows gone ; walk_rtn_scopes' stays (outside the claim, L-listed)
 item	param	kind	args	calls
 Elaborator::with_scope	f	FnOnce	&mut Self	once
 Elaborator::walk_rtn_scopes	hit	Fn	&str	probe:the routine tables for one composed key
-Elaborator::scoped_key_at_or_above	hit	Fn	&AtKey	probe:the caller's tables for one composed key
-Elaborator::walk_scopes_key	hit	Fn	&AtKey	probe:the caller's tables for one composed key
-Elaborator::walk_scopes_key_from	hit	Fn	&AtKey	probe:the caller's tables for one composed key
-Elaborator::walk_scopes_key_shadowed	hit	Fn	&AtKey	probe:the caller's tables for one composed key
 == SURF_BODY
 # BODY-ALL (DELTA11 R2, R4 N-5): the sha256 of the body tokens of every fn of the file set.
 # First rows at LS2a ; each unit's verify prints the rows that changed.
@@ -870,6 +1007,7 @@ Elaborator::walk_scopes_key_shadowed	hit	Fn	&AtKey	probe:the caller's tables for
 # §5.2 Q-DECLKEY DK1-5a (2026-11-25): the five moved bodies (lexscope/hier.rs), key_in (key.rs) new ; Scopes::key_under (mod.rs, AtKey) and fb_key_under_and_scope_debug (tests.rs, at_text) changed
 # §5.2 Q-DECLKEY DK1-5b (2026-11-25): names_with_pkg_var_aliases (moved, lexscope/elab.rs) and Scopes::keys_under_cur (lexscope/mod.rs) new ; the order pin fb_keys_under_cur_orders_and_dedups (lexscope/tests.rs) new
 # §5.2 Q-DECLKEY DK1-5b round 2 (2026-11-25, the cost trip on the package path): Scopes::keys_under_cur re-pinned (its key list by value, sorted / deduped / filtered in place, no format!) and the order pin re-pinned (its two calls hand the Vec by value)
+# §5.2 Q-DECLKEY DK2 (2026-11-26): the 23 named entries' bodies re-pinned for form k6, the best measured inline form, left on T at the cost STOP (W/scopebind/dk2/REPORT.txt): each closure `#[inline(always)] |k|` ; the four walks `#[inline(always)]`, walk_scopes_key_inner / walk_out_from / decl_probe_key `#[inline(always)]`)
 file	fn	sha256
 lexscope/disp.rs	Elaborator::ctx_here	69e9d6c0bf32d6a9ce1037ddff1a4ca8c9de14874b6204b5e55e34f914f6cb9d
 lexscope/disp.rs	Elaborator::cur_context	5c5a9d16421bd37235f37aed01f89d7e4e82e43fa2f0dd65cde5a39e24f627f8
@@ -899,7 +1037,7 @@ lexscope/elab.rs	Elaborator::names_with_pkg_var_aliases	3b2e58f26bc9994497723116
 lexscope/elab.rs	Elaborator::push_block_local_init	1e7349e2e3b8b72df1ad90ee701abf9bb7dfa53afd8107b2839f67a2558d4601
 lexscope/elab.rs	Elaborator::report_at	0a7914e184740a121f3ad5e2e54417d01cd3b8cab4d3b818ab91ea08640b7928
 lexscope/elab.rs	Elaborator::scoped_init_key	e8e6bdb08ad2356dd41579fa21fbae58edd780656be45d5940d1b66b359beddf
-lexscope/elab.rs	Elaborator::walk_hits_decl_pos	a78bd35774a4c4d672db94dd47aa2d60478715dc598fffd0b8fbc8b7a2aa92d1
+lexscope/elab.rs	Elaborator::walk_hits_decl_pos	1024295b62c9a7aea818c6074ef7f92312a9cc1e446fd546559a4b0fc5b9db64
 lexscope/elab.rs	Elaborator::walk_rtn_scopes	44fd92b502bfa8291ad8e714834d29e3c82538eb6c192aeea87dc975e16fb5fe
 lexscope/elab.rs	Elaborator::with_scope	92b75c76cf81ca4a8847258c77f345c3b3297201527b0a40cb1c25ddb5be56c2
 lexscope/hier.rs	Elaborator::hier_key_within	bb6653389427001618fab590a154d1e13afc3a10cd911b6ab89ed96718a4e870
@@ -1035,11 +1173,34 @@ lexscope/tests.rs	fb_swap_take_pkg_repoint_hold	2977248e3fddf12f4fa245701b49f07c
 lexscope/walk.rs	Elaborator::decl_probe_key	4aef8df81a697497750ee2587e824f6ca768b7bae167c73b044effdb5f62977d
 lexscope/walk.rs	Elaborator::is_gen_scope_segment	f2090092f044115ebc9aa27a032234eed2fdd4e31434d23fafb6c6eb51531fda
 lexscope/walk.rs	Elaborator::scoped_key_at_or_above	258ce7f9c28f1625154f7d0e9569cd8ae25ae9c3d925c65700820aed1fac7add
+lexscope/walk.rs	Elaborator::walk_above_enum_label_type	9bd225d5d63969fd266b53ffa573f3b7779ec4c34d4d3278350c8f444eb4fed2
+lexscope/walk.rs	Elaborator::walk_above_gen_loop_label	5355763557e93656b7de17fa4cc6dab2fd643480e59f693aa7ba1a871f964ea3
+lexscope/walk.rs	Elaborator::walk_above_gen_singleton_label	9ebc77c4f4c682ee2d5a25c8a493356580f5110ff857477dd01d94f557eb0d50
+lexscope/walk.rs	Elaborator::walk_from_net_or_refused_clk	6abd8053b7e97a10ec8e4eeee038b46c0e12ca12f4af662ea54921d695130196
+lexscope/walk.rs	Elaborator::walk_key_any_const	d9aa3a1c3e242dbc5795859ab651be8becba708b093af5b07bcd0a24e71cd6db
+lexscope/walk.rs	Elaborator::walk_key_any_const_or_net	748d9aec5ed8c2d9f7385db55804a0ba77bc90b98ab18840b552b66a57265bc9
+lexscope/walk.rs	Elaborator::walk_key_array_const_value_or_net	67c8d0ab18906be14d0ba45c2d9f71c6e8dd610088235a2520da8ef0b63ce56d
+lexscope/walk.rs	Elaborator::walk_key_genvar	eb72a8cb1d7994360a8a830efeca1aa278ed68d2dd019ad64f71f0fe4f9d1890
+lexscope/walk.rs	Elaborator::walk_key_iface_inst	40bbcea94fc0f0163a4ea900ae0dee19235df2f62ab160721874bffeeefa2e14
+lexscope/walk.rs	Elaborator::walk_key_meta	ec58d04e9a2f7b5a7701affb354549ebc8f9d4fca8290e705df053fa7227b0ef
+lexscope/walk.rs	Elaborator::walk_key_net	1ab0a58256cef0eb3c72dc0fc5c0b05a961dba29521b135bc0b72617540af3e3
+lexscope/walk.rs	Elaborator::walk_key_net_or_value	d401e808fda1d00b5d2da8a82e09831b9ffe748f9cd7895c0af3e901bf8e4591
+lexscope/walk.rs	Elaborator::walk_key_pkg_var_alias	f3bf4cfd9e38a3a71e915323136dc8639e1b423612b81d80b01a95718302c66c
+lexscope/walk.rs	Elaborator::walk_key_real	10c593980d690c7cce6d82b74c7863f11e798643e04461795439baad09828541
+lexscope/walk.rs	Elaborator::walk_key_real_value_or_net	e05cfedd05ac5e27b69a2d4c9df053fd9bf236848d2ae1fd1dabd25684087bf1
+lexscope/walk.rs	Elaborator::walk_key_str_real_value_wide_or_net	bbf416632e9a1238775650d637364cf85fe8b07e0c4877644f82dc67d04a9711
+lexscope/walk.rs	Elaborator::walk_key_value	d60b32d292e16fbd2ae478da9f638d0b7861e93bf6d56fce491784b79466dacb
+lexscope/walk.rs	Elaborator::walk_key_value_or_net	695b392cb7c961bd1b5d518475d523a3e486b054fc8d0c4c47e522680d80bc08
+lexscope/walk.rs	Elaborator::walk_key_value_or_other_kind	07fc3980cbac4f815925ab196372918d9a6bd5e1632cfe894185f7216a3dfa8d
+lexscope/walk.rs	Elaborator::walk_key_wide	0d56c67441028bf417cca34a561f3f93a4317afacc5df69046659588ac271bf5
+lexscope/walk.rs	Elaborator::walk_key_wide_value_or_net	381ca80ff14caad4570f51d1174389a214cba3aa14bdc6e4910a856ba3cb1d3b
 lexscope/walk.rs	Elaborator::walk_out_from	0bba8ef521ffa19306597118e417dc2d4e949f31e06409369eeeb74e83529f04
 lexscope/walk.rs	Elaborator::walk_scopes_key	1a07594158e568fc20bccbdc57f2274e40bd43030b8b46b433eb7188b2c1174c
 lexscope/walk.rs	Elaborator::walk_scopes_key_from	112b5d07daca9a0cbe34608f97c12bc9a37c1e903fa0aec188c3199abe8774aa
 lexscope/walk.rs	Elaborator::walk_scopes_key_inner	3346cdbeeb0bc35eeba05e4b7dd02747b778338e3a32f53628feaeb005e5498b
 lexscope/walk.rs	Elaborator::walk_scopes_key_shadowed	129d6d3259a98a5ea739de7d649e6a60c0b338be69d0a2ce73eaff9f6651a199
+lexscope/walk.rs	Elaborator::walk_shadowed_fixed_string_dyn	27723cbfbfaf997818fe6e49e7f66f68665a9a1cc2e4b07c91729f0224f67302
+lexscope/walk.rs	Elaborator::walk_shadowed_string_array_elem	32feee643841f76d21afb44546b81d380399d2d104fcbadb4b43980a0d8cfd43
 == SURF_INTERIOR
 # INTERIOR (LS1 part 6): the exemptions, each a counted, named row (as LEAVE / ENTER are):
 # item, position, the path of names INTERIOR follows to the carrier, why (hand). A row whose
@@ -1063,6 +1224,7 @@ Elaborator::with_scope	IN:f	Self = Elaborator -> Elaborator.const_call_fn -> Ref
 # §5.2 Q-DECLKEY DK1-4b-2 (2026-11-24): the walk entries return a DeclKey — 5 rows re-judged: RET=CARD(Option in Option<DeclKey>) ; RET=UNKNOWN(DeclKey) (plan mode judges with no file-set definitions, as UNKNOWN(AtKey) since DK1-4b-1 ; HT-SURF judges the position CARD) ; ret_text 20 -> 15
 # §5.2 Q-DECLKEY DK1-5a (2026-11-25): hier_resolve, hier_key_within, indexed_gen_singleton, singleton_scope_key moved to lexscope/hier.rs (file column ; singleton_scope_key private now) ; + is_hier_scope (R-J2: the resolver's scope question moves in with it, private ; absent from moved.tsv and from this table before) — 30 -> 31 fns
 # §5.2 Q-DECLKEY DK1-5b (2026-11-25): + names_with_pkg_var_aliases (X18, the unit's one mover, lexscope/elab.rs ; absent from moved.tsv and this table before: move_census SURF_PLAN absent=1) — 31 -> 32 fns ; decl_keep_snapshot stays outside (R-J1: no row) and keys_under_cur is a new entry, not a moved fn (no row)
+# §5.2 Q-DECLKEY DK2 (2026-11-26, form (c)): the four generic walks are private (each site calls a named entry, 23, E-1c) — 4 rows re-judged off the surface (their CB:hit / CB:hit.0 / IN:name / RET verdicts leave with the visibility) ; walk_scopes (scope.rs) deleted, its row gone: 32 -> 31 fns ; the entries take `name: &str` (+ `prefix`) and return Option<DeclKey>, no callback (SURF_ROWS)
 unit	fn	file	vis	tier	signature	verdict	fails	in_enter
 DK1	decl_probe_key	lexscope/walk.rs	-	E	(&self, name: &str, key: &mut AtKey, hit: &impl Fn(&AtKey) -> bool) -> bool	FAIL	ARG:key=UNKNOWN(AtKey); CB:hit=CB(a callback Fn(&AtKey)); CB:hit.0=UNKNOWN(AtKey)	name
 DK1	hier_key_within	lexscope/hier.rs	-	E	(&self, base: &str, rest: &[String]) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	base,rest
@@ -1070,13 +1232,12 @@ DK1	hier_resolve	lexscope/hier.rs	pub(crate)	E	(&self, prefix: &crate::ScopeRef,
 DK1	indexed_gen_singleton	lexscope/hier.rs	pub(crate)	E	(&self, level: &str, seg: &str) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	level,seg
 DK1	is_hier_scope	lexscope/hier.rs	-	E	(&self, base: &str) -> bool	PASS	-	base
 DK1	names_with_pkg_var_aliases	lexscope/elab.rs	pub(crate)	E	(&self, names: &std::collections::BTreeSet<String>) -> std::collections::BTreeSet<String>	FAIL	RET=TEXT(String); RET=UNKNOWN(std::collections::BTreeSet<String>)	names
-DK1	scoped_key_at_or_above	lexscope/walk.rs	pub(crate)	E	(&self, prefix: &crate::ScopeRef, name: &str, hit: impl Fn(&AtKey) -> bool) -> Option<DeclKey>	FAIL	CB:hit=CB(a callback Fn(&AtKey)); CB:hit.0=UNKNOWN(AtKey); RET=CARD(Option in Option<DeclKey>); RET=UNKNOWN(DeclKey)	prefix,name
+DK1	scoped_key_at_or_above	lexscope/walk.rs	-	E	(&self, prefix: &crate::ScopeRef, name: &str, hit: impl Fn(&AtKey) -> bool) -> Option<DeclKey>	FAIL	CB:hit=CB(a callback Fn(&AtKey)); CB:hit.0=UNKNOWN(AtKey); RET=CARD(Option in Option<DeclKey>); RET=UNKNOWN(DeclKey)	prefix,name
 DK1	singleton_scope_key	lexscope/hier.rs	-	E	(&self, level: &str, seg: &str) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	level,seg
-DK1	walk_scopes	scope.rs	pub(crate)	E	(&self, name: &str, table: &Keyed<T>) -> Option<T>	FAIL	IN:table=IN-TRAIT(Copy); RET=BOUND(T: Copy); RET=CARD(Option in Option<T>)	name,table
-DK1	walk_scopes_key	lexscope/walk.rs	pub(crate)	E	(&self, name: &str, hit: impl Fn(&AtKey) -> bool) -> Option<DeclKey>	FAIL	CB:hit=CB(a callback Fn(&AtKey)); CB:hit.0=UNKNOWN(AtKey); RET=CARD(Option in Option<DeclKey>); RET=UNKNOWN(DeclKey)	name
-DK1	walk_scopes_key_from	lexscope/walk.rs	pub(crate)	E	(&self, prefix: &crate::ScopeRef, name: &str, hit: impl Fn(&AtKey) -> bool) -> Option<DeclKey>	FAIL	CB:hit=CB(a callback Fn(&AtKey)); CB:hit.0=UNKNOWN(AtKey); RET=CARD(Option in Option<DeclKey>); RET=UNKNOWN(DeclKey)	prefix,name
+DK1	walk_scopes_key	lexscope/walk.rs	-	E	(&self, name: &str, hit: impl Fn(&AtKey) -> bool) -> Option<DeclKey>	FAIL	CB:hit=CB(a callback Fn(&AtKey)); CB:hit.0=UNKNOWN(AtKey); RET=CARD(Option in Option<DeclKey>); RET=UNKNOWN(DeclKey)	name
+DK1	walk_scopes_key_from	lexscope/walk.rs	-	E	(&self, prefix: &crate::ScopeRef, name: &str, hit: impl Fn(&AtKey) -> bool) -> Option<DeclKey>	FAIL	CB:hit=CB(a callback Fn(&AtKey)); CB:hit.0=UNKNOWN(AtKey); RET=CARD(Option in Option<DeclKey>); RET=UNKNOWN(DeclKey)	prefix,name
 DK1	walk_scopes_key_inner	lexscope/walk.rs	-	E	(&self, name: &str, hit: impl Fn(&AtKey) -> bool, stop_at_net_binding: bool) -> Option<DeclKey>	FAIL	CB:hit=CB(a callback Fn(&AtKey)); CB:hit.0=UNKNOWN(AtKey); RET=CARD(Option in Option<DeclKey>); RET=UNKNOWN(DeclKey)	name
-DK1	walk_scopes_key_shadowed	lexscope/walk.rs	pub(crate)	E	(&self, name: &str, hit: impl Fn(&AtKey) -> bool) -> Option<DeclKey>	FAIL	CB:hit=CB(a callback Fn(&AtKey)); CB:hit.0=UNKNOWN(AtKey); RET=CARD(Option in Option<DeclKey>); RET=UNKNOWN(DeclKey)	name
+DK1	walk_scopes_key_shadowed	lexscope/walk.rs	-	E	(&self, name: &str, hit: impl Fn(&AtKey) -> bool) -> Option<DeclKey>	FAIL	CB:hit=CB(a callback Fn(&AtKey)); CB:hit.0=UNKNOWN(AtKey); RET=CARD(Option in Option<DeclKey>); RET=UNKNOWN(DeclKey)	name
 DK4	net_name_table	net_util.rs	pub(crate)	E	(&self) -> Vec<String>	FAIL	RET=CARD(Vec in Vec<String>); RET=TEXT(String)	-
 LS2-d	cur_context	lexscope/disp.rs	-	E	(&self) -> Vec<diag::Frame>	FAIL	RET=CARD(Vec in Vec<diag::Frame>); RET=UNKNOWN(named type of another module diag::Frame)	-
 LS2-d	display_of	lexscope/disp.rs	-	E	(&self, prefix: &str) -> String	FAIL	RET=TEXT(String)	prefix
@@ -1097,7 +1258,7 @@ LS3	push_block_local_init	lexscope/elab.rs	pub(crate)	E	(&mut self, scope: Optio
 LS3	scoped_init_key	lexscope/elab.rs	-	E	(&self, scope: Option<&str>) -> String	FAIL	RET=TEXT(String)	scope
 LS3	report_at	lexscope/elab.rs	pub(crate)	E	(&mut self, span: Option<ast::Span>, prefix: &ScopeRef, msg: &str, reported: &mut ReportedAt)	FAIL	ARG:reported=UNKNOWN(ReportedAt)	span,prefix,msg
 == SURF_PLAN_COUNTS
-fns=32 pass=5 fail=27 ret_fail=24 ret_text=16 callback_text=1 mut_text=0 card=16 cb=8 interior=1 enter=40 enter_number=6 in_unknown=0
+fns=31 pass=5 fail=26 ret_fail=23 ret_text=16 callback_text=1 mut_text=0 card=15 cb=8 interior=1 enter=38 enter_number=6 in_unknown=0
 == FIX_LEAVE
 id	item	position	type	closes
 L0	scope_out	RET	T::Plain	permanent

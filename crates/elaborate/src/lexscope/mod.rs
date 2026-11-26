@@ -21,9 +21,10 @@
 //! named by a self-path) are named entries returning `bool` over the same text ; none returns
 //! text, and their call sites are counted by the home tests (HC_SCOPEQ).
 //!
-//! The outward walk of a name (DK1-4a) is here too, in `walk.rs`: the Elaborator methods every
-//! scoped lookup calls (`walk_scopes_key` and its forms), reading the scope texts as this module's
-//! fields ; since DK1-4b they hand `hit` an [`AtKey`] and return a [`DeclKey`]. The hierarchical
+//! The outward walk of a name (DK1-4a) is here too, in `walk.rs`: the generic walks
+//! (`walk_scopes_key` and its forms, private to `walk.rs` since §5.2 Q-DECLKEY DK2), reading the
+//! scope texts as this module's fields, and the named entries every scoped lookup calls, one per
+//! hit set ; since DK1-4b the walks hand `hit` an [`AtKey`] and return a [`DeclKey`]. The hierarchical
 //! resolver is here too (DK1-5a), in `hier.rs`: `hier_resolve`, two of the generate-spelling
 //! helpers it asks and its scope question `is_hier_scope`.
 

@@ -1699,9 +1699,9 @@ impl Elaborator<'_> {
                 }
                 // A NON-zero-LSB param/localparam (`localparam [15:8] P; P[15:12]`) —
                 // the base folds to a Const (not a net), so normalize by the param's
-                // DECLARED range (recorded in `param_range`, resolved by the SAME
-                // `walk_scopes` as the value). A zero-LSB param has no entry → raw
-                // (byte-identical).
+                // DECLARED range (recorded in `param_range`, resolved by the SAME walk as the
+                // value, `walk_scopes_key`, asked as `walk_key_value_or_net`). A zero-LSB param
+                // has no entry → raw (byte-identical).
                 if let Some((lo, w, asc)) = self.param_sel_range(base) {
                     return self.norm_offset_for_range(raw_off, lo, w, asc);
                 }

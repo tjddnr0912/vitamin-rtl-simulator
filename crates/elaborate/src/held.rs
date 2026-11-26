@@ -268,14 +268,19 @@ impl Elaborator<'_> {
                 .iter()
                 .position(|r| k.is_formed_at(&r.alias))
         };
-        let refused_at = |k: &AtKey| self.clk_refused.iter().position(|r| at_same(&r.alias, k));
         (2..=path.len()).find_map(|k| {
             let head = path[..k].join(".");
-            let key = self.walk_scopes_key_from(prefix, &head, |k| {
-                self.symbols.contains_at(k) || refused_at(k).is_some()
-            })?;
+            let key = self.walk_from_net_or_refused_clk(prefix, &head)?;
             refused(&key)
         })
+    }
+
+    /// The refused clocking items' half of `walk_from_net_or_refused_clk`'s set (§5.2 Q-DECLKEY
+    /// DK2): `k` is a refused item's alias. The walk's candidate against each alias, as
+    /// [`Self::clk_refused_at`]'s closure asked it before DK2 ; read here, in the record's own
+    /// file, not in `lexscope`.
+    pub(crate) fn hit_clk_refused(&self, k: &AtKey) -> bool {
+        self.clk_refused.iter().any(|r| at_same(&r.alias, k))
     }
 
     /// [`Self::clk_refused_at`] for a path written in the current scope.

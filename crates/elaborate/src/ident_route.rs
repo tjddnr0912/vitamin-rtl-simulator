@@ -60,7 +60,7 @@ impl Elaborator<'_> {
     /// 5. the INNERMOST key over the COMBINED binding set (string / wide / real /
     ///    numeric params and symbols): a string, wide or real parameter is
     ///    answered only when that exact key is the parameter (an independent
-    ///    `walk_scopes` over one side map would match an OUTER binding even when
+    ///    `walk_scopes_key` over one side map would match an OUTER binding even when
     ///    an inner net / numeric param / frame-local shadows it — IEEE §6.21
     ///    innermost-wins). When the innermost key is a hoisted block-local NET
     ///    that covers the reader (or was declared at it), the net wins over a
@@ -96,7 +96,7 @@ impl Elaborator<'_> {
             return BareIdentRoute::Other;
         }
         let mut local_shadows_param = false;
-        if let Some(key) = self.walk_scopes_key(seg, |k| self.hit_any_const_or_net(k)) {
+        if let Some(key) = self.walk_key_any_const_or_net(seg) {
             if let Some(raw) = self.str_param_raw.get_found(&key) {
                 return BareIdentRoute::Str(raw.clone());
             }
@@ -119,7 +119,7 @@ impl Elaborator<'_> {
             if let Some(v) = self.lookup_scoped(seg) {
                 let meta = self.name_meta(seg);
                 let guessed = self
-                    .walk_scopes_key(seg, |k| self.hit_value(k))
+                    .walk_key_value(seg)
                     .is_some_and(|k| self.param_type_guessed.contains_found(&k));
                 return BareIdentRoute::Param { v, meta, guessed };
             }
@@ -397,7 +397,7 @@ impl Elaborator<'_> {
         if let ast::ExprKind::Ident(p) = &e.kind {
             if let [seg] = p.segments.as_slice() {
                 return self
-                    .walk_scopes_key(&seg.name, |k| self.hit_value(k))
+                    .walk_key_value(&seg.name)
                     .is_some_and(|k| self.param_type_guessed.contains_found(&k));
             }
         }

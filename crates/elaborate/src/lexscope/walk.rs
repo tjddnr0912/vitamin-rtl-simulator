@@ -1,26 +1,36 @@
 //! The outward scope walk (§5.2 Q-DECLKEY DK1-4a): the key-returning walk of a name from the current
 //! scope (or a carried one) outward through the transparent generate / `$func$` / `$itask$` / `$blk$`
 //! scopes, its saved-prefix forms, the package window's probe it asks first, and the generate-segment
-//! test it stops on — moved here whole from `scope.rs`, `generate.rs` and `decl_scope.rs` (the value
-//! form over a store, `walk_scopes`, stays in `scope.rs`: a caller of the walk, typed at DK1-4b). They
-//! are Elaborator methods (tier E), so every caller's tokens are unchanged ; inside, they read the
-//! current scope's text and a carried scope's text as this module's own fields, not through the
-//! bridges. Since DK1-4b they are typed: `hit` is handed each candidate as an [`AtKey`] (the walk's
-//! one scratch text, re-written per scope level ; DK1-4b-1) and the walk returns the candidate it
-//! accepted as a [`DeclKey`], the scratch text moved into it, so a hit allocates nothing the text walk
-//! did not (DK1-4b-2).
+//! test it stops on — moved here whole from `scope.rs`, `generate.rs` and `decl_scope.rs`. They are
+//! Elaborator methods, tier E at DK1-4a and private to this file since DK2 (the segment test:
+//! `pub(super)` ; THE HIT SETS below) ; inside, they read the current scope's text and a carried
+//! scope's text as this module's own fields, not through the bridges. Since DK1-4b they are typed:
+//! `hit` is handed each candidate as an [`AtKey`] (the walk's one scratch text, re-written per
+//! scope level ; DK1-4b-1) and the walk returns the candidate it accepted as a [`DeclKey`], the
+//! scratch text moved into it, so a hit allocates nothing the text walk did not (DK1-4b-2).
+//!
+//! THE HIT SETS (§5.2 Q-DECLKEY DK2): the four generic walks are private to this file ; code outside
+//! asks one of the named entries at its foot, one per hit set, `walk_<kind>_<set>` (kind `key`,
+//! `shadowed`, `from`, `above`: the walk it calls). Each entry's body is ONE call of its walk with a
+//! closure literal, the closure its sites spelled before DK2 (the same probes in the same `||` order:
+//! an inline `contains_at` over a store that is none of the nine FQ parameter maps ; a `hit_*` lane of
+//! `bound/read.rs` for a set that names one ; `held.rs`'s `hit_clk_refused` for the refused clocking
+//! items), so no fn outside this file takes a predicate over declaration keys and nothing selects a
+//! set at run time. The generic value walk over one caller's store (`scope.rs`) is deleted: its three
+//! callers ask an entry and read the store's entry at the found key themselves (`lookup_scoped`,
+//! `name_meta`, `name_real`).
 
 use super::{AtKey, DeclKey};
 use crate::decl_scope::{DeclArm, DeclPhase};
 use crate::Elaborator;
 
 impl Elaborator<'_> {
-    #[inline]
-    pub(crate) fn walk_scopes_key(
-        &self,
-        name: &str,
-        hit: impl Fn(&AtKey) -> bool,
-    ) -> Option<DeclKey> {
+    /// The innermost key `<scope>.<name>` whose candidate satisfies `hit`, searching the current
+    /// scope and every scope enclosing it while the stripped segment is transparent — ONE source of
+    /// truth for the visibility rule, so key-level consumers (the modport read-only check, the
+    /// iface-instance lookup) can never drift from the value-level lookups.
+    #[inline(always)]
+    fn walk_scopes_key(&self, name: &str, hit: impl Fn(&AtKey) -> bool) -> Option<DeclKey> {
         self.walk_scopes_key_inner(name, hit, false)
     }
 
@@ -31,8 +41,8 @@ impl Elaborator<'_> {
     /// The deferred hierarchical resolvers run after `cur_prefix` has moved on, so they
     /// carry the prefix that was live when the reference was LOWERED and cannot use the
     /// ambient walk. Diagnostic-only today (V33-3's enum-label receiver test).
-    #[inline]
-    pub(crate) fn scoped_key_at_or_above(
+    #[inline(always)]
+    fn scoped_key_at_or_above(
         &self,
         prefix: &crate::ScopeRef,
         name: &str,
@@ -86,8 +96,8 @@ impl Elaborator<'_> {
     /// during every generate phase, so it would reproduce the silent generate-body
     /// deletion verbatim. `array_const_vals` (`const_eval.rs`) is exactly such a
     /// consumer: it sits INSIDE `const_eval_in_scope` and must keep the plain walk.
-    #[inline]
-    pub(crate) fn walk_scopes_key_shadowed(
+    #[inline(always)]
+    fn walk_scopes_key_shadowed(
         &self,
         name: &str,
         hit: impl Fn(&AtKey) -> bool,
@@ -95,6 +105,7 @@ impl Elaborator<'_> {
         self.walk_scopes_key_inner(name, hit, true)
     }
 
+    #[inline(always)]
     fn walk_scopes_key_inner(
         &self,
         name: &str,
@@ -124,8 +135,8 @@ impl Elaborator<'_> {
     /// reference's lowering scope): the same scope-transparency rule, without the
     /// package-routine probe. ENG-1b: a refused clocking item is found with it from a
     /// function or generate block exactly as `lookup_net_scoped` finds its alias.
-    #[inline]
-    pub(crate) fn walk_scopes_key_from(
+    #[inline(always)]
+    fn walk_scopes_key_from(
         &self,
         prefix: &crate::ScopeRef,
         name: &str,
@@ -140,6 +151,7 @@ impl Elaborator<'_> {
         )
     }
 
+    #[inline(always)]
     fn walk_out_from(
         &self,
         mut prefix: &str,
@@ -202,6 +214,7 @@ impl Elaborator<'_> {
     /// The declaring package's key for bare constant `name`, written into `key`,
     /// while the window half runs and the routine does not declare `name` itself.
     /// `walk_scopes_key_inner` asks it before its outward walk.
+    #[inline(always)]
     fn decl_probe_key(&self, name: &str, key: &mut AtKey, hit: &impl Fn(&AtKey) -> bool) -> bool {
         use std::fmt::Write;
         if self.decl_phase.get() != DeclPhase::Win {
@@ -214,6 +227,268 @@ impl Elaborator<'_> {
         key.0.clear();
         let _ = write!(key.0, "$pkg${}.{name}", w.pkg);
         hit(key) && !w.declares(self, name)
+    }
+
+    // ── the named entries (§5.2 Q-DECLKEY DK2): one per hit set, each ONE call of its walk ──
+
+    /// [`Self::walk_scopes_key`] over the hit set `params` (`hit_value`).
+    #[inline]
+    pub(crate) fn walk_key_value(&self, name: &str) -> Option<DeclKey> {
+        self.walk_scopes_key(
+            name,
+            #[inline(always)]
+            |k| self.hit_value(k),
+        )
+    }
+
+    /// [`Self::walk_scopes_key`] over the hit set `params || symbols` (`hit_value_or_net`).
+    #[inline]
+    pub(crate) fn walk_key_value_or_net(&self, name: &str) -> Option<DeclKey> {
+        self.walk_scopes_key(
+            name,
+            #[inline(always)]
+            |k| self.hit_value_or_net(k),
+        )
+    }
+
+    /// [`Self::walk_scopes_key`] over the hit set `wide_param_bits` (`hit_wide`).
+    #[inline]
+    pub(crate) fn walk_key_wide(&self, name: &str) -> Option<DeclKey> {
+        self.walk_scopes_key(
+            name,
+            #[inline(always)]
+            |k| self.hit_wide(k),
+        )
+    }
+
+    /// [`Self::walk_scopes_key`] over the hit set `wide_param_bits || params || symbols`
+    /// (`hit_wide_value_or_net`).
+    #[inline]
+    pub(crate) fn walk_key_wide_value_or_net(&self, name: &str) -> Option<DeclKey> {
+        self.walk_scopes_key(
+            name,
+            #[inline(always)]
+            |k| self.hit_wide_value_or_net(k),
+        )
+    }
+
+    /// [`Self::walk_scopes_key`] over the hit set `real_param_val || params || symbols`
+    /// (`hit_real_value_or_net`).
+    #[inline]
+    pub(crate) fn walk_key_real_value_or_net(&self, name: &str) -> Option<DeclKey> {
+        self.walk_scopes_key(
+            name,
+            #[inline(always)]
+            |k| self.hit_real_value_or_net(k),
+        )
+    }
+
+    /// [`Self::walk_scopes_key`] over the hit set `str_param_raw || real_param_val || params ||
+    /// wide_param_bits` (`hit_any_const`).
+    #[inline]
+    pub(crate) fn walk_key_any_const(&self, name: &str) -> Option<DeclKey> {
+        self.walk_scopes_key(
+            name,
+            #[inline(always)]
+            |k| self.hit_any_const(k),
+        )
+    }
+
+    /// [`Self::walk_scopes_key`] over the hit set `str_param_raw || wide_param_bits ||
+    /// real_param_val || params || symbols` (`hit_any_const_or_net`).
+    #[inline]
+    pub(crate) fn walk_key_any_const_or_net(&self, name: &str) -> Option<DeclKey> {
+        self.walk_scopes_key(
+            name,
+            #[inline(always)]
+            |k| self.hit_any_const_or_net(k),
+        )
+    }
+
+    /// [`Self::walk_scopes_key`] over the hit set `param_meta` (`hit_meta`: META-WALK,
+    /// `name_meta`).
+    #[inline]
+    pub(crate) fn walk_key_meta(&self, name: &str) -> Option<DeclKey> {
+        self.walk_scopes_key(
+            name,
+            #[inline(always)]
+            |k| self.hit_meta(k),
+        )
+    }
+
+    /// [`Self::walk_scopes_key`] over the hit set `real_param_val` (`hit_real`: REAL-WALK,
+    /// `name_real`).
+    #[inline]
+    pub(crate) fn walk_key_real(&self, name: &str) -> Option<DeclKey> {
+        self.walk_scopes_key(
+            name,
+            #[inline(always)]
+            |k| self.hit_real(k),
+        )
+    }
+
+    /// [`Self::walk_scopes_key`] over the hit set `array_const_vals || params || symbols`
+    /// (`hit_array_const_value_or_net`).
+    #[inline]
+    pub(crate) fn walk_key_array_const_value_or_net(&self, name: &str) -> Option<DeclKey> {
+        self.walk_scopes_key(
+            name,
+            #[inline(always)]
+            |k| self.hit_array_const_value_or_net(k),
+        )
+    }
+
+    /// [`Self::walk_scopes_key`] over the hit set `str_param_raw || real_param_val || params ||
+    /// wide_param_bits || symbols` (`hit_str_real_value_wide_or_net`).
+    #[inline]
+    pub(crate) fn walk_key_str_real_value_wide_or_net(&self, name: &str) -> Option<DeclKey> {
+        self.walk_scopes_key(
+            name,
+            #[inline(always)]
+            |k| self.hit_str_real_value_wide_or_net(k),
+        )
+    }
+
+    /// [`Self::walk_scopes_key`] over the hit set `params || wide_param_bits || real_param_val ||
+    /// str_param_raw || symbols` (`hit_value_or_other_kind`).
+    #[inline]
+    pub(crate) fn walk_key_value_or_other_kind(&self, name: &str) -> Option<DeclKey> {
+        self.walk_scopes_key(
+            name,
+            #[inline(always)]
+            |k| self.hit_value_or_other_kind(k),
+        )
+    }
+
+    /// [`Self::walk_scopes_key`] over the hit set `symbols || params` (`hit_net_or_value`).
+    #[inline]
+    pub(crate) fn walk_key_net_or_value(&self, name: &str) -> Option<DeclKey> {
+        self.walk_scopes_key(
+            name,
+            #[inline(always)]
+            |k| self.hit_net_or_value(k),
+        )
+    }
+
+    /// [`Self::walk_scopes_key`] over the hit set `symbols`.
+    #[inline]
+    pub(crate) fn walk_key_net(&self, name: &str) -> Option<DeclKey> {
+        self.walk_scopes_key(
+            name,
+            #[inline(always)]
+            |k| self.symbols.contains_at(k),
+        )
+    }
+
+    /// [`Self::walk_scopes_key`] over the hit set `pkg_var_aliases`.
+    #[inline]
+    pub(crate) fn walk_key_pkg_var_alias(&self, name: &str) -> Option<DeclKey> {
+        self.walk_scopes_key(
+            name,
+            #[inline(always)]
+            |k| self.pkg_var_aliases.contains_at(k),
+        )
+    }
+
+    /// [`Self::walk_scopes_key`] over the hit set `iface_insts`.
+    #[inline]
+    pub(crate) fn walk_key_iface_inst(&self, name: &str) -> Option<DeclKey> {
+        self.walk_scopes_key(
+            name,
+            #[inline(always)]
+            |k| self.iface_insts.contains_at(k),
+        )
+    }
+
+    /// [`Self::walk_scopes_key`] over the hit set `genvar_decls`.
+    #[inline]
+    pub(crate) fn walk_key_genvar(&self, name: &str) -> Option<DeclKey> {
+        self.walk_scopes_key(
+            name,
+            #[inline(always)]
+            |k| self.genvar_decls.contains_at(k),
+        )
+    }
+
+    /// [`Self::walk_scopes_key_shadowed`] over the hit set `string_array_elems`.
+    #[inline]
+    pub(crate) fn walk_shadowed_string_array_elem(&self, name: &str) -> Option<DeclKey> {
+        self.walk_scopes_key_shadowed(
+            name,
+            #[inline(always)]
+            |k| self.string_array_elems.contains_at(k),
+        )
+    }
+
+    /// [`Self::walk_scopes_key_shadowed`] over the hit set `fixed_string_dyn_key`.
+    #[inline]
+    pub(crate) fn walk_shadowed_fixed_string_dyn(&self, name: &str) -> Option<DeclKey> {
+        self.walk_scopes_key_shadowed(
+            name,
+            #[inline(always)]
+            |k| self.fixed_string_dyn_key.contains_at(k),
+        )
+    }
+
+    /// [`Self::walk_scopes_key_from`] over the hit set `symbols ||` a refused clocking item's alias
+    /// (`held.rs` `hit_clk_refused`).
+    #[inline]
+    pub(crate) fn walk_from_net_or_refused_clk(
+        &self,
+        prefix: &crate::ScopeRef,
+        name: &str,
+    ) -> Option<DeclKey> {
+        self.walk_scopes_key_from(
+            prefix,
+            name,
+            #[inline(always)]
+            |k| self.symbols.contains_at(k) || self.hit_clk_refused(k),
+        )
+    }
+
+    /// [`Self::scoped_key_at_or_above`] over the hit set `gen_singleton_labels`.
+    #[inline]
+    pub(crate) fn walk_above_gen_singleton_label(
+        &self,
+        prefix: &crate::ScopeRef,
+        name: &str,
+    ) -> Option<DeclKey> {
+        self.scoped_key_at_or_above(
+            prefix,
+            name,
+            #[inline(always)]
+            |k| self.gen_singleton_labels.contains_at(k),
+        )
+    }
+
+    /// [`Self::scoped_key_at_or_above`] over the hit set `gen_loop_labels`.
+    #[inline]
+    pub(crate) fn walk_above_gen_loop_label(
+        &self,
+        prefix: &crate::ScopeRef,
+        name: &str,
+    ) -> Option<DeclKey> {
+        self.scoped_key_at_or_above(
+            prefix,
+            name,
+            #[inline(always)]
+            |k| self.gen_loop_labels.contains_at(k),
+        )
+    }
+
+    /// [`Self::scoped_key_at_or_above`] over the hit set `enum_label_types`.
+    #[inline]
+    pub(crate) fn walk_above_enum_label_type(
+        &self,
+        prefix: &crate::ScopeRef,
+        name: &str,
+    ) -> Option<DeclKey> {
+        self.scoped_key_at_or_above(
+            prefix,
+            name,
+            #[inline(always)]
+            |k| self.enum_label_types.contains_at(k),
+        )
     }
 
     /// True iff `seg` is a GENERATE-block scope segment (`label[idx]`), as opposed

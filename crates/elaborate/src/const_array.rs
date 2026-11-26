@@ -108,11 +108,7 @@ impl Elaborator<'_> {
                 // the unguarded walk answered the outer array to the wide and `$size`
                 // consumers; the value arm carried the same hole, recorded as GAP-G's
                 // root in `const_select_base`, closed here for every consumer).
-                if let Some(key) = self.walk_scopes_key(n, |k| {
-                    self.array_const_vals.contains_at(k)
-                        || self.params.contains_at(k)
-                        || self.symbols.contains_at(k)
-                }) {
+                if let Some(key) = self.walk_key_array_const_value_or_net(n) {
                     if self.array_const_vals.contains_found(&key) {
                         return Some(ConstArrayRef::Local(key));
                     }
@@ -125,7 +121,7 @@ impl Elaborator<'_> {
                 if self.local_decl_names.contains(n) || self.lookup_scoped(n).is_some() {
                     return None;
                 }
-                let akey = self.walk_scopes_key(n, |k| self.pkg_var_aliases.contains_at(k))?;
+                let akey = self.walk_key_pkg_var_alias(n)?;
                 let (pkg, _) = self.pkg_var_aliases.get_found(&akey)?;
                 self.pkg_array_const_vals.get(pkg)?.get(n)?;
                 Some(ConstArrayRef::Pkg(pkg.clone(), n.to_string()))

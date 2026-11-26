@@ -75,18 +75,21 @@
 //!
 //! VALUE-ABSENT, META-ABSENT, META-STALE, RANGE-ABSENT (two meanings), HIER-IMMORTAL,
 //! REAL-TWIN-NO-HIER (body, header) vs REAL-TWIN-HIER (generate), STR-KEEPS-VALUE,
-//! GUESSED. The meta walk (`walk_scopes` over `param_meta` alone) can take a name's
-//! value and its type from different keys (cell p16): `name_meta` names it.
+//! GUESSED. The meta walk (the outward walk over `param_meta` alone, `walk_key_meta`)
+//! can take a name's value and its type from different keys (cell p16): `name_meta` names it.
 //!
-//! # R: the read lanes (read.rs, BIND-1b)
+//! # R: the read lanes (read.rs, BIND-1b ; §5.2 Q-DECLKEY DK2)
 //!
 //! `name_meta` (META-WALK) and `name_real` (REAL-WALK) are the two one-map walks ;
-//! seven `hit_*` rules are the scope walk's hit tests, one per map set, each in the
-//! `||` order its sites spelled (`read.rs`'s head note tables the rules, their map
-//! sets and their sites, and the sites left with their reason). They read ; they write
-//! nothing and change no presence lane. `bound_home.rs` W5 pins them: W5a-W5c the walks
-//! and closures spelled at a site, W5d each lane's calls per (file, fn) (a lane call
-//! replaced by a bare-key read is a direct read, which W5a does not see).
+//! thirteen `hit_*` lanes are the scope walk's hit tests over a map set that names one
+//! of the nine maps, one per set, each in the `||` order its sites spelled (`read.rs`'s
+//! head note tables the lanes, their map sets, their named entries and their sites).
+//! A walk site calls its set's named entry (`lexscope/walk.rs`), whose closure calls the
+//! lane. They read ; they write nothing and change no presence lane. `bound_home.rs`
+//! W5 pins them: W5a-W5c a walk or closure spelled at a site, W5d each lane's calls per
+//! (file, fn) (since DK2 the thirteen from the named entries and `name_meta` / `name_real`'s ; a
+//! lane call replaced by a bare-key read is a direct read, which W5a does not see), and no
+//! token of the nine maps in `lexscope/walk.rs`.
 //!
 //! # What the pins see, and what they do not (REVIEW-ONLY)
 //!

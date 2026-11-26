@@ -53,13 +53,7 @@ impl Elaborator<'_> {
                 // happens to be unreachable today because generate-scope params also
                 // land in `symbols`, i.e. the invariant held by an accident of a
                 // different map. Spell it out instead of relying on that.
-                let key = self.walk_scopes_key(seg, |k| {
-                    self.str_param_raw.contains_at(k)
-                        || self.real_param_val.contains_at(k)
-                        || self.params.contains_at(k)
-                        || self.wide_param_bits.contains_at(k)
-                        || self.symbols.contains_at(k)
-                })?;
+                let key = self.walk_key_str_real_value_wide_or_net(seg)?;
                 self.str_param_raw.get_found(&key).cloned()
             }
             // §3 ⑨: read the PACKAGE's own map. ⚠️ This arm used to look `str_param_raw`

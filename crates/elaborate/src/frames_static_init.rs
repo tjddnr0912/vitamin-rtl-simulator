@@ -95,7 +95,7 @@ impl Elaborator<'_> {
         nonh.extend_found(
             ports
                 .iter()
-                .filter_map(|p| self.walk_scopes_key(&p.name.name, |k| self.symbols.contains_at(k)))
+                .filter_map(|p| self.walk_key_net(&p.name.name))
                 .collect(),
         );
         loop {
@@ -237,9 +237,7 @@ impl Elaborator<'_> {
                     .as_ref()
                     .is_some_and(|init| !self.frame_static_init_t0_safe(init))
             })
-            .filter_map(|decl| {
-                self.walk_scopes_key(&decl.name.name, |k| self.symbols.contains_at(k))
-            })
+            .filter_map(|decl| self.walk_key_net(&decl.name.name))
             .collect()
     }
 
@@ -253,9 +251,7 @@ impl Elaborator<'_> {
                     .as_ref()
                     .is_some_and(|init| self.frame_static_init_once(d, init))
             })
-            .filter_map(|decl| {
-                self.walk_scopes_key(&decl.name.name, |k| self.symbols.contains_at(k))
-            })
+            .filter_map(|decl| self.walk_key_net(&decl.name.name))
             .collect()
     }
 
@@ -282,7 +278,7 @@ impl Elaborator<'_> {
             K::IntLit { .. } | K::RealLit { .. } | K::StrLit { .. } | K::PkgScoped { .. } => false,
             K::Ident(p) => {
                 p.segments.len() == 1 && {
-                    self.walk_scopes_key(&p.segments[0].name, |k| self.symbols.contains_at(k))
+                    self.walk_key_net(&p.segments[0].name)
                         .is_some_and(|k| admitted.contains_found(&k))
                 }
             }
@@ -435,12 +431,11 @@ impl Elaborator<'_> {
         if self.lookup_scoped(name).is_some() {
             return true;
         }
-        self.walk_scopes_key(name, |k| self.symbols.contains_at(k))
-            .is_some_and(|k| {
-                found_text(&k)
-                    .split('.')
-                    .any(|seg| seg.starts_with("$func$"))
-                    && !self.frame_nonhoistable.contains_found(&k)
-            })
+        self.walk_key_net(name).is_some_and(|k| {
+            found_text(&k)
+                .split('.')
+                .any(|seg| seg.starts_with("$func$"))
+                && !self.frame_nonhoistable.contains_found(&k)
+        })
     }
 }
