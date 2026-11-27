@@ -123,7 +123,7 @@ impl Elaborator<'_> {
     /// `decl_pos` describes a hoisted block-local (`hoisted_block_local`)?
     pub(crate) fn hoisted_at_decl_pos(&self, name: &str) -> bool {
         self.hoisted_block_local
-            .contains_key(&self.decl_pos_key(name))
+            .contains_text(&self.decl_pos_key(name))
     }
 
     /// The key `name` forms under the scope `decl_pos` describes (mark [`Mark::DeclPos`]).
@@ -420,11 +420,11 @@ impl Elaborator<'_> {
         &self,
         names: &std::collections::BTreeSet<String>,
     ) -> std::collections::BTreeSet<String> {
-        if self.pkg_var_aliases.is_empty() {
+        if self.pkg_var_aliases.has_no_key() {
             return names.clone();
         }
         let mut out = names.clone();
-        for key in self.pkg_var_aliases.keys() {
+        for key in self.pkg_var_aliases.keys_text() {
             // Keys are `self.fq(name)`, so only the aliases bound at the CURRENT scope
             // are this scope's bare names (a nested instance's alias is not visible
             // here by bare name).
@@ -445,7 +445,7 @@ impl Elaborator<'_> {
     /// write (an ERROR path: a recurrence of the round-35 P0 names vita instead of the user's code) and the
     /// §3.b route veto `frame_outside_writes_are_user_nets` (a normal path: once per DISTINCT out-of-window net).
     pub(crate) fn net_is_compiler_internal(&self, net_id: u32) -> bool {
-        self.symbols.iter().any(|(fq, &id)| {
+        self.symbols.iter_text().any(|(fq, &id)| {
             id == net_id
                 && fq
                     .rsplit('.')
@@ -459,7 +459,7 @@ impl Elaborator<'_> {
     /// `None` when no key holds it. LEAVE L13 (permanent, ruling R-K3 q6): a bare declared name leaves the module as text.
     pub(crate) fn bare_name_of_net(&self, net_id: u32) -> Option<String> {
         self.symbols
-            .iter()
+            .iter_text()
             .find(|(_, &v)| v == net_id)
             .map(|(k, _)| k.rsplit('.').next().unwrap_or(k).to_string())
     }
@@ -480,7 +480,7 @@ impl Elaborator<'_> {
         let dst_prefix = format!("{}.", self.lex.at_cur(pname).0);
         let aliases: Vec<(String, u32, bool)> = self
             .symbols
-            .range(src_prefix.clone()..)
+            .range_text(src_prefix.clone()..)
             .take_while(|(k, _)| k.starts_with(&src_prefix))
             .filter_map(|(k, &id)| {
                 let suffix = &k[src_prefix.len()..];
@@ -497,9 +497,9 @@ impl Elaborator<'_> {
             .collect();
         for (k, id, input) in aliases {
             if input {
-                self.modport_readonly.insert(k.clone());
+                self.modport_readonly.insert_text(k.clone());
             }
-            self.symbols.insert(k, id);
+            self.symbols.insert_text(k, id);
         }
     }
 }

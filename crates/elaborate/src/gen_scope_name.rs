@@ -2,9 +2,9 @@
 //!
 //! vita stores a generate-FOR iteration and a SINGLETON (conditional / `case` /
 //! bare labelled) block under the SAME `label[idx]` shape, so a storage key cannot
-//! say which spelling a design is allowed to write. These predicates are the one
-//! home of that question; every hierarchical resolver consults them and nobody
-//! re-derives the rule from a key.
+//! say which spelling a design is allowed to write. This file keeps the segment parser
+//! (`gen_seg_label`) and the refusal's message ; the predicates the resolvers ask live in
+//! `lexscope/hier.rs` (DK1-5a, DK3-b), and nobody re-derives the rule from a key.
 
 use super::*;
 
@@ -16,21 +16,6 @@ impl Elaborator<'_> {
     pub(crate) fn gen_seg_label(seg: &str) -> Option<&str> {
         let (label, idx) = seg.strip_suffix(']')?.rsplit_once('[')?;
         (!label.is_empty() && !idx.is_empty() && !label.starts_with('$')).then_some(label)
-    }
-
-    /// The first segment of an already-resolved storage `key` that the SOURCE spelled
-    /// with a singleton generate scope's `[0]` storage index. `user_segs` is how many
-    /// TRAILING segments of `key` the source wrote — the leading ones come from the
-    /// reader's own prefix and are vita's spelling, never the design's, so they are not
-    /// judged here.
-    pub(crate) fn key_spells_indexed_singleton(
-        &self,
-        key: &DeclKey,
-        user_segs: usize,
-    ) -> Option<String> {
-        let segs: Vec<&str> = found_text(key).split('.').collect();
-        let start = segs.len().saturating_sub(user_segs);
-        (start..segs.len()).find_map(|i| self.indexed_gen_singleton(&segs[..i].join("."), segs[i]))
     }
 
     /// The message a hierarchical reader emits when `path` names a generate scope the

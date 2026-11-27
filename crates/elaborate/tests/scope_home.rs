@@ -115,7 +115,7 @@
 //!   `debug_assert*!` calls by (file, fn, macro) with a count (DELTA9 N-8, DELTA10 N-g).
 //! - HBR every call of a bridge entry (SURF_LEAVE's items) outside lexscope by (file, fn,
 //!   entry, SINK) with a count, SINK as HOUT's (DELTA10 w1 ; TW-BR: a bridge that closes at a
-//!   unit — L2 / L3 at RS1, L11 / L12 at DK3-b — may only fall ; L13, the permanent class of
+//!   unit — L2 / L3 at RS1 ; L11 / L12 closed at DK3-b — may only fall ; L13, the permanent class of
 //!   bare declared names (R-K3 q6), takes a row only with the unit that names it, as
 //!   `bare_name_of_net`'s at §5.2 Q-DECLKEY DK3-a) ; and each SURF_LEAVE row closes `permanent`
 //!   exactly when its id is one of `LEAVE_PERMANENT` (L0, L13 ; NP19-7).
@@ -1399,7 +1399,17 @@ fn single_path(e: &Expr) -> Option<String> {
 /// handed to one reads a FOUND key. h6's census of lexscope's fns with a DeclKey parameter FAILS
 /// on one these lists and the `_found` suffix do not cover (H6 FOUND TAKER).
 const FOUND_FNS: &[&str] = &["key_same", "found_text"];
-const FOUND_METHODS: &[&str] = &["gen_binding_encloses", "alias_iface_port"];
+const FOUND_METHODS: &[&str] = &[
+    "gen_binding_encloses",
+    "alias_iface_port",
+    // §5.2 Q-DECLKEY DK3-b: moved into lexscope/hier.rs (L12 closed)
+    "key_spells_indexed_singleton",
+];
+/// H6 (§5.2 Q-DECLKEY DK3-b round 2): the methods of `impl DeclKey` with a `self` receiver — an
+/// untyped closure parameter that is their receiver reads a FOUND key. h6's census of DeclKey's
+/// receiver methods FAILS on one off this list (H6 FOUND TAKER), and on a name here no such method
+/// has (H6 FOUND TAKER STALE).
+const FOUND_RECV_METHODS: &[&str] = &["is_formed_as", "is_formed_at", "has_func_segment"];
 
 /// H6 (§5.2 Q-DECLKEY DK1-6 round 2): the closure a `let` binds, through a reference, a paren
 /// and a block's tail (`let c = { let p = &self.x; move |k| p.contains_found(k) };`).
@@ -1419,7 +1429,7 @@ fn closure_of(e: &Expr) -> Option<&Expr> {
 
 /// H6 (§5.2 Q-DECLKEY DK1-4b-2): a closure reads a walk's FOUND key through its first parameter
 /// when that parameter is typed `DeclKey` (by value or by reference) or, untyped, when the body
-/// hands it to a `_found` entry, to `key_same`, or asks it `is_formed_at` / `is_formed_as` (a
+/// hands it to a `_found` entry, to `key_same`, or asks it a FOUND_RECV_METHODS method (a
 /// closure typed anything else, e.g. `|me: &Self|` around its own walk, is not one) ; round 2:
 /// FOUND_FNS / FOUND_METHODS are the other takers, the closure may sit behind `&`, a paren or a
 /// block's tail (closure_of). REVIEW-ONLY:
@@ -1442,8 +1452,7 @@ fn found_key_closure(e: &Expr) -> bool {
             let meth = m.method.to_string();
             if ((meth.ends_with("_found") || FOUND_METHODS.contains(&meth.as_str()))
                 && m.args.iter().any(|a| names(a, self.0)))
-                || ((meth == "is_formed_at" || meth == "is_formed_as")
-                    && names(&m.receiver, self.0))
+                || (FOUND_RECV_METHODS.contains(&meth.as_str()) && names(&m.receiver, self.0))
             {
                 self.1 = true;
             }
@@ -2483,9 +2492,10 @@ fn h6_rows(c: &Census) -> Vec<(String, String, String, usize)> {
 }
 
 /// H6 (§5.2 Q-DECLKEY DK1-6 round 2): the fns of lexscope (its `#[cfg(test)]` file left out)
-/// with a parameter whose type names DeclKey, by simple name.
-fn declkey_takers() -> BTreeSet<String> {
-    struct T(BTreeSet<String>);
+/// with a parameter whose type names DeclKey, by simple name ; DK3-b round 2: and, second, the
+/// methods of an `impl DeclKey` block (no trait) with a `self` receiver.
+fn declkey_takers() -> (BTreeSet<String>, BTreeSet<String>) {
+    struct T(BTreeSet<String>, BTreeSet<String>);
     impl T {
         fn sig(&mut self, s: &syn::Signature) {
             let takes = s.inputs.iter().any(|a| {
@@ -2505,8 +2515,22 @@ fn declkey_takers() -> BTreeSet<String> {
             self.sig(&f.sig);
             visit::visit_impl_item_fn(self, f);
         }
+        fn visit_item_impl(&mut self, i: &'a syn::ItemImpl) {
+            let on_declkey = matches!(&*i.self_ty, syn::Type::Path(tp)
+                if tp.path.segments.last().is_some_and(|l| l.ident == "DeclKey"));
+            if on_declkey && i.trait_.is_none() {
+                for it in &i.items {
+                    if let syn::ImplItem::Fn(f) = it {
+                        if f.sig.receiver().is_some() {
+                            self.1.insert(f.sig.ident.to_string());
+                        }
+                    }
+                }
+            }
+            visit::visit_item_impl(self, i);
+        }
     }
-    let mut t = T(BTreeSet::new());
+    let mut t = T(BTreeSet::new(), BTreeSet::new());
     for (rel, text) in lexscope_texts() {
         if rel.ends_with("tests.rs") {
             continue;
@@ -2514,7 +2538,7 @@ fn declkey_takers() -> BTreeSet<String> {
         let f = syn::parse_file(&text).unwrap_or_else(|e| panic!("H6 cannot parse {rel}: {e}"));
         t.visit_file(&f);
     }
-    t.0
+    (t.0, t.1)
 }
 
 #[test]
@@ -2818,8 +2842,24 @@ fn h6_the_walk_call_sites_are_pinned() {
         }
     }
     // §5.2 Q-DECLKEY DK1-6 round 2: every fn of lexscope with a DeclKey parameter is a found-key
-    // taker found_key_closure reads (a `_found` entry, FOUND_FNS, FOUND_METHODS)
-    let takers = declkey_takers();
+    // taker found_key_closure reads (a `_found` entry, FOUND_FNS, FOUND_METHODS ; FOUND_RECV_METHODS since DK3-b round 2)
+    let (takers, recv_takers) = declkey_takers();
+    // §5.2 Q-DECLKEY DK3-b round 2: and every receiver method of `impl DeclKey` is one of FOUND_RECV_METHODS
+    for t in FOUND_RECV_METHODS {
+        if !recv_takers.contains(*t) {
+            msgs.push(format!(
+                "H6 FOUND TAKER STALE  {t}: no `impl DeclKey` method of that name has a self receiver — remove it"
+            ));
+        }
+    }
+    for t in &recv_takers {
+        if !FOUND_RECV_METHODS.contains(&t.as_str()) {
+            msgs.push(format!(
+                "H6 FOUND TAKER  {t}: a DeclKey method with a self receiver that found_key_closure does not read — \
+                 add it to FOUND_RECV_METHODS"
+            ));
+        }
+    }
     for t in FOUND_FNS.iter().chain(FOUND_METHODS) {
         if !takers.contains(*t) {
             msgs.push(format!(
@@ -3162,6 +3202,10 @@ const SCAN_METHODS: &[&str] = &[
     "into_iter",
     "drain",
     "values_mut",
+    // §5.2 Q-DECLKEY DK3-b: the stores' text entries (lexscope/key.rs, pub(super)) the in-module scans read through
+    "iter_text",
+    "keys_text",
+    "range_text",
 ];
 /// HS / HD: a receiver that is the `Elaborator` (scans.py's window).
 const RECV2: &[&str] = &["self", "s", "me", "this"];
@@ -3169,9 +3213,9 @@ const RECV2: &[&str] = &["self", "s", "me", "this"];
 const KEYED_COLL: &[&str] = &[
     "BTreeMap", "HashMap", "BTreeSet", "HashSet", "IndexMap", "IndexSet",
 ];
-/// HS / H5 (§5.2 Q-DECLKEY DK1-1): the stores' two types of window w9 (`lexscope/key.rs`), by their
-/// exact names: a `BTreeMap<String, V>` / `BTreeSet<String>` held behind `Deref` / `DerefMut`, so a
-/// field of one is still keyed by `String` text (HS's store set, H5's name-typed fields) until DK3-b.
+/// HS / H5 (§5.2 Q-DECLKEY DK1-1): the stores' two types (`lexscope/key.rs`), by their exact names:
+/// a `BTreeMap<String, V>` / `BTreeSet<String>` held privately (window w9's `Deref` / `DerefMut` deleted
+/// at DK3-b), so a field of one is still a `String`-keyed store (HS's store set, H5's name-typed fields).
 const WINDOW_TYPES: &[&str] = &["Keyed", "KeyedSet"];
 /// HH: a probe of a store (k4.py READ less the compiler-only ops).
 const HH_READ: &[&str] = &[
@@ -7112,8 +7156,8 @@ fn hdbg_the_debug_only_code_is_pinned() {
 
 #[test]
 fn hbr_the_bridge_reads_are_pinned() {
-    // the bridge entries = LEAVE's items (since §5.2 Q-DECLKEY DK3-a: L2 / L3 residue R, L11,
-    // L12, and L13 the permanent class of bare declared names) ; not L0, the BOUNDARY
+    // the bridge entries = LEAVE's items (since §5.2 Q-DECLKEY DK3-b: L2 / L3 residue R and L13
+    // the permanent class of bare declared names ; L11 / L12 closed) ; not L0, the BOUNDARY
     // `scope_out` / `Outgoing::plain`, whose call sites are HC's (HOUT's rows with their SINK and
     // HC_LOCAL ; DELTA10 L1). LEAVE_PERMANENT: the ids whose rows close `permanent`.
     let mut entries: Vec<String> = surf_rows("SURF_LEAVE")
@@ -7152,11 +7196,11 @@ fn hbr_the_bridge_reads_are_pinned() {
         "HBR",
         &got,
         &want,
-        "a new read through a bridge (LEAVE L2 L3 L11 L12 close at a unit, L13 is permanent): TW-BR — a closing \
+        "a new read through a bridge (LEAVE L2 L3 close at RS1, L13 is permanent): TW-BR — a closing \
          bridge may only fall, L13 takes a row only with the unit that names it ; name the unit, read where \
          the text goes (SINK), add the row",
-        "a bridge read is gone: name the unit, remove the row (L1 closed at DK1-5b ; L2 / L3 close at RS1, L11 / L12 \
-         at DK3-b)",
+        "a bridge read is gone: name the unit, remove the row (L1 closed at DK1-5b, L11 / L12 at DK3-b ; L2 / L3 \
+         close at RS1)",
     );
     let mut by: BTreeMap<String, usize> = BTreeMap::new();
     for (k, n) in &rows {
@@ -7389,10 +7433,10 @@ fn hc_scopeq_the_scope_question_askers_are_pinned() {
 #[test]
 fn hxf_the_found_set_fills_are_pinned() {
     // §5.2 Q-DECLKEY DK1-5a (DELTA16 R-H12 note 2): `KeyedSet::extend_found` moves a found
-    // key's String into a KeyedSet, and window w9 (key.rs Deref / DerefMut) still opens that set
-    // to text until DK3-b — covered by w9's NOT-PROMISED line, so its callers outside lexscope
-    // are pinned by (file, fn, entry) with a count: a new caller is a new found-key text in a
-    // text-open set. Calls through a fn value or a macro body are not seen (watched_calls'
+    // key's String into a KeyedSet ; window w9 (key.rs Deref / DerefMut), which opened that set
+    // to text, is deleted since DK3-b (the set's text entries are lexscope's), and its callers outside
+    // lexscope stay pinned by (file, fn, entry) with a count: a new caller is a new found key into
+    // a set. Calls through a fn value or a macro body are not seen (watched_calls'
     // walker, as HC_SCOPEQ's).
     let entries = vec!["extend_found".to_string()];
     let mut rows: BTreeMap<String, usize> = BTreeMap::new();
@@ -7422,8 +7466,8 @@ fn hxf_the_found_set_fills_are_pinned() {
         "HXF",
         &got,
         &want,
-        "a new caller of KeyedSet::extend_found: a found key's text into a set window w9 still opens — name \
-         the unit, read what the set answers, add the row (DK3-b deletes the window)",
+        "a new caller of KeyedSet::extend_found: a found key into a set (no window since DK3-b) — name \
+         the unit, read what the set answers, add the row",
         "a caller of KeyedSet::extend_found is gone: name the unit, remove the row",
     );
     let counts = format!(

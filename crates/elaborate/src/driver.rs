@@ -226,7 +226,7 @@ impl<'s> Elaborator<'s> {
             rtn_decl_genvars: BTreeMap::new(),
             gen_genvars: Vec::new(),
             cur_rtn_pkg: Vec::new(),
-            decl_pos: Keyed::default(),
+            decl_pos: BTreeMap::new(),
             decl_pos_range: (0, 0),
             decl_block_locals: std::collections::BTreeSet::new(),
             wide_param_bits: Bound::new_empty(),

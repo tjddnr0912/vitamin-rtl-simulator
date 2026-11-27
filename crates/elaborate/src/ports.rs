@@ -331,7 +331,7 @@ impl Elaborator<'_> {
     /// `walk_scopes_key` (through `walk_key_net`), so name-level granularity is preserved (the
     /// same net stays writable through the parent or an `output` modport).
     pub(crate) fn check_modport_write(&mut self, path: &ast::HierPath) {
-        if self.modport_readonly.is_empty() {
+        if self.modport_readonly.has_no_key() {
             return;
         }
         let joined = path

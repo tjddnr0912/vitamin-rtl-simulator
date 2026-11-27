@@ -134,8 +134,8 @@ mod instance;
 mod instance_array;
 mod lexscope;
 use lexscope::{
-    at_same, found_text, key_in, key_same, key_show, scope_out, shown_from_spelling, AtKey,
-    DeclKey, Keyed, KeyedSet, Mark, NewKey, ReportedAt, ScopeKeyed, ScopeRef, Shown, ShownCtx,
+    at_same, key_in, key_same, key_show, scope_out, shown_from_spelling, AtKey, DeclKey, Keyed,
+    KeyedSet, Mark, NewKey, ReportedAt, ScopeKeyed, ScopeRef, Shown, ShownCtx,
 };
 mod limits;
 mod lvalue;
@@ -1146,7 +1146,7 @@ struct Elaborator<'s> {
     // is the only ordering information elaboration keeps; `resolve_net` is where it
     // is spent. Saved/restored per module, and swapped with the routine tables around
     // `wire_ports` (a port connection is a PARENT expression).
-    decl_pos: Keyed<u32>,
+    decl_pos: BTreeMap<String, u32>,
     // Source range of the module `decl_pos` was gathered from. A use position is only
     // comparable against it if it came from the SAME text: `.*` expands to paths that
     // reuse the CHILD module's port identifiers, whose spans sit wherever that module

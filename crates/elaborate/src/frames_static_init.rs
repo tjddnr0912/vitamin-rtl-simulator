@@ -99,8 +99,7 @@ impl Elaborator<'_> {
                 .collect(),
         );
         loop {
-            let before = nonh.len();
-            self.frame_nonhoistable.clone_from(&nonh);
+            self.frame_nonhoistable = nonh.snapshot();
             for (seg, d) in &cands {
                 let d = d.clone();
                 let found = match seg {
@@ -109,7 +108,7 @@ impl Elaborator<'_> {
                 };
                 nonh.extend_found(found);
             }
-            if nonh.len() == before {
+            if nonh.same_key_count(&self.frame_nonhoistable) {
                 break;
             }
         }
@@ -164,7 +163,7 @@ impl Elaborator<'_> {
             };
         }
         if shadowed {
-            self.frame_nonhoistable.clear();
+            self.frame_nonhoistable.clear_keys();
             return;
         }
         // Admission is decided BEFORE the builder is touched: `reserve_frame_static_guard`
@@ -431,11 +430,7 @@ impl Elaborator<'_> {
         if self.lookup_scoped(name).is_some() {
             return true;
         }
-        self.walk_key_net(name).is_some_and(|k| {
-            found_text(&k)
-                .split('.')
-                .any(|seg| seg.starts_with("$func$"))
-                && !self.frame_nonhoistable.contains_found(&k)
-        })
+        self.walk_key_net(name)
+            .is_some_and(|k| k.has_func_segment() && !self.frame_nonhoistable.contains_found(&k))
     }
 }

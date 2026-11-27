@@ -1,8 +1,8 @@
 //! The declaration-key stores (§5.2 Q-DECLKEY, sub-unit DK1-1): every Elaborator field keyed by a
 //! declaration's dotted key is a [`Keyed`] map or a [`KeyedSet`] — the same `BTreeMap` /
 //! `BTreeSet` as before, held privately, so the iteration order is the key text's order it
-//! always was. A key that is not yet typed is text, and text reaches a store only through the
-//! WINDOW below.
+//! always was. No text reaches a store from outside this module: every entry takes a key type
+//! or no key at all (the WINDOW below is deleted).
 //!
 //! THE FIRST KEY TYPE (sub-unit DK1-2a): a [`NewKey`] is the key a declaration is stored under,
 //! formed by [`Scopes::new_key`] from the current scope (`fq`'s text, the same bytes) and by
@@ -29,23 +29,27 @@
 //! `hit` accepted, the walk's scratch text moved into it (no copy) ; made at the walk's three returns
 //! (`walk.rs`) and, under `#[cfg(test)]`, by `tests.rs`'s helper ; the field is `pub(super)`, so its
 //! constructor door is lexscope-wide (scope_home HKC pins each file's constructions). It reaches a store
-//! only through the `_found` entries, its text leaves the module only through [`found_text`] (L11, a
-//! counted bridge), and outside lexscope it meets another key only through [`key_same`],
-//! [`DeclKey::is_formed_as`] and [`DeclKey::is_formed_at`].
+//! only through the `_found` entries, its text does not leave the module ([`found_text`], L11, is
+//! `pub(super)` since §5.2 Q-DECLKEY DK3-b ; the one segment test outside is [`DeclKey::has_func_segment`]),
+//! and outside lexscope it meets another key only through [`key_same`], [`DeclKey::is_formed_as`] and
+//! [`DeclKey::is_formed_at`].
 //!
 //! Each of the three key types is `#[must_use]` (§5.2 Q-DECLKEY DK2): a key formed and dropped as a
 //! statement is refused by rustc's `unused_must_use` (an error under the gate's `-D warnings`) ; the
 //! attribute does not reach a key inside an `Option` or a `Vec` (a walk's `Option<DeclKey>`).
 //!
-//! THE WINDOW (w9, DELTA14 F1): `Deref` / `DerefMut` to the map / set each store holds, so every
-//! existing use compiles as it was written (one counted door, text in and text out). It is
-//! deleted at DK3-b, where the compiler proves no text use is left. `Keyed`'s `Default` is written
-//! by hand (no `V: Default` bound: `Bound::new_empty` builds one over `ir::ConstVal`) ; there is no
-//! `Clone`: a `.clone()` of a store reaches the std map's through the window and yields the std
-//! map, which the snapshot code (`bound/undo.rs`, `frames_static_init.rs`) relies on.
+//! THE WINDOW (w9, DELTA14 F1) — `Deref` / `DerefMut` to the map / set each store holds, one counted
+//! door, text in and text out — is DELETED (§5.2 Q-DECLKEY DK3-b): the compiler proves no text use of a
+//! store is left outside this module. A store is reached through the typed entries below, the
+//! whole-store ones that read no key (`has_no_key`, `same_key_count`, `clear_keys`, `snapshot`) and, inside
+//! `lexscope` only, the `pub(super)` text entries (`contains_text`, `get_text`, `iter_text`,
+//! `keys_text`, `range_text`, `insert_text`). `Keyed`'s `Default` is written
+//! by hand (no `V: Default` bound: `Bound::new_empty` builds one over `ir::ConstVal`). Neither store type
+//! is `Clone` (ZN in `mod.rs` ; §5.2 Q-DECLKEY DK3-b): a whole-store copy is the named entry
+//! `snapshot`, a store, not the std map — the instance-array prepass's snapshot (`bound/undo.rs` `SideSnap`,
+//! eight stores) and the non-hoistable set's fixpoint (`frames_static_init.rs`) take it ; no key text is read.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::ops::{Deref, DerefMut};
 
 use super::Shown;
 
@@ -56,42 +60,34 @@ pub(crate) struct Keyed<V>(BTreeMap<String, V>);
 #[derive(Default)]
 pub(crate) struct KeyedSet(BTreeSet<String>);
 
+impl<V: Clone> Keyed<V> {
+    /// The whole store copied, no key read: the instance-array prepass's snapshot (`bound/undo.rs`
+    /// `side_snapshot`) and the non-hoistable fixpoint (`frames_static_init.rs`). There is no `Clone`
+    /// (ZN in `mod.rs`), so a `.clone()` of a store does not compile anywhere.
+    #[inline(never)]
+    pub(crate) fn snapshot(&self) -> Self {
+        Keyed(self.0.clone())
+    }
+}
+
+impl KeyedSet {
+    /// The whole set copied, no key read: see [`Keyed::snapshot`].
+    #[inline(never)]
+    pub(crate) fn snapshot(&self) -> Self {
+        KeyedSet(self.0.clone())
+    }
+}
+
 impl<V> Default for Keyed<V> {
     fn default() -> Self {
         Keyed(BTreeMap::new())
     }
 }
 
-impl<V> Deref for Keyed<V> {
-    type Target = BTreeMap<String, V>;
-    fn deref(&self) -> &BTreeMap<String, V> {
-        &self.0
-    }
-}
-
-impl<V> DerefMut for Keyed<V> {
-    fn deref_mut(&mut self) -> &mut BTreeMap<String, V> {
-        &mut self.0
-    }
-}
-
-impl Deref for KeyedSet {
-    type Target = BTreeSet<String>;
-    fn deref(&self) -> &BTreeSet<String> {
-        &self.0
-    }
-}
-
-impl DerefMut for KeyedSet {
-    fn deref_mut(&mut self) -> &mut BTreeSet<String> {
-        &mut self.0
-    }
-}
-
 /// A declaration key formed to DECLARE a name in the current scope (DK1-2a): the current scope's
 /// text, `.`, the local name — or the local name alone under the empty scope. Made only by
 /// [`Scopes::new_key`] ; no `Display`, `Deref`, `Borrow`, `From` or `Into` (ZN in `mod.rs`), so a
-/// NewKey cannot take the window's text path into a store.
+/// NewKey's text reaches a store only through the `_new` entries (no window is left since DK3-b).
 #[must_use]
 #[derive(Clone)]
 pub(crate) struct NewKey(String);
@@ -148,7 +144,7 @@ pub(super) fn key_text(k: &NewKey) -> &str {
 /// the field is `pub(super)`, so the
 /// constructor door is the whole of `lexscope`, not this file (scope_home HKC pins the constructions per
 /// lexscope file). No `Clone`, `Display`, `Debug`, `Deref`, `Borrow`, `From` or `Into` (ZN in `mod.rs`),
-/// so it cannot take the window's text path into a store, and no `_new` entry takes it.
+/// so its text reaches a store only through the `_at` entries (no window since DK3-b) ; no `_new` entry takes it.
 #[must_use]
 pub(crate) struct AtKey(pub(super) String);
 
@@ -177,15 +173,17 @@ pub(crate) fn at_same(a: &AtKey, b: &AtKey) -> bool {
 /// `Into` (ZN in `mod.rs`), and no `PartialEq`: it is taken by the `_found` entries
 /// (`Keyed::get_found` / `contains_found` / `index_found`, `KeyedSet::contains_found` /
 /// `extend_found`), the compares ([`key_same`], [`DeclKey::is_formed_as`], [`DeclKey::is_formed_at`]),
-/// [`found_text`] (L11) and the fns handed only a found key ; no `_new` or `_at` entry takes it.
+/// [`found_text`] (inside lexscope) and the fns handed only a found key ; no `_new` or `_at` entry takes it.
 #[must_use]
 pub(crate) struct DeclKey(pub(super) String);
 
-/// L11 (LEAVE): a found key's text where it meets a text operation outside the module (a key's
-/// segments read: frames_static_init.rs, gen_scope_name.rs, DK3-b ; ports.rs's scope prefix glue
-/// moved in at DK3-a, `alias_iface_port`) ; a counted bridge.
+/// A found key's text where it meets a text operation inside this module (`alias_iface_port`'s scope
+/// prefix glue, `key_spells_indexed_singleton`'s segments, `walk_hits_decl_pos`, `gen_binding_encloses`).
+/// It was L11, the counted bridge out of the module ; §5.2 Q-DECLKEY DK3-b closed it (its last readers
+/// outside, frames_static_init.rs's segment test and gen_scope_name.rs's `key_spells_indexed_singleton`,
+/// became [`DeclKey::has_func_segment`] and an entry of `hier.rs`), so it is `pub(super)`.
 #[inline]
-pub(crate) fn found_text(k: &DeclKey) -> &str {
+pub(super) fn found_text(k: &DeclKey) -> &str {
     &k.0
 }
 
@@ -296,5 +294,93 @@ impl KeyedSet {
     #[inline]
     pub(crate) fn extend_found(&mut self, ks: Vec<DeclKey>) {
         self.0.extend(ks.into_iter().map(|k| k.0));
+    }
+}
+
+/// The whole-store entries that read, form and drop no key (§5.2 Q-DECLKEY DK3-b, q8): the std
+/// `is_empty` / `len` / `clear` on the private map / set, under names of their own (no std token: the
+/// token census of the stores' entries stays exact).
+impl<V> Keyed<V> {
+    #[inline]
+    pub(crate) fn has_no_key(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+/// The whole-store entries of a set store (q8, as [`Keyed::has_no_key`]): `has_no_key` / `same_key_count` /
+/// `clear_keys` (frames_static_init.rs's non-hoistable fixpoint, `modport_readonly`, `param_type_guessed`).
+impl KeyedSet {
+    #[inline]
+    pub(crate) fn has_no_key(&self) -> bool {
+        self.0.is_empty()
+    }
+    /// True when this set holds as many keys as `other` (the fixpoint's growth test: `extend_found`
+    /// only adds, so an equal count is no new key) ; a bool, as I-SURF wants of an OUT position.
+    #[inline]
+    pub(crate) fn same_key_count(&self, other: &KeyedSet) -> bool {
+        self.0.len() == other.0.len()
+    }
+    #[inline]
+    pub(crate) fn clear_keys(&mut self) {
+        self.0.clear()
+    }
+}
+
+/// The text entries of a map store, for this module's own text probes (§5.2 Q-DECLKEY DK3-b: the
+/// window's uses inside `lexscope` — `hier.rs`, `elab.rs`, `disp.rs`): `pub(super)`, so no file
+/// outside the module can name one ; each is the std verb on the private map.
+impl<V> Keyed<V> {
+    #[inline]
+    pub(super) fn contains_text(&self, k: &str) -> bool {
+        self.0.contains_key(k)
+    }
+    #[inline]
+    pub(super) fn iter_text(&self) -> std::collections::btree_map::Iter<'_, String, V> {
+        self.0.iter()
+    }
+    #[inline]
+    pub(super) fn keys_text(&self) -> std::collections::btree_map::Keys<'_, String, V> {
+        self.0.keys()
+    }
+    #[inline]
+    pub(super) fn range_text(
+        &self,
+        from: std::ops::RangeFrom<String>,
+    ) -> std::collections::btree_map::Range<'_, String, V> {
+        self.0.range(from)
+    }
+    #[inline]
+    pub(super) fn insert_text(&mut self, k: String, v: V) -> Option<V> {
+        self.0.insert(k, v)
+    }
+}
+
+/// The text entries of a set store (as [`Keyed::contains_text`]: this module's own probes, `pub(super)`).
+impl KeyedSet {
+    #[inline]
+    pub(super) fn contains_text(&self, k: &str) -> bool {
+        self.0.contains(k)
+    }
+    #[inline]
+    pub(super) fn insert_text(&mut self, k: String) -> bool {
+        self.0.insert(k)
+    }
+}
+
+/// `hier_resolve`'s leaf read (§5.2 Q-DECLKEY DK3-b: its `table` is a store, `&Keyed<V>`): the std
+/// `get` on the private map, `pub(super)` as the text entries above.
+impl<V> Keyed<V> {
+    #[inline]
+    pub(super) fn get_text(&self, k: &str) -> Option<&V> {
+        self.0.get(k)
+    }
+}
+
+/// A found key's segment test (§5.2 Q-DECLKEY DK3-b: frames_static_init.rs's frame-local test, L11's
+/// row there closed): is one segment of the key a function frame's (`$func$…`)?
+impl DeclKey {
+    #[inline]
+    pub(crate) fn has_func_segment(&self) -> bool {
+        self.0.split('.').any(|seg| seg.starts_with("$func$"))
     }
 }

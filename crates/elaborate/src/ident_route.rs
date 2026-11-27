@@ -391,7 +391,7 @@ impl Elaborator<'_> {
     /// inferred from that value. Kinds this walk does not descend are literals
     /// and names it cannot bind — never a guess by themselves.
     pub(crate) fn ast_reads_guessed_param(&self, e: &ast::Expr) -> bool {
-        if self.param_type_guessed.is_empty() {
+        if self.param_type_guessed.has_no_key() {
             return false;
         }
         if let ast::ExprKind::Ident(p) = &e.kind {

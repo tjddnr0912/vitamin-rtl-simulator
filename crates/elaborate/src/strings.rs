@@ -160,7 +160,7 @@ impl Elaborator<'_> {
         // Zero cost for every design that declares no string array at all: the arm can
         // only fire on a hit in one of these two containers, so the whole classifier
         // stays byte-identical there without walking any scope chain.
-        if self.string_array_elems.is_empty() && self.string_elem_dyn_nets.is_empty() {
+        if self.string_array_elems.has_no_key() && self.string_elem_dyn_nets.is_empty() {
             return false;
         }
         if self.is_string_array_base(base) {

@@ -27,8 +27,8 @@
 //!   whose arguments spell a `<recv>.<map>.contains_at(` / `.contains_found(` /
 //!   `.contains_key(` arm (the hit is a `hit_*` rule ; `contains_at` since §5.2 Q-DECLKEY
 //!   DK1-4b-1, where the walk's candidate became an `AtKey`, `contains_found` since DK1-4b-2,
-//!   where its found key became a `DeclKey`, `contains_key` while the window w9 lets a text
-//!   probe a store: it leaves W5c with the window, DK3-b ; W5b names maps, not verbs, so it
+//!   where its found key became a `DeclKey`, `contains_key` from when the window w9 let a text
+//!   probe a store: kept after DK3-b deleted the window, no store takes text ; W5b names maps, not verbs, so it
 //!   reads a `_found` closure as it reads an `_at` one). Each exception is a row with its reason (`W5A_EXCEPT`, `W5B_EXCEPT`,
 //!   `W5C_EXCEPT`). What the token shapes do not see is REVIEW-ONLY: a closure bound
 //!   to a name and passed later is seen where it is written, not where it is walked ;

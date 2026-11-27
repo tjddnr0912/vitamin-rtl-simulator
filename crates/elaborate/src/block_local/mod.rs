@@ -300,8 +300,8 @@ impl Elaborator<'_> {
         out
     }
 
-    pub(crate) fn gather_decl_positions(&self, module: &ast::ModuleDecl) -> Keyed<u32> {
-        let mut pos: Keyed<u32> = Keyed::default();
+    pub(crate) fn gather_decl_positions(&self, module: &ast::ModuleDecl) -> BTreeMap<String, u32> {
+        let mut pos: BTreeMap<String, u32> = BTreeMap::new();
         let mut note = |n: &str, lo: u32| match pos.entry(n.to_string()) {
             std::collections::btree_map::Entry::Vacant(v) => {
                 v.insert(lo);

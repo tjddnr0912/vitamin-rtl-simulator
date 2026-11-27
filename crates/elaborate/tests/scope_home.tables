@@ -118,6 +118,8 @@ sites 26 {"CONSTRUCTOR": 1, "DEFINITION": 1, "DIAGNOSTIC": 7, "LOOKUP": 2, "PARE
 # move |k: &DeclKey| .. };`) is a local / found-key closure ; an untyped closure whose parameter goes to found_text / key_same /
 # gen_binding_encloses or a `_found` entry reads a FOUND key (FOUND_FNS / FOUND_METHODS ; every lexscope fn with a DeclKey parameter must be
 # one: `H6 FOUND TAKER`) ; two local closures bound to ONE name in one fn while a probe calls `name()` FAIL (`H6 DUP LOCAL`) ; none on this tree.
+# §5.2 Q-DECLKEY DK3-b round 2 (2026-11-27): an untyped closure whose parameter is the receiver of a FOUND_RECV_METHODS method (is_formed_as,
+# is_formed_at, has_func_segment) reads a FOUND key ; every `impl DeclKey` method with a self receiver must be one (`H6 FOUND TAKER`, or STALE).
 # §5.2 Q-DECLKEY DK2 (2026-11-26, form (c)): a site calls a NAMED ENTRY of lexscope/walk.rs, one per hit set (E-1c ; the entry column), its hit text the entry's arm (E-2c, table H6A) ; the 51 SITE rows' hit_set stands but held.rs clk_refused_at's (`at_same()` was the deleted local closure's free call ; a `hit_*` lane is read by its fields: clk_refused+symbols) ; site_texts 25 -> 23 (one text per entry), site_sets 20 ; walk_scopes deleted (its INTERNAL row gone) ; an entry's own walk call is its arm, H6A's row, not a SITE
 file	fn	entry	hit_text	class	hit_set	calls
 array_geom.rs	shape_bits	walk_key_value	hit_value	SITE	params	1
@@ -365,9 +367,13 @@ rows 102 {"COPY": 15, "FRAME": 3, "OWN": 36, "PLACE": 5, "R5": 1, "R5TAIL": 2, "
 # §5.2 Q-DECLKEY DK1-5b (2026-11-25): decl_keep_snapshot STAYS in decl_scope.rs (R-J1) and hands its key list to lexscope: the `keys` collection it built (BTreeSet<&str>) is keys_under_cur's now (BTreeMap<&str, &NewKey>, lexscope/mod.rs) [DK1-6 (2026-11-25): ROUND 1's form, never built — the round-2 line below is the built state (newreads N9 (b))]
 # §5.2 Q-DECLKEY DK1-5b round 2 (2026-11-25, the cost trip on the package path): keys_under_cur builds no collection of its own: it takes the caller's Vec<&NewKey> BY VALUE and sorts, dedups and filters it in place (no BTreeMap, no second Vec) ; its H7 row `keys_under_cur 1 keys` is gone
 # §5.2 Q-DECLKEY DK3-a (2026-11-26): bind_iface_port's alias list moves with its loop into lexscope/elab.rs alias_iface_port (X15): 2 -> 1 (mp_dirs), + 1 (aliases)
+# §5.2 Q-DECLKEY DK3-b (2026-11-27): key_spells_indexed_singleton moves into lexscope/hier.rs with its `segs` (L12 closed) ; gather_decl_positions' `pos` is a fn-local name collection again (q7: decl_pos back to BTreeMap<String, u32>, DK1-1's note above reversed) — R-LOCAL +1
+# §5.2 Q-DECLKEY DK3-b (2026-11-27): q7: the two `dpos=gather_decl_positions` bindings (elaborate_iface_instances, elaborate_instance) are untyped name collections again (DK1-1's note above reversed)
+# NOT-PROMISED NP19-12 (HBR's head): the unit named in these `#` lines is read by no rule (a row's unit is a comment, no column).
 file	fn	lets	bindings
 block_local/gate.rs	deny_static_init_reading_per_entry	1	hits
 block_local/hoist.rs	hoist_block_local_nets	1	pushed
+block_local/mod.rs	gather_decl_positions	1	pos
 block_local/mod.rs	gather_nested_block_locals	1	names
 block_local/timed_task.rs	refuse_timing_block_local_hazard	1	names
 block_local_class.rs	block_local_scope_prefix	1	segs
@@ -412,7 +418,6 @@ frames_static_init.rs	block_wrap_prefix	1	segs
 frames_static_init.rs	emit_frame_static_prologue	1	cands
 gen_enum.rs	gen_carried_typedefs	UNTYPED	names=scope_names
 gen_enum.rs	scope_names	1	names
-gen_scope_name.rs	key_spells_indexed_singleton	1	segs
 held.rs	clk_refused_path	1	names
 held.rs	deny_refused_clocking_input_arg	1	joined
 hier.rs	lval_hier_sel_chain	UNTYPED	path=lval_hier_chain
@@ -424,7 +429,7 @@ hier_leaf_shape.rs	record_hier_sel_shape	1	names
 hoist/general.rs	hoist_inout_general_seq	1	snaps
 hoist/general.rs	hoist_inout_general_seq	UNTYPED	roots=order_plan
 iface_inst.rs	elaborate_iface_instances	5	local_const_funcs,wc_const_fn,explicit_const_fn,wc_rtn,explicit_rtn
-iface_inst.rs	elaborate_iface_instances	UNTYPED	local_names=gather_local_decl_names,dbl=gather_block_local_names,shadow_names=names_with_pkg_var_aliases,scoped_blocks=compute_scoped_block_locals,per_entry_blocks=compute_per_entry_block_locals,coalesced=compute_coalesced_block_locals
+iface_inst.rs	elaborate_iface_instances	UNTYPED	local_names=gather_local_decl_names,dpos=gather_decl_positions,dbl=gather_block_local_names,shadow_names=names_with_pkg_var_aliases,scoped_blocks=compute_scoped_block_locals,per_entry_blocks=compute_per_entry_block_locals,coalesced=compute_coalesced_block_locals
 iface_rtn_scope.rs	move_static_scoped	UNTYPED	keys=static_scoped_keys
 inline_fn.rs	body_needs_context_width	2	widths,unknown_bv
 inline_fn.rs	inline_pkg_function	1	pkg_rtn_names
@@ -438,13 +443,14 @@ inline_task.rs	inline_static_task	1	dyn_binds
 inline_task.rs	inline_static_task	UNTYPED	declared=rtn_declared_names
 inline_task_locals.rs	hoist_inline_task_locals	1	hoisted_here
 instance.rs	elaborate_instance	6	conflict_names,local_const_funcs,wc_const_fn,explicit_const_fn,wc_rtn,explicit_rtn
-instance.rs	elaborate_instance	UNTYPED	names=gather_local_decl_names,dbl=gather_block_local_names,shadow_names=names_with_pkg_var_aliases,scoped_blocks=compute_scoped_block_locals,per_entry_blocks=compute_per_entry_block_locals,coalesced=compute_coalesced_block_locals,shadow_names=names_with_pkg_var_aliases,map=compute_scoped_block_locals
+instance.rs	elaborate_instance	UNTYPED	names=gather_local_decl_names,dpos=gather_decl_positions,dbl=gather_block_local_names,shadow_names=names_with_pkg_var_aliases,scoped_blocks=compute_scoped_block_locals,per_entry_blocks=compute_per_entry_block_locals,coalesced=compute_coalesced_block_locals,shadow_names=names_with_pkg_var_aliases,map=compute_scoped_block_locals
 instance_array.rs	elaborate_instance_array	1	port_widths
 lexscope/disp.rs	display_of	1	out
 lexscope/elab.rs	alias_iface_port	1	aliases
 lexscope/elab.rs	assert_block_local_inits_drained	1	keys
 lexscope/elab.rs	flush_block_local_inits	3	keys,all,runs
 lexscope/hier.rs	hier_resolve	1	segs
+lexscope/hier.rs	key_spells_indexed_singleton	1	segs
 multidriver.rs	check_multidriver_processes	2	rule_a_fires,via_call_writers
 multidriver.rs	multidriver_vars	2	body_decls,declared
 net_util.rs	declare_implicit_nets	2	iface_insts,want
@@ -514,7 +520,7 @@ block_local_class.rs	compute_timed_blocks	let	path
 block_local_class.rs	compute_timed_blocks	field:Acc	sharers
 block_local_class.rs	compute_timed_blocks	field:Acc	scoped
 == H7_COUNTS
-lets 155 fns 86 untyped 30 readers 26
+lets 156 fns 87 untyped 30 readers 26
 == HM
 # HM: the mints of scope-qualified text, by (file, fn, mint kind, name) with a count — g3 mints.tsv's rule
 # (census_g3.rs + link.py): `call` a call of a mint fn (MINT_CALLS), `fmt` / `fmt-tempname` a `format!` /
@@ -542,6 +548,7 @@ lets 155 fns 86 untyped 30 readers 26
 # §5.2 Q-DECLKEY DK1-5b round 2 (2026-11-25, the cost trip on the package path): that `format!` is gone: the prefix test reads the current text and the byte after it (`k.starts_with(prefix)` and `as_bytes()[prefix.len()] == b'.'`), no `<prefix>.` text is formed ; its HM row `keys_under_cur fmt format 1` is gone
 # §5.2 Q-DECLKEY DK2 (2026-11-26, form (c)): the 51 walk calls call their NAMED ENTRY (MINT_CALLS knows the 23 by E-1c ; TAG key as the walk rows) — 46 site rows re-keyed (the five two-walk fns split 2 -> 1+1), walk_scopes' `call walk_scopes_key` row gone, + 23 rows `lexscope/walk.rs <entry> call <its walk> 1 key`
 # §5.2 Q-DECLKEY DK3-a (2026-11-26): bind_iface_port's two prefix formats move to lexscope/elab.rs alias_iface_port (TAG scope kept)
+# §5.2 Q-DECLKEY DK3-b (2026-11-27): key_spells_indexed_singleton's two mints move into lexscope/hier.rs (TAG key kept) ; its derived-fn HAND row goes with gen_scope_name.rs's fn
 file	fn	kind	name	count	TAG
 array_geom.rs	shape_bits	call	walk_key_value	1	key
 arrays.rs	expr_array_chain	join	join	1	spelling
@@ -618,9 +625,6 @@ frames_static_init.rs	frame_init_name_is_local_or_const	call	walk_key_net	1	key
 gen_scope_name.rs	gen_spelling_hint	call	walk_above_gen_loop_label	1	key
 gen_scope_name.rs	gen_spelling_hint	call	walk_above_gen_singleton_label	1	key
 gen_scope_name.rs	gen_spelling_hint	join	join	2	display=1+spelling=1
-gen_scope_name.rs	key_spells_indexed_singleton	call	indexed_gen_singleton	1	key
-gen_scope_name.rs	key_spells_indexed_singleton	derived-fn	key_spells_indexed_singleton	1	key
-gen_scope_name.rs	key_spells_indexed_singleton	join	join	1	key
 held.rs	clk_refused_at	call	walk_from_net_or_refused_clk	1	key
 held.rs	clk_refused_at	join	join	1	spelling
 held.rs	deny_refused_clocking_input_arg	join	join	1	display
@@ -698,6 +702,8 @@ lexscope/hier.rs	hier_resolve	fmt	format	1	key
 lexscope/hier.rs	hier_resolve	join	join	2	scope
 lexscope/hier.rs	indexed_gen_singleton	fmt	format	1	key
 lexscope/hier.rs	is_hier_scope	fmt	format	1	scope
+lexscope/hier.rs	key_spells_indexed_singleton	call	indexed_gen_singleton	1	key
+lexscope/hier.rs	key_spells_indexed_singleton	join	join	1	key
 lexscope/hier.rs	singleton_scope_key	fmt	format	1	key
 lexscope/key.rs	at_cur	fmt	format	1	key
 lexscope/key.rs	key_in	fmt	format	1	key
@@ -780,7 +786,7 @@ sva_clocking.rs	lower_clocking_blocks	join	join	2	spelling
 systask.rs	lower_systask	join	join	1	spelling
 systask.rs	unformatted_call_proxy	join	join	1	spelling
 == HM_COUNTS
-mints 282 kinds {"call": 101, "curp": 5, "derived-fn": 11, "fmt": 46, "fmt-tempname": 25, "join": 87, "push": 7} tags {"display": 21, "key": 122, "scope": 17, "segment": 17, "spelling": 105}
+mints 281 kinds {"call": 101, "curp": 5, "derived-fn": 10, "fmt": 46, "fmt-tempname": 25, "join": 87, "push": 7} tags {"display": 21, "key": 121, "scope": 17, "segment": 17, "spelling": 105}
 == HS_STORES
 # HS: the store set — every `Elaborator` field whose type is a map / set keyed by `String`
 # (through Option / RefCell / Rc / Box / Bound) ; g3 name_keyed_fields.txt's 86 less its
@@ -798,8 +804,9 @@ all_clocking_names array_const_meta array_const_vals  array_param_overrides bind
 # §5.2 Q-DECLKEY DK2 (2026-11-26, form (c)): clk_refused_at's candidate scan moves into held.rs hit_clk_refused (walk_from_net_or_refused_clk's closure calls it) — a second HAND row, X24 names both scans (DELTA19B I2 L4 ; R7) ; clk_refused_at's row stands for `refused`
 # §5.2 Q-DECLKEY DK3-a (2026-11-26): the three DK4-show scans (cont_var.rs, lvalue.rs, netdecl.rs) are one scan of lexscope/disp.rs net_key_shown ; net_name_table moved in ; X12 (dynarr.rs) is lexscope/elab.rs bare_name_of_net, X13 net_is_compiler_internal moved in, X15 bind_iface_port's range is alias_iface_port's — 7 rows gone, 5 new, KIND and ENTRY kept: scans 29 -> 27
 # NOT-PROMISED (§5.2 Q-DECLKEY DK3-a): a scan of `symbols` written back outside lexscope is seen by HS / HOUT today (control K7: cont_var.rs
-#  cont_var_name, HS NEW ROW + HOUT GONE ROW ; K8: ports.rs bind_iface_port, HS NEW ROW + HF CHANGED) and by the compiler only after DK3-b
-#  deletes the window (K7b: E0599, no `iter` on Keyed).
+#  cont_var_name, HS NEW ROW + HOUT GONE ROW ; K8: ports.rs bind_iface_port, HS NEW ROW + HF CHANGED) and, since §5.2 Q-DECLKEY DK3-b
+#  deleted the window, by the compiler first (DK3-b's control D2: E0599, no method `iter` on Keyed).
+# §5.2 Q-DECLKEY DK3-b (2026-11-27): the 9 in-module scans read through the stores' text entries (SCAN_METHODS + iter_text / keys_text / range_text, s10eng E2): method column renamed, KIND / ENTRY kept, scans 27
 file	fn	store	method	count	KIND	ENTRY
 classes.rs	register_classes	class_table	iter	1	KEY-BLIND	Z2-values
 driver.rs	run	bind_targets	values	1	KEY-BLIND	Z2-values
@@ -812,15 +819,15 @@ frames_classify.rs	build_frame_set	func_table	keys	1	KEY-BLIND	Z2-values
 frames_classify.rs	build_task_frame_set	task_table	for	2	KEY-BLIND	Z2-values
 held.rs	clk_refused_at	clk_refused	iter	1	HAND:TEXT-SCAN-ANSWERS	X24
 held.rs	hit_clk_refused	clk_refused	iter	1	HAND:TEXT-SCAN-ANSWERS	X24
-lexscope/disp.rs	net_key_shown	symbols	iter	1	PRINT/DUMP	DK4-show
-lexscope/disp.rs	net_name_table	symbols	iter	1	PRINT/DUMP	DK4-show
-lexscope/elab.rs	alias_iface_port	symbols	range	1	TEXT-SCAN-ANSWERS	X15
-lexscope/elab.rs	bare_name_of_net	symbols	iter	1	TEXT-SCAN-ANSWERS	X12
-lexscope/elab.rs	names_with_pkg_var_aliases	pkg_var_aliases	keys	1	TEXT-SCAN-ANSWERS	X18
-lexscope/elab.rs	net_is_compiler_internal	symbols	iter	1	TEXT-SCAN-ANSWERS	X13
-lexscope/hier.rs	is_hier_scope	hier_params	range	1	TEXT-SCAN-ANSWERS	w9:DK3-b
-lexscope/hier.rs	is_hier_scope	symbols	range	1	TEXT-SCAN-ANSWERS	w9:DK3-b
-lexscope/hier.rs	is_hier_scope	wide_param_bits	range	1	TEXT-SCAN-ANSWERS	w9:DK3-b
+lexscope/disp.rs	net_key_shown	symbols	iter_text	1	PRINT/DUMP	DK4-show
+lexscope/disp.rs	net_name_table	symbols	iter_text	1	PRINT/DUMP	DK4-show
+lexscope/elab.rs	alias_iface_port	symbols	range_text	1	TEXT-SCAN-ANSWERS	X15
+lexscope/elab.rs	bare_name_of_net	symbols	iter_text	1	TEXT-SCAN-ANSWERS	X12
+lexscope/elab.rs	names_with_pkg_var_aliases	pkg_var_aliases	keys_text	1	TEXT-SCAN-ANSWERS	X18
+lexscope/elab.rs	net_is_compiler_internal	symbols	iter_text	1	TEXT-SCAN-ANSWERS	X13
+lexscope/hier.rs	is_hier_scope	hier_params	range_text	1	TEXT-SCAN-ANSWERS	w9:DK3-b
+lexscope/hier.rs	is_hier_scope	symbols	range_text	1	TEXT-SCAN-ANSWERS	w9:DK3-b
+lexscope/hier.rs	is_hier_scope	wide_param_bits	range_text	1	TEXT-SCAN-ANSWERS	w9:DK3-b
 lexscope/mod.rs	keys_under_cur	keys	iter	1	HAND:TEXT-SCAN-ANSWERS	X19
 pkg_body_scope.rs	frame_key_of	frame_idx	iter	1	KEY-BLIND	Z2-values
 pkg_body_scope.rs	imported_routine_bodies	func_table	keys	1	TEXT-SCAN-ANSWERS	X14-RS1
@@ -880,6 +887,7 @@ reads 39 roles {"composite": 4, "whole": 35} stores {"array_param_overrides": 1,
 # §5.2 Q-DECLKEY DK1-5b (2026-11-25): names_with_pkg_var_aliases' `rsplit_once '.'` (moved to lexscope/elab.rs) and decl_keep_snapshot's two `starts_with <mine>` (keys_under_cur's, lexscope/mod.rs) re-homed (TAG / UNIT kept) [DK1-6 (2026-11-25): ROUND 1's form, never built — the round-2 line below is the built state (newreads N9 (b))]
 # §5.2 Q-DECLKEY DK1-5b round 2 (2026-11-25, the cost trip on the package path): the two `starts_with <mine>` are one `starts_with <prefix>`, in the closure `mine` the debug_assert and the retain both call (TAG / UNIT kept)
 # §5.2 Q-DECLKEY DK3-a (2026-11-26): five segment tests re-homed with their fns: X12 dynarr.rs -> lexscope/elab.rs bare_name_of_net, X13 net_is_compiler_internal moved in, X15 bind_iface_port's two -> alias_iface_port (TAG key, UNIT DK3 kept)
+# §5.2 Q-DECLKEY DK3-b (2026-11-27): frame_init_name_is_local_or_const's `$func$` segment test is DeclKey::has_func_segment (lexscope/key.rs, L11 closed) ; key_spells_indexed_singleton's split re-homed (lexscope/hier.rs) — TAG / UNIT kept
 file	fn	method	arg	count	TAG	UNIT
 block_local/gate.rs	actual_is_record_of	starts_with	'$'	1	spelling	-
 block_local/gate.rs	actual_is_record_of	strip_prefix	"$unp$"	1	spelling	-
@@ -906,11 +914,8 @@ frames_reserve.rs	reserve_frame_func	contains	"::"	1	key	RS1
 frames_reserve.rs	reserve_frame_func	contains	'$'	1	key	RS1
 frames_reserve.rs	reserve_frame_task	contains	"::"	1	key	RS1
 frames_reserve.rs	reserve_frame_task	contains	'$'	1	key	RS1
-frames_static_init.rs	frame_init_name_is_local_or_const	split	'.'	1	key	DK3
-frames_static_init.rs	frame_init_name_is_local_or_const	starts_with	"$func$"	1	key	DK3
 gen_scope_name.rs	gen_seg_label	rsplit_once	'['	1	scope	DK1
 gen_scope_name.rs	gen_seg_label	starts_with	'$'	1	scope	DK1
-gen_scope_name.rs	key_spells_indexed_singleton	split	'.'	1	key	DK3
 iface_rtn_scope.rs	static_scoped_keys	contains	"::"	2	key	RS1
 lexscope/disp.rs	cur_context	strip_prefix	"$pkg$"	1	display	B3k
 lexscope/disp.rs	display_of	contains	'['	1	display	B3k
@@ -940,6 +945,9 @@ lexscope/elab.rs	walk_rtn_scopes	strip_prefix	'.'	1	scope	RS1
 lexscope/elab.rs	walk_rtn_scopes	strip_prefix	<inst>	1	scope	RS1
 lexscope/hier.rs	hier_resolve	split	'.'	1	scope	walk
 lexscope/hier.rs	is_hier_scope	starts_with	<probe>	1	key	DK3
+lexscope/hier.rs	key_spells_indexed_singleton	split	'.'	1	key	DK3
+lexscope/key.rs	has_func_segment	split	'.'	1	key	DK3
+lexscope/key.rs	has_func_segment	starts_with	"$func$"	1	key	DK3
 lexscope/mod.rs	cur_frame_routine_is_any	rsplit	'.'	1	scope	B3k
 lexscope/mod.rs	cur_frame_routine_is_any	strip_prefix	"$func$"	1	scope	B3k
 lexscope/mod.rs	cur_frame_routine_is_any	strip_prefix	"$itask$"	1	scope	B3k
@@ -997,6 +1005,7 @@ tests 98 tags {"display": 9, "key": 24, "scope": 37, "spelling": 28} units {"-":
 # element is a NewKey (R-G3: the type column moved, the row stays).
 # §5.2 Q-DECLKEY DK1-3 (2026-11-24, the read side): AtKey's own field (lexscope/key.rs) is a read key's text (KEY ; CODE I, NewKey's) ; ClkRefused.alias holds an AtKey
 # (held.rs:356, its one producer, was an `fq` read key: N11-3), so its row left (a retype to a key type) — KEYED-JUDGE5 5 -> 4, KEY 2 -> 3.
+# §5.2 Q-DECLKEY DK3-b (2026-11-27): decl_pos is a `BTreeMap<String, u32>` again (q7: a decl-position table keyed by the text gather_decl_positions mints, not a store ; CLASS / CODE / STORE kept)
 struct	file	field	type	CLASS	CODE	STORE
 Elaborator	lib.rs	symbols	Keyed<u32>	BINDING	V	KEYED-PLAN26
 Elaborator	lib.rs	bind_targets	BTreeMap<String, Vec<ast::ModuleInstance>>	NOT	DEF	-
@@ -1072,7 +1081,7 @@ Elaborator	lib.rs	task_table	BTreeMap<String, ast::TaskDef>	BINDING	R	ROUTINE
 Elaborator	lib.rs	rtn_pkg	BTreeMap<String, String>	BINDING	R	ROUTINE
 Elaborator	lib.rs	rtn_decl_scope	BTreeMap<String, ScopeRef>	BINDING	R	ROUTINE
 Elaborator	lib.rs	rtn_decl_genvars	BTreeMap<String, Vec<(NewKey, i64)>>	BINDING	R	ROUTINE
-Elaborator	lib.rs	decl_pos	Keyed<u32>	BINDING	V	KEYED-OTHER
+Elaborator	lib.rs	decl_pos	BTreeMap<String, u32>	BINDING	V	KEYED-OTHER
 Elaborator	lib.rs	decl_block_locals	std::collections::BTreeSet<String>	BINDING	V	-
 Elaborator	lib.rs	wide_param_bits	Bound<Keyed<ir::ConstVal>>	BINDING	V	KEYED-PLAN26
 Elaborator	lib.rs	inout_func_names	std::collections::BTreeSet<String>	BINDING	R	ROUTINE
@@ -1525,11 +1534,23 @@ ident=0 asserts=6
 #  NP19-7 LEAVE_PERMANENT (hbr_the_bridge_reads_are_pinned) reads SURF_LEAVE's id column only: a row given id L13 (or L0) with closes
 #         `permanent` by a table edit passes it — a deliberate edit, not an accident ; an L13 row's reader outside still needs an HBR row,
 #         an L0 row is not HBR's (the entry list skips id L0) ; and another id's closes is checked only to differ from `permanent`.
+# NOT-PROMISED (one shape a line ; measured by the controls of §5.2 Q-DECLKEY DK3-b, W/scopebind/dk3b/ctrl and m7):
+#  NP19-8 a `snapshot` call outside bound/undo.rs and frames_static_init.rs is pinned by no rule (D8: an HF count by position only):
+#         control D8 (`self.symbols.snapshot()` beside bind_iface_port's alias call) is seen by HF by position only (bind_iface_port's
+#         site 1, e5 -> e6) ; in a fn with no HF site by none (D8b: dynarr.rs dyn_blocking_special, every table passes).
+#  NP19-9 the window's end is pinned by HT-SURF, not by the compiler: a `Deref` (or `DerefMut`) impl for `Keyed` / `KeyedSet` written
+#         back compiles (D1: HT-SURF IMPL-TRAIT + BODY + SURF_ROWS NEW ROW only) ; a std map method or `.clone()` on a store outside
+#         lexscope is refused by the compiler (D2 D3 D5 D6: E0599).
+#  NP19-10 a text entry widened (`pub(super)` -> `pub(crate)`, D7) compiles ; it is seen by HT-SURF's rows and, at its first outside
+#         call, by HS / HSEG / HF (D7) — not by the compiler.
+#  NP19-11 a `pub(crate)` entry of lexscope respelled `pub` is pinned by no rule (M7 m_snap_pub: `Keyed::snapshot` made `pub`, every
+#         table passes): `lexscope` is a private module (lib.rs `mod lexscope;`), the two spellings have one reach, and HT-SURF's
+#         SURF_ROWS hold no visibility column (vis_wider counts both wider than the module).
+#  NP19-12 a table's `#` head line is read by no rule: H7's DK3-b line naming the unit of the row `block_local/mod.rs
+#         gather_decl_positions 1 pos` with `DK3-b` removed passes (M7 m_h7_unit: every table passes) ; a row's unit is a comment, no column.
+# §5.2 Q-DECLKEY DK3-b (2026-11-27): L11 and L12 CLOSED: frame_init_name_is_local_or_const reads DeclKey::has_func_segment (no found_text) ; key_spells_indexed_singleton moved into lexscope/hier.rs (found_text pub(super), indexed_gen_singleton private -> bool) — 3 rows gone
 file	fn	entry	sink	count
 block_local_feed.rs	feed_scoped_block_locals	names_with_pkg_var_aliases	LOCAL:shadow_names#3	1
-frames_static_init.rs	frame_init_name_is_local_or_const	found_text	RECV:.split	1
-gen_scope_name.rs	key_spells_indexed_singleton	found_text	RECV:.split	1
-gen_scope_name.rs	key_spells_indexed_singleton	indexed_gen_singleton	CLOSURE>ARG:({..}).find_map	1
 generate.rs	register_gen_func	cur_gen_rtn_key	OTHER:let-pattern	1
 generate.rs	register_gen_task	cur_gen_rtn_key	OTHER:let-pattern	1
 iface_inst.rs	elaborate_iface_instances	names_with_pkg_var_aliases	LOCAL:shadow_names#2	1
@@ -1555,7 +1576,7 @@ dynarr.rs	dyn_blocking_special	bare_name_of_net	LOCAL:tid#2	1
 # §5.2 Q-DECLKEY DK1-5b (2026-11-25): cur_prefix_text 3 -> 0 (L1 closed), key_text 6 -> 0 (L7 closed), + names_with_pkg_var_aliases 4 (L13)
 # §5.2 Q-DECLKEY DK3-a (2026-11-26): at_text 1 -> 0 (L9 closed), display_of_key_text 1 -> 0 (L4 closed), found_text 3 -> 2 (L11: ports.rs
 # bind_iface_port's read moved in as alias_iface_port), + bare_name_of_net 1 (L13: dynarr.rs dyn_blocking_special) — 13 -> 11
-{"bare_name_of_net": 1, "cur_gen_rtn_key": 2, "found_text": 2, "indexed_gen_singleton": 1, "names_with_pkg_var_aliases": 4, "walk_rtn_scopes": 1}
+{"bare_name_of_net": 1, "cur_gen_rtn_key": 2, "names_with_pkg_var_aliases": 4, "walk_rtn_scopes": 1}
 == HC_ARGS
 # HC ARGS (LS2a ; DELTA11 R4 N-8, DELTA12 S2 r4): keyed by SURF_ENTER's to-scope rows — the token text of
 # the argument at that parameter in every call of the entry, crate-wide (lexscope included), by (file, fn,
@@ -1727,8 +1748,8 @@ struct_arm.rs	struct_arm_context	cur_under_func_or_itask	1
 entries=6 sites=6
 == HXF
 # HXF (§5.2 Q-DECLKEY DK1-5a (2026-11-25), DELTA16 R-H12 note 2): every call of `KeyedSet::extend_found` outside lexscope, by (file, fn, entry) with
-# a count. extend_found moves a found key's String into a KeyedSet that window w9 still opens to text (key.rs Deref / DerefMut):
-# covered by w9's NOT-PROMISED line until DK3-b deletes the window ; a new caller is a new found-key text in a text-open set.
+# a count. extend_found moves a found key's String into a KeyedSet ; window w9 (key.rs Deref / DerefMut), which opened the set to text,
+# is deleted since §5.2 Q-DECLKEY DK3-b (a found key's text enters a set only by this typed entry) ; a new caller is a new found key into a set.
 file	fn	entry	count
 frames_static_init.rs	emit_frame_static_prologue	extend_found	3
 == HXF_COUNTS

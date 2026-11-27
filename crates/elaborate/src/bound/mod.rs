@@ -154,7 +154,7 @@ impl<T> Bound<T> {
     }
 }
 
-// `repr(transparent)`: a guarded field is the size of its map.
+// `repr(transparent)`: a `Bound<T>` is the size of its `T` (asserted on the std maps the stores wrap).
 const _: () = {
     use std::mem::size_of;
     assert!(size_of::<Bound<BTreeMap<String, i64>>>() == size_of::<BTreeMap<String, i64>>());

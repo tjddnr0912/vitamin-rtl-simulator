@@ -17,7 +17,7 @@
 //! (LS1 part 7 replaces it by IN-TOTAL, below).
 //! I-OUT. Every lexscope fn that takes the Elaborator (a receiver in `impl Elaborator`, or
 //! `Self` in a callback) is on the list E, its body pinned by OUT-F (`self.<field>` whose
-//! field type is not a lexscope type ; a WINDOW type's store counts as not one), OUT-C (calls of fns not defined in lexscope), OUT-M
+//! field type is not a lexscope type ; a store's type, `Keyed` / `KeyedSet` (STORE_TYPES), counts as not one), OUT-C (calls of fns not defined in lexscope), OUT-M
 //! (macro calls) by (fn, name, count) ; FLOW (`in`, `payload`, `text:<sink>`) is a hand column
 //! (its `text:` parts checked by E3 since §5.2 Q-DECLKEY DK1-6, below).
 //!
@@ -102,12 +102,13 @@
 //! symbol: NP-17) ; a field behind a macro type or an associated type (IN-UNKNOWN, loud) ; a
 //! `carried` parameter read through an alias (`let x = &p; x.f`: WHOLE reads the identifier).
 //!
-//! The rule §5.2 Q-DECLKEY DK1-1 adds (R-F10, premise10 N10-9): WINDOW — a trait impl in the file
-//! set off ALLOWED_IMPLS passes only as a row of WINDOW naming its type and its trait, the trait one
-//! of WINDOW_TRAITS (`Deref`, `DerefMut`), with the unit that deletes it and the date it came ; a
-//! row off WINDOW_TRAITS fails WINDOW-TRAIT, one with no unit WINDOW-UNIT, one no impl matches is
-//! STALE. Its rows are the stores' text door w9 (`Keyed`, `KeyedSet`, deleted at DK3-b) ; the
-//! list does not widen ALLOWED_IMPLS (a `Deref` on any other type still fails IMPL-TRAIT, NP10-1).
+//! WINDOW, the rule §5.2 Q-DECLKEY DK1-1 added (R-F10, premise10 N10-9), is deleted with the window
+//! at DK3-b: no trait impl off ALLOWED_IMPLS is admitted, `Deref` / `DerefMut` on `Keyed` /
+//! `KeyedSet` included (IMPL-TRAIT) — NP10-1's allowance (a trait for the ONE type a WINDOW row named)
+//! ends: no allow list exists. What the window's rows also did stays (DK3-b round 2): a field whose type
+//! names a store type (STORE_TYPES: `Keyed`, `KeyedSet`) is no lexscope field, so every read of it by a
+//! tier-E fn, through a text entry or a typed one, is an OUT-F row by (fn, field, count), both store
+//! types alike ; a STORE_TYPES name off SURF_VOCAB is STALE.
 //!
 //! The rule §5.2 Q-DECLKEY DK1-6 adds (DELTA18 G2.4 E1-E4, R-J3, as corrected by R-J7 (a)):
 //! OUTCALL — every call from a fn of the file set (any tier, closures and a macro's expression
@@ -246,9 +247,9 @@ const ALLOWED_ATTRS: &[&str] = &[
 ];
 const ALLOWED_DERIVES: &[&str] = &["Clone", "Default"];
 const ALLOWED_IMPLS: &[&str] = &["Clone", "Default", "Debug", "Drop", BOUNDARY_TRAIT];
-/// WINDOW (§5.2 Q-DECLKEY DK1-1, R-F10 / premise10 N10-9): the traits off ALLOWED_IMPLS a row of
-/// WINDOW may admit, for the ONE type that row names ; not a wider allow list (NP10-1).
-const WINDOW_TRAITS: &[&str] = &["Deref", "DerefMut"];
+/// OUT-F (§5.2 Q-DECLKEY DK3-b round 2): the store types of lexscope/key.rs ; a field whose type names
+/// one is counted (no lexscope field), whatever its value type: the store's reads stay pinned by field.
+const STORE_TYPES: &[&str] = &["Keyed", "KeyedSet"];
 const STD_ROOTS: &[&str] = &["std", "core", "alloc"];
 const FLOWS: &[&str] = &["in", "payload"];
 /// OUTCALL's fixtures (§5.2 Q-DECLKEY DK1-6): NO1 .. NO_LAST each fail as FIX_EXPECT pins.
@@ -743,8 +744,6 @@ struct Cfg {
     outgoing: BTreeMap<String, String>,
     /// item, kind, name, count, flow
     e: Vec<Vec<String>>,
-    /// WINDOW: type, trait, deleting unit, since (a dated, named admission of one trait impl)
-    window: Vec<Vec<String>>,
     /// OUTCALL: item, callee, count, class, closes
     outcall: Vec<Vec<String>>,
     /// OUTCALL's blind list: name, why (`std` | `module`)
@@ -821,7 +820,6 @@ fn cfg_with(prefix: &str, over: &BTreeMap<String, String>) -> Cfg {
             .map(|r| (r[0].clone(), r[1].clone()))
             .collect(),
         e: rows_of(&get(&format!("{prefix}_E")), 5, "E"),
-        window: rows_of(&get(&format!("{prefix}_WINDOW")), 4, "WINDOW"),
         outcall: rows_of(&get(&format!("{prefix}_OUTCALL")), 5, "OUTCALL"),
         outcall_blind: rows_of(&get(&format!("{prefix}_OUTCALL_BLIND")), 2, "OUTCALL_BLIND"),
         outcall_sinks: one(&format!("{prefix}_OUTCALL_SINKS")),
@@ -3013,8 +3011,6 @@ fn addr_fn_check(eng: &mut Eng<'_>, c: &AddrCensus) {
 struct EVis<'a> {
     defs: &'a Defs,
     cfg_vocab: &'a BTreeMap<String, String>,
-    /// WINDOW's rows: a field whose type names one of their types is read through the window
-    cfg_window: &'a [Vec<String>],
     f: BTreeMap<String, usize>,
     c: BTreeMap<String, usize>,
     m: BTreeMap<String, usize>,
@@ -3031,11 +3027,8 @@ impl EVis<'_> {
         };
         let mut names = BTreeSet::new();
         type_names(t, &mut names);
-        // a store of the window (WINDOW) is no lexscope field: its map is read through Deref
-        if names
-            .iter()
-            .any(|x| self.cfg_window.iter().any(|w| &w[0] == x))
-        {
+        // a store (STORE_TYPES) is no lexscope field: its reads are counted, a Keyed<V> and a KeyedSet alike
+        if names.iter().any(|x| STORE_TYPES.contains(&x.as_str())) {
             return false;
         }
         names.iter().all(|x| {
@@ -3396,7 +3389,6 @@ struct Eng<'a> {
     cb_used: BTreeSet<usize>,
     interior_used: BTreeSet<usize>,
     enums_seen: BTreeSet<String>,
-    window_used: BTreeSet<usize>,
     plan: bool,
 }
 
@@ -3413,7 +3405,6 @@ impl Eng<'_> {
             cb_used: BTreeSet::new(),
             interior_used: BTreeSet::new(),
             enums_seen: BTreeSet::new(),
-            window_used: BTreeSet::new(),
             plan,
         }
     }
@@ -4785,21 +4776,10 @@ fn impl_item<'a>(
             why.push(("IMPL-TRAIT".into(), "a negative impl".into()));
         }
         if !ALLOWED_IMPLS.contains(&tr.as_str()) {
-            // WINDOW: a row naming this type and this trait (a trait of WINDOW_TRAITS) admits it
-            let row = eng
-                .cfg
-                .window
-                .iter()
-                .position(|r| r[0] == ty && r[1] == tr && WINDOW_TRAITS.contains(&tr.as_str()));
-            match row {
-                Some(i) if neg.is_none() => {
-                    eng.window_used.insert(i);
-                }
-                _ => why.push((
-                    "IMPL-TRAIT".into(),
-                    format!("impl {} for {}", npath(path), nt(&im.self_ty)),
-                )),
-            }
+            why.push((
+                "IMPL-TRAIT".into(),
+                format!("impl {} for {}", npath(path), nt(&im.self_ty)),
+            ));
         }
         if !eng.defs.defined_type(&ty) {
             why.push((
@@ -5262,7 +5242,6 @@ fn e_fn(eng: &mut Eng<'_>, file: &str, item: &str, block: &syn::Block) {
     let mut v = EVis {
         defs: &eng.defs,
         cfg_vocab: &eng.cfg.vocab,
-        cfg_window: &eng.cfg.window,
         f: BTreeMap::new(),
         c: BTreeMap::new(),
         m: BTreeMap::new(),
@@ -6546,34 +6525,14 @@ fn stale_checks(eng: &mut Eng<'_>) {
             eng.fail("-", &e, "-", "STALE", "an ENUMS row names no visible enum");
         }
     }
-    let window = eng.cfg.window.clone();
-    for (i, w) in window.iter().enumerate() {
-        let item = format!("{} for {}", w[1], w[0]);
-        if !WINDOW_TRAITS.contains(&w[1].as_str()) {
+    for t in STORE_TYPES {
+        if !eng.cfg.vocab.contains_key(*t) {
             eng.fail(
                 "-",
-                &item,
-                "IMPL",
-                "WINDOW-TRAIT",
-                format!("a WINDOW row's trait off {WINDOW_TRAITS:?}"),
-            );
-        }
-        if w[2].is_empty() || w[2] == "-" {
-            eng.fail(
+                t,
                 "-",
-                &item,
-                "IMPL",
-                "WINDOW-UNIT",
-                "a WINDOW row names no deleting unit",
-            );
-        }
-        if !eng.window_used.contains(&i) {
-            eng.fail(
-                "-",
-                &item,
-                "IMPL",
                 "STALE",
-                "a WINDOW row matches no impl of the file set",
+                "a STORE_TYPES name is no SURF_VOCAB row",
             );
         }
     }

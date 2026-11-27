@@ -36,7 +36,7 @@ impl Elaborator<'_> {
                     } else {
                         format!("{acc}.{label}")
                     };
-                    if self.gen_singleton_labels.contains(&key) {
+                    if self.gen_singleton_labels.contains_text(&key) {
                         label.to_string()
                     } else {
                         seg.to_string()
@@ -247,7 +247,7 @@ impl Elaborator<'_> {
     pub(crate) fn net_name_table(&self) -> Vec<Shown> {
         let n_nets = self.nets.len();
         let mut names = vec![String::new(); n_nets];
-        for (fq, &id) in self.symbols.iter() {
+        for (fq, &id) in self.symbols.iter_text() {
             if let Some(slot) = names.get_mut(id as usize) {
                 if slot.is_empty() {
                     *slot = self.display_of_key_text(fq);
@@ -274,7 +274,7 @@ impl Elaborator<'_> {
     /// lvalue kind lvalue.rs, the multi-driver netdecl.rs) ; `None` when no key holds it (each caller prints `#<id>`).
     pub(crate) fn net_key_shown(&self, net_id: u32) -> Option<Shown> {
         self.symbols
-            .iter()
+            .iter_text()
             .find(|(_, &id)| id == net_id)
             .map(|(n, _)| Shown(n.clone()))
     }

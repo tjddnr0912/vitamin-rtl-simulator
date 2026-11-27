@@ -25,8 +25,8 @@
 //! (`walk_scopes_key` and its forms, private to `walk.rs` since §5.2 Q-DECLKEY DK2), reading the
 //! scope texts as this module's fields, and the named entries every scoped lookup calls, one per
 //! hit set ; since DK1-4b the walks hand `hit` an [`AtKey`] and return a [`DeclKey`]. The hierarchical
-//! resolver is here too (DK1-5a), in `hier.rs`: `hier_resolve`, two of the generate-spelling
-//! helpers it asks and its scope question `is_hier_scope`.
+//! resolver is here too (DK1-5a), in `hier.rs`: `hier_resolve`, the generate-spelling helpers (two it
+//! asks ; `key_spells_indexed_singleton`, scope.rs's, since DK3-b) and its scope question `is_hier_scope`.
 
 use std::collections::{BTreeMap, HashMap};
 use std::hash::{BuildHasherDefault, DefaultHasher};
@@ -41,10 +41,10 @@ mod key;
 mod tests;
 mod walk;
 
-use key::key_text;
 pub(crate) use key::{
-    at_same, found_text, key_in, key_same, key_show, AtKey, DeclKey, Keyed, KeyedSet, NewKey,
+    at_same, key_in, key_same, key_show, AtKey, DeclKey, Keyed, KeyedSet, NewKey,
 };
+use key::{found_text, key_text};
 
 /// An interned scope text. Private to the module: no id leaves it.
 #[derive(Clone)]

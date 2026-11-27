@@ -8,14 +8,14 @@ use crate::*;
 /// U3 (SIDE8): every map but `params`, cloned whole before the instance-array prepass
 /// binds a child's header at the parent's prefix, and put back after it.
 pub(crate) type SideSnap = (
-    BTreeMap<String, ir::ConstVal>,
-    BTreeMap<String, DeclRange>,
-    BTreeMap<String, DeclRange>,
-    BTreeMap<String, String>,
-    BTreeMap<String, f64>,
-    BTreeMap<String, (u32, bool)>,
-    BTreeMap<String, i64>,
-    BTreeSet<String>,
+    Keyed<ir::ConstVal>,
+    Keyed<DeclRange>,
+    Keyed<DeclRange>,
+    Keyed<String>,
+    Keyed<f64>,
+    Keyed<(u32, bool)>,
+    Keyed<i64>,
+    KeyedSet,
 );
 
 impl Elaborator<'_> {
@@ -83,28 +83,28 @@ impl Elaborator<'_> {
     /// U3: the eight maps the prepass puts back, in SIDE8's order.
     pub(crate) fn side_snapshot(&self) -> SideSnap {
         (
-            self.wide_param_bits.clone(),
-            self.param_range.clone(),
-            self.hier_param_range.clone(),
-            self.str_param_raw.clone(),
-            self.real_param_val.clone(),
-            self.param_meta.clone(),
-            self.hier_params.clone(),
-            self.param_type_guessed.clone(),
+            self.wide_param_bits.snapshot(),
+            self.param_range.snapshot(),
+            self.hier_param_range.snapshot(),
+            self.str_param_raw.snapshot(),
+            self.real_param_val.snapshot(),
+            self.param_meta.snapshot(),
+            self.hier_params.snapshot(),
+            self.param_type_guessed.snapshot(),
         )
     }
 
     /// U3: whole-map put-back of [`Self::side_snapshot`] (assigned in the same order).
     pub(crate) fn side_restore(&mut self, side: SideSnap) {
         (
-            **self.wide_param_bits.w(),
-            **self.param_range.w(),
-            **self.hier_param_range.w(),
-            **self.str_param_raw.w(),
-            **self.real_param_val.w(),
-            **self.param_meta.w(),
-            **self.hier_params.w(),
-            **self.param_type_guessed.w(),
+            *self.wide_param_bits.w(),
+            *self.param_range.w(),
+            *self.hier_param_range.w(),
+            *self.str_param_raw.w(),
+            *self.real_param_val.w(),
+            *self.param_meta.w(),
+            *self.hier_params.w(),
+            *self.param_type_guessed.w(),
         ) = side;
     }
 

@@ -560,7 +560,7 @@ impl Elaborator<'_> {
     /// must be treated as a MISS by the dotted-name consumers, so the
     /// reference stays loud. Single-segment lookups never call this.
     pub(crate) fn dotted_hit_is_pkg_alias(&self, joined: &str) -> bool {
-        !self.pkg_var_aliases.is_empty()
+        !self.pkg_var_aliases.has_no_key()
             && self
                 .walk_key_net(joined)
                 .is_some_and(|k| self.pkg_var_aliases.contains_found(&k))
@@ -574,7 +574,7 @@ impl Elaborator<'_> {
     /// reads see the constant, so a write/array-view resolving the alias
     /// would be a SILENT divergence. Callers turn a `true` into a loud path.
     pub(crate) fn bare_hit_is_shadowed_pkg_alias(&self, name: &str) -> bool {
-        !self.pkg_var_aliases.is_empty()
+        !self.pkg_var_aliases.has_no_key()
             && self
                 .walk_key_net(name)
                 .is_some_and(|k| self.pkg_var_aliases.contains_found(&k))

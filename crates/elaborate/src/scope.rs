@@ -441,9 +441,7 @@ impl Elaborator<'_> {
         // self` and must never be the site that speaks.
         if name.as_bytes().contains(&b'.')
             && name.as_bytes().contains(&b'[')
-            && self
-                .key_spells_indexed_singleton(&key, name.split('.').count())
-                .is_some()
+            && self.key_spells_indexed_singleton(&key, name.split('.').count())
         {
             return None;
         }

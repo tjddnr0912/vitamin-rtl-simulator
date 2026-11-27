@@ -8,7 +8,7 @@
 //! | `a.expr_kind_matchers.<crate>` | functions that pattern-match 3 or more distinct `ExprKind` variants, per crate, outside `hdl_ast::walk` (the one sanctioned child enumeration) |
 //! | `b.const_option_fns` | `pub(crate) fn` in `elaborate/src/const_*.rs` returning `Option` |
 //! | `c.calls.<name>` | call sites of `const_eval_in_scope`, `const_eval_u32`, `const_self_width` in `elaborate/src` |
-//! | `d.elaborator_string_keyed` | `Elaborator` fields typed `BTreeMap`/`HashMap`/`BTreeSet`/`HashSet` keyed by `String` (or a store type of the window w9, `Keyed` / `KeyedSet`) |
+//! | `d.elaborator_string_keyed` | `Elaborator` fields typed `BTreeMap`/`HashMap`/`BTreeSet`/`HashSet` keyed by `String` (or a key store type, `Keyed` / `KeyedSet`: a private `String`-keyed map / set) |
 //! | `e.sim_engine_elaborate_reexports` | items `sim-engine` re-exports with `pub use elaborate::…` |
 //!
 //! The scanner parses every file with `syn` (full syntax), so a comment or a string
@@ -511,9 +511,9 @@ fn string_keyed(t: &syn::Type) -> bool {
         };
         return matches!(a.args.first(), Some(syn::GenericArgument::Type(inner)) if string_keyed(inner));
     }
-    // §5.2 Q-DECLKEY DK1-1: a store of window w9 (`Keyed<_>` / `KeyedSet`, `lexscope/key.rs`) holds
-    // a `BTreeMap<String, _>` / `BTreeSet<String>` behind `Deref`: still string-keyed, by its exact
-    // name, until DK3-b deletes the window.
+    // §5.2 Q-DECLKEY DK1-1: a key store (`Keyed<_>` / `KeyedSet`, `lexscope/key.rs`) holds a
+    // `BTreeMap<String, _>` / `BTreeSet<String>` privately (its `Deref` window deleted at DK3-b):
+    // still string-keyed, by its exact name.
     if last.ident == "Keyed" || last.ident == "KeyedSet" {
         return true;
     }

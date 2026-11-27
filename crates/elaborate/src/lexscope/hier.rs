@@ -1,29 +1,30 @@
 //! The hierarchical resolver (§5.2 Q-DECLKEY DK1-5a): the IEEE 1800 §23.6 commit-to-scope walk of a
 //! dotted path (`hier_resolve`), the storage key it builds inside the committed scope
-//! (`hier_key_within`), and two of the §27.4 / §27.5 generate-spelling helpers they ask
-//! (`indexed_gen_singleton`, `singleton_scope_key`), with the scope question the walk asks
-//! (`is_hier_scope`, X16, private) — moved here whole from `hier.rs` and
-//! `gen_scope_name.rs`. They are Elaborator methods (tier E), so every caller's tokens are unchanged ;
+//! (`hier_key_within`), and the §27.4 / §27.5 generate-spelling helpers (`indexed_gen_singleton`,
+//! `singleton_scope_key`, which they ask ; `key_spells_indexed_singleton`, scope.rs's, since DK3-b), with the
+//! scope question the walk asks (`is_hier_scope`, X16, private) — moved here whole from `hier.rs` and
+//! `gen_scope_name.rs`. They are Elaborator methods (tier E), so the move changed no caller's tokens ;
 //! a carried scope's text is read here through the module's own [`super::Scopes::scope_text`], private
 //! since this unit, so no bridge is left for them outside.
 //!
 //! WHAT LEAVES AS TEXT, AND UNTIL WHEN:
-//! - `indexed_gen_singleton`'s return, the label key `level.label` of a singleton generate scope:
-//!   LEAVE L12, read by `key_spells_indexed_singleton` (`gen_scope_name.rs`) ; closes at DK3-b, where that
-//!   reader becomes an entry of this module and this fn goes private.
-//! - `hier_resolve`'s `table` is the caller's text-keyed map (`&BTreeMap<String, V>`, reached through
-//!   window w9), and eleven store reads here go through the window by text, inside the module, until
-//!   DK3-b deletes it: `gen_singleton_labels.contains` in `indexed_gen_singleton` and in
-//!   `singleton_scope_key` (2) ; `pkg_var_aliases.contains_key` x2 and `symbols.contains_key` in
-//!   `hier_resolve` (3) ; `symbols` / `hier_params` / `wide_param_bits` `.contains_key` in
-//!   `hier_key_within` (3) ; and the same three stores' `.range` scans in `is_hier_scope` (3).
+//! - nothing of `indexed_gen_singleton` (private, `bool` since §5.2 Q-DECLKEY DK3-b): LEAVE L12, its
+//!   label-key return, closed when its one outside reader, `key_spells_indexed_singleton`
+//!   (`gen_scope_name.rs`'s), moved in here and became a `bool` entry.
+//! - `hier_resolve`'s `table` is a store (`&Keyed<V>`, since §5.2 Q-DECLKEY DK3-b deleted window w9),
+//!   read by `get_text` ; the eleven store reads by text here are `key.rs`'s `pub(super)` text entries,
+//!   inside the module: `gen_singleton_labels.contains_text` in `indexed_gen_singleton` and in
+//!   `singleton_scope_key` (2) ; `pkg_var_aliases.contains_text` x2 and `symbols.contains_text` in
+//!   `hier_resolve` (3) ; `symbols` / `hier_params` / `wide_param_bits` `.contains_text` in
+//!   `hier_key_within` (3) ; and the same three stores' `.range_text` scans in `is_hier_scope` (3).
 //! - ONE call hands text to a fn outside the module: `Self::gen_seg_label(seg)` in
 //!   `indexed_gen_singleton` passes its own entered `seg` through (no key or scope text is formed before
-//!   it). It is NOT pinned by class until DK1-6 (the outward-call table SURF_OUTCALL): until then a
-//!   second such call is caught only as a new OUT-C row and a BODY re-pin of the scope surface.
+//!   it). It is pinned by class since DK1-6: SURF_OUTCALL's row `indexed_gen_singleton · gen_seg_label
+//!   · 1` (a second such call FAILS OUTCALL) ; its OUT-C row and the BODY pin stay change detection.
 //! - `hier_key_within`, `singleton_scope_key` and `is_hier_scope` are private: their text returns and
 //!   parameters stay inside.
 
+use super::{found_text, DeclKey, Keyed};
 use crate::Elaborator;
 
 impl Elaborator<'_> {
@@ -40,20 +41,33 @@ impl Elaborator<'_> {
     /// sets separate them.
     ///
     /// `level` is the fully-qualified scope the segment is resolved IN; `seg` is the
-    /// segment exactly as the source wrote it. `Some(label key)` means this spelling is
+    /// segment exactly as the source wrote it. `true` means this spelling is
     /// not the scope's name, so the resolver declines and the reader stays loud
     /// (MEASURED: `gi[0].x` read `3` at exit 0 where iverilog refuses to bind
     /// `gi['sd0].x` and verilator cannot find `gi[0]` — net read and write, localparam,
     /// `$bits`, event control, element and part select, cross-instance, nested, and an
     /// unnamed `genblk1`).
-    pub(crate) fn indexed_gen_singleton(&self, level: &str, seg: &str) -> Option<String> {
-        let label = Self::gen_seg_label(seg)?;
+    fn indexed_gen_singleton(&self, level: &str, seg: &str) -> bool {
+        let Some(label) = Self::gen_seg_label(seg) else {
+            return false;
+        };
         let key = if level.is_empty() {
             label.to_string()
         } else {
             format!("{level}.{label}")
         };
-        self.gen_singleton_labels.contains(&key).then_some(key)
+        self.gen_singleton_labels.contains_text(&key)
+    }
+
+    /// Did the SOURCE spell a segment of an already-resolved storage `key` with a singleton
+    /// generate scope's `[0]` storage index (`true`: one such segment)? `user_segs` is how many
+    /// TRAILING segments of `key` the source wrote — the leading ones come from the
+    /// reader's own prefix and are vita's spelling, never the design's, so they are not
+    /// judged here.
+    pub(crate) fn key_spells_indexed_singleton(&self, key: &DeclKey, user_segs: usize) -> bool {
+        let segs: Vec<&str> = found_text(key).split('.').collect();
+        let start = segs.len().saturating_sub(user_segs);
+        (start..segs.len()).any(|i| self.indexed_gen_singleton(&segs[..i].join("."), segs[i]))
     }
 
     /// The `[0]` STORAGE key of the SINGLETON generate scope a BARE label names in
@@ -82,7 +96,7 @@ impl Elaborator<'_> {
         } else {
             format!("{level}.{seg}")
         };
-        if !self.gen_singleton_labels.contains(&label) {
+        if !self.gen_singleton_labels.contains_text(&label) {
             return None;
         }
         let g0 = format!("{label}[0]");
@@ -103,7 +117,7 @@ impl Elaborator<'_> {
         &self,
         prefix: &crate::ScopeRef,
         path: &[String],
-        table: &std::collections::BTreeMap<String, V>,
+        table: &Keyed<V>,
     ) -> Option<V> {
         // A2b (adversarial sound #2): a hierarchical reference FROM package
         // scope (a `$pkg$…` prefix = the package pre-sweep, the only proc
@@ -134,7 +148,7 @@ impl Elaborator<'_> {
             // a design may name it — both oracles refuse to bind `gi[0].x`. Committed-
             // unresolved, ahead of every arm below, so the reader stays loud instead
             // of reaching the scope through its storage spelling.
-            if self.indexed_gen_singleton(&level, first).is_some() {
+            if self.indexed_gen_singleton(&level, first) {
                 return None;
             }
             // (a) leading segment names a child SCOPE (module/genblock instance) here.
@@ -147,10 +161,10 @@ impl Elaborator<'_> {
                 // not a declaration in the importing scope), so a HIERARCHICAL
                 // path must never resolve through it (iverilog: "Unable to
                 // bind"). Committed-unresolved → the caller stays loud.
-                if self.pkg_var_aliases.contains_key(&full) {
+                if self.pkg_var_aliases.contains_text(&full) {
                     return None;
                 }
-                return table.get(&full).cloned(); // committed: Some=hit, None=unresolved
+                return table.get_text(&full).cloned(); // committed: Some=hit, None=unresolved
             }
             // (b) SINGLETON generate block: vita names a named `if`/`begin` block `g[0]`,
             // but the hierarchical name is the bare `g` (IEEE: the implicit [0] is not
@@ -170,14 +184,14 @@ impl Elaborator<'_> {
                 } else {
                     self.hier_key_within(&base0, &path[1..])?
                 };
-                if self.pkg_var_aliases.contains_key(&full) {
+                if self.pkg_var_aliases.contains_text(&full) {
                     return None; // same §26.3 rule as (a)
                 }
-                return table.get(&full).cloned();
+                return table.get_text(&full).cloned();
             }
             // (c) leading segment names a NET (not a scope) here: `.member` on a plain
             // net is unsupported (committed → unresolved, loud).
-            if self.symbols.contains_key(&base) {
+            if self.symbols.contains_text(&base) {
                 return None;
             }
             // not found at this level → walk one scope outward.
@@ -228,7 +242,7 @@ impl Elaborator<'_> {
         for (i, seg) in rest.iter().enumerate() {
             // §27.5, at every depth: a singleton generate scope named with its `[0]`
             // storage index (`u.gi[0].x`) is not a name the design may write.
-            if self.indexed_gen_singleton(&cur, seg).is_some() {
+            if self.indexed_gen_singleton(&cur, seg) {
                 return None;
             }
             let plain = format!("{cur}.{seg}");
@@ -236,9 +250,9 @@ impl Elaborator<'_> {
                 // LEAF: the caller's `table` decides whether this is a hit, so hand
                 // back the plain spelling unless only the `[0]` scope spelling
                 // exists (a whole-scope reference, e.g. a genblock-typed leaf).
-                if self.symbols.contains_key(&plain)
-                    || self.hier_params.contains_key(&plain)
-                    || self.wide_param_bits.contains_key(&plain)
+                if self.symbols.contains_text(&plain)
+                    || self.hier_params.contains_text(&plain)
+                    || self.wide_param_bits.contains_text(&plain)
                 {
                     return Some(plain);
                 }
@@ -269,19 +283,19 @@ impl Elaborator<'_> {
         let probe = format!("{base}.");
         let hit = |k: &String| k.starts_with(&probe);
         self.symbols
-            .range(probe.clone()..)
+            .range_text(probe.clone()..)
             .next()
             .is_some_and(|(k, _)| hit(k))
             || self
                 .hier_params
-                .range(probe.clone()..)
+                .range_text(probe.clone()..)
                 .next()
                 .is_some_and(|(k, _)| hit(k))
             // A child whose only parameter is wider than i64 lives in the wide side
             // map alone; without this arm it was not a scope at all.
             || self
                 .wide_param_bits
-                .range(probe.clone()..)
+                .range_text(probe.clone()..)
                 .next()
                 .is_some_and(|(k, _)| hit(k))
     }
