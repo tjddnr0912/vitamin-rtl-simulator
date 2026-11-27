@@ -3,7 +3,7 @@
 //! because the base folds to a Const (not a net) and `norm_offset_if_net`'s
 //! `lookup_net_scoped` returned `None` → the declared LSB (8) was never subtracted
 //! → silent X. The declared range is recorded in `param_range` (resolved by the
-//! SAME `walk_scopes` as the param value/meta) and normalized via
+//! SAME outward walk as the param value/meta, `walk_scopes_key`) and normalized via
 //! `norm_offset_for_range` — the param twin of a net's `norm_offset_for_net`. A
 //! zero-LSB param (`[N:0]`) and the whole-param read are byte-identical (no entry).
 //!

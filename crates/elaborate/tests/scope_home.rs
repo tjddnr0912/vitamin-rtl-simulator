@@ -118,7 +118,10 @@
 //!   unit — L2 / L3 at RS1 ; L11 / L12 closed at DK3-b — may only fall ; L13, the permanent class of
 //!   bare declared names (R-K3 q6), takes a row only with the unit that names it, as
 //!   `bare_name_of_net`'s at §5.2 Q-DECLKEY DK3-a) ; and each SURF_LEAVE row closes `permanent`
-//!   exactly when its id is one of `LEAVE_PERMANENT` (L0, L13 ; NP19-7).
+//!   exactly when its id is one of `LEAVE_PERMANENT` (L0, L13 ; NP19-7). §5.2 Q-DECLKEY DK4: the
+//!   row's end in code, `HBR_END` (R's three reads, RS1's, and L13's five) and `LEAVE_IDS_END`
+//!   (L0, L2, L3, L13): a read off it or a SURF_LEAVE id off it fails `HBR END` by name, a
+//!   re-pinned table or not.
 //! - HC ARGS for every SURF_ENTER row of role to-scope, the token text of the argument at that
 //!   parameter in every call of the entry, crate-wide, by (file, fn, callee, tokens) with a
 //!   count (DELTA11 R4 N-8, DELTA12 S2 r4) ; the entry's name must be unique in the crate.
@@ -127,6 +130,11 @@
 //!   PLAN8 H2 (4)), the argument at that parameter, the same way.
 //! - HC CARRY (LS3, PLAN8 H2 (c)) every call of `scope_carry` outside lexscope by (file, fn,
 //!   SINK) with a count, SINK as HBR's ; a LOCAL sink (a carry bound by `let`) is pinned 0.
+//! - HSHOW / HCALL (§5.2 Q-DECLKEY DK4) the calls outside lexscope, by (file, fn, entry) with a
+//!   count, of `key_show` / `show_miss` (HSHOW: every display site, wherever its Shown goes) and
+//!   of `hit_clk_refused` / `snapshot` (HCALL: 0 and 9) ; a row with no site is STALE.
+//! - HKT (§5.2 Q-DECLKEY DK4) the key types and stores of lexscope/key.rs by shape (fields,
+//!   attributes), every trait impl for one of them, and every `zn!` line with its trait list.
 //!
 //! A difference between a census and its table fails with the row and what to do: a NEW
 //! row names the unit that owns it (the row of ROADMAP §5.2 that adds it) and enters this
@@ -7226,7 +7234,139 @@ fn hbr_the_bridge_reads_are_pinned() {
             ));
         }
     }
+    msgs.extend(hbr_end_check(&rows, &surf_rows("SURF_LEAVE")));
     finish("HBR", &msgs);
+}
+
+/// §5.2 Q-DECLKEY DK4 (DELTA19 H4 (1), R-K3 q6): the row's end, `HBR == R + the permanent class`,
+/// in code beside the table — R's three reads (RS1, Q-RTNSCOPE: L3 cur_gen_rtn_key 2, L2
+/// walk_rtn_scopes 1) and L13's five (names_with_pkg_var_aliases 4, bare_name_of_net 1), by (id,
+/// file, fn, entry, count). A re-pinned HBR table does not move it: a sixth L13 reader, a fourth R
+/// read or a moved count fails `HBR END` by name.
+const HBR_END: &[(&str, &str, &str, &str, usize)] = &[
+    (
+        "L3",
+        "generate.rs",
+        "register_gen_func",
+        "cur_gen_rtn_key",
+        1,
+    ),
+    (
+        "L3",
+        "generate.rs",
+        "register_gen_task",
+        "cur_gen_rtn_key",
+        1,
+    ),
+    ("L2", "package.rs", "resolve_rtn_key", "walk_rtn_scopes", 1),
+    (
+        "L13",
+        "block_local_feed.rs",
+        "feed_scoped_block_locals",
+        "names_with_pkg_var_aliases",
+        1,
+    ),
+    (
+        "L13",
+        "iface_inst.rs",
+        "elaborate_iface_instances",
+        "names_with_pkg_var_aliases",
+        1,
+    ),
+    (
+        "L13",
+        "instance.rs",
+        "elaborate_instance",
+        "names_with_pkg_var_aliases",
+        2,
+    ),
+    (
+        "L13",
+        "dynarr.rs",
+        "dyn_blocking_special",
+        "bare_name_of_net",
+        1,
+    ),
+];
+
+/// The SURF_LEAVE ids the row ends with: L0 (the BOUNDARY) and L13 (permanent), L2 / L3 (R, RS1's).
+/// Any other id (a new bridge, or L4 / L9 / L11 / L12 written back) fails `HBR END LEAVE ID`.
+const LEAVE_IDS_END: &[&str] = &["L0", "L2", "L3", "L13"];
+
+/// `HBR == R + the permanent class` (HBR_END, LEAVE_IDS_END) against the computed reads (`rows`,
+/// keyed `file\tfn\tentry\tsink`) and SURF_LEAVE's rows ; each message names its row.
+fn hbr_end_check(rows: &BTreeMap<String, usize>, leave: &[Vec<String>]) -> Vec<String> {
+    let mut msgs = Vec::new();
+    let mut got: BTreeMap<(String, String, String), usize> = BTreeMap::new();
+    for (k, n) in rows {
+        let c: Vec<&str> = k.split('\t').collect();
+        if c.len() >= 3 {
+            *got.entry((c[0].to_string(), c[1].to_string(), c[2].to_string()))
+                .or_default() += n;
+        }
+    }
+    // round 2 (R4): every id of an item (walk_rtn_scopes has two SURF_LEAVE rows), not the last
+    let mut ids: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for r in leave {
+        if !LEAVE_IDS_END.contains(&r[0].as_str()) {
+            msgs.push(format!(
+                "HBR END LEAVE ID  {} · {} · {} — the row ends with {LEAVE_IDS_END:?} only (L2 / L3 \
+                 close at RS1, L0 / L13 are permanent): a new LEAVE id is a new bridge, a closed one \
+                 written back reopens it",
+                r[0],
+                r.get(1).map(String::as_str).unwrap_or(""),
+                r.get(2).map(String::as_str).unwrap_or("")
+            ));
+        }
+        if r[0] != "L0" {
+            ids.entry(item_simple(&r[1]))
+                .or_default()
+                .insert(r[0].clone());
+        }
+    }
+    let mut want: BTreeMap<(String, String, String), usize> = BTreeMap::new();
+    for (id, file, qual, entry, n) in HBR_END {
+        want.insert((file.to_string(), qual.to_string(), entry.to_string()), *n);
+        let gives: Vec<&str> = ids
+            .get(*entry)
+            .map(|s| s.iter().map(String::as_str).collect())
+            .unwrap_or_default();
+        if gives != [*id] {
+            msgs.push(format!(
+                "HBR END ID  {file} · {qual} · {entry} is {id}'s in the row's end, SURF_LEAVE gives \
+                 [{}]",
+                if gives.is_empty() {
+                    "no row".to_string()
+                } else {
+                    gives.join(", ")
+                }
+            ));
+        }
+    }
+    for (k, n) in &got {
+        match want.get(k) {
+            None => msgs.push(format!(
+                "HBR END NEW READ  {} · {} · {} [{n}] — HBR == R (RS1: L2 / L3, 3 reads) + L13 (the \
+                 permanent class: 5 reads) ; a new reader of a bridge is not the row's end",
+                k.0, k.1, k.2
+            )),
+            Some(w) if w != n => msgs.push(format!(
+                "HBR END COUNT  {} · {} · {}  end [{w}]  code [{n}]",
+                k.0, k.1, k.2
+            )),
+            _ => {}
+        }
+    }
+    for (k, w) in &want {
+        if !got.contains_key(k) {
+            msgs.push(format!(
+                "HBR END GONE  {} · {} · {} [{w}] — an end read is gone: R closes at RS1 (name it), \
+                 L13 is permanent",
+                k.0, k.1, k.2
+            ));
+        }
+    }
+    msgs
 }
 
 /// §5.2 Q-DECLKEY DK3-a (rulings R-K3 q6, R-K19 c): the SURF_LEAVE ids that close `permanent` —
@@ -8519,6 +8659,498 @@ fn hkc_the_key_constructions_are_pinned() {
         ));
     }
     finish("HKC", &msgs);
+}
+
+// =====================================================================================
+// §5.2 Q-DECLKEY DK4 — the row's end, stated and planted (DELTA19 H4 (3) (4), R-K18 N1,
+// R-K20 / R-K21 D8): HSHOW, HCALL, HKT + ZN
+// =====================================================================================
+
+/// The calls of `entries` OUTSIDE lexscope by (file, fn, entry) with a count (watched_calls'
+/// walker: a method call, a path call whose callee's last segment is the entry, and the entry named
+/// as a value, each count 1 ; a macro's arguments are read as a comma list of expressions, else
+/// its first expression only (mac_exprs) ; not read: HKI's K1-K4 and the shapes each table's head
+/// lists after them).
+fn outside_calls(entries: &[&str]) -> BTreeMap<String, usize> {
+    let watch: Vec<String> = entries.iter().map(|e| e.to_string()).collect();
+    let mut rows: BTreeMap<String, usize> = BTreeMap::new();
+    for (file, qual, callee, _, _) in watched_calls(&watch) {
+        if in_lexscope(&file) {
+            continue;
+        }
+        *rows.entry(format!("{file}\t{qual}\t{callee}")).or_default() += 1;
+    }
+    rows
+}
+
+/// One watched-call table: `rows` against the section `name` (file, fn, entry, count) and its
+/// `<name>_COUNTS` line ; a GONE row is STALE.
+fn outside_calls_check(
+    name: &str,
+    entries: &[&str],
+    rows: &BTreeMap<String, usize>,
+    new_row: &str,
+) -> Vec<String> {
+    let got: BTreeMap<String, String> = rows
+        .iter()
+        .map(|(k, n)| (k.clone(), n.to_string()))
+        .collect();
+    let dumped: Vec<String> = rows.iter().map(|(k, n)| format!("{k}\t{n}")).collect();
+    dump(name, "file\tfn\tentry\tcount", &dumped);
+    let mut want = BTreeMap::new();
+    for row in table(&tables::get(name)) {
+        assert_eq!(
+            row.len(),
+            4,
+            "{name} table row has {} columns, not 4: {row:?}",
+            row.len()
+        );
+        want.insert(row[..3].join("\t"), row[3].clone());
+    }
+    let mut msgs = diff_rows(
+        name,
+        &got,
+        &want,
+        new_row,
+        "STALE: a row with no site — name the unit that removed the call, remove the row",
+    );
+    let counts = format!(
+        "entries={} sites={}",
+        entries.len(),
+        rows.values().sum::<usize>()
+    );
+    let want_counts = tables::get(&format!("{name}_COUNTS"));
+    if counts != want_counts {
+        msgs.push(format!(
+            "{name} COUNTS table [{want_counts}] now [{counts}]"
+        ));
+    }
+    msgs.extend(entries_are_fns(name, entries));
+    msgs
+}
+
+/// §5.2 Q-DECLKEY DK4 round 2 (R1): every watched entry is the name of a fn of crates/elaborate/src
+/// (an item fn, a method or a trait fn with that ident), so an entry renamed or misspelt fails by
+/// name instead of comparing an empty census with an empty table (`hit_clk_refused` has 0 rows).
+fn entries_are_fns(name: &str, entries: &[&str]) -> Vec<String> {
+    struct Sigs(BTreeSet<String>);
+    impl<'a> Visit<'a> for Sigs {
+        fn visit_signature(&mut self, s: &'a syn::Signature) {
+            self.0.insert(s.ident.to_string());
+        }
+    }
+    let mut v = Sigs(BTreeSet::new());
+    for s in load_src() {
+        v.visit_file(&s.file);
+    }
+    entries
+        .iter()
+        .filter(|e| !v.0.contains(**e))
+        .map(|e| {
+            format!(
+                "{name} ENTRY NOT A FN  {e} — no fn of crates/elaborate/src has that name: the table \
+                 watches nothing for it (renamed? rename the entry with its unit)"
+            )
+        })
+        .collect()
+}
+
+/// HSHOW's entries: the two lexscope fns that make display text of a key or of a name in the
+/// current scope (`key_show(&NewKey)`, `Scopes::show_miss(&str)`, each returning a `Shown`).
+const HSHOW_ENTRIES: &[&str] = &["key_show", "show_miss"];
+
+#[test]
+fn hshow_the_display_sites_are_pinned() {
+    // §5.2 Q-DECLKEY DK4 (DELTA19 H4 (4), DELTA14 DK4 "key_show's sites re-read as one table"):
+    // every call of key_show / show_miss outside lexscope by (file, fn, entry) with a count. HOUT
+    // pins the ones handed to `scope_out` (its ARG column) ; a call whose Shown goes elsewhere is
+    // no HOUT row, so this table holds every site, wherever the Shown goes.
+    let rows = outside_calls(HSHOW_ENTRIES);
+    let msgs = outside_calls_check(
+        "HSHOW",
+        HSHOW_ENTRIES,
+        &rows,
+        "a new site of key_show / show_miss outside lexscope (display text of a key or of a name in \
+         the current scope): name the unit, read where the Shown goes (HOUT pins `scope_out`'s), add \
+         the row",
+    );
+    finish("HSHOW", &msgs);
+}
+
+/// HCALL's entries: `hit_clk_refused` (held.rs, a lane the walk entry walk_from_net_or_refused_clk
+/// calls from lexscope ; R-K18 N1), `snapshot` (lexscope's whole-store copy of a Keyed /
+/// KeyedSet ; R-K20 / R-K21 D8) and, since round 2 (B2), bound/undo.rs's wrappers of eight such
+/// copies, `side_snapshot` and its put-back `side_restore` (one caller each).
+const HCALL_ENTRIES: &[&str] = &[
+    "hit_clk_refused",
+    "snapshot",
+    "side_snapshot",
+    "side_restore",
+];
+
+#[test]
+fn hcall_the_watched_outside_callers_are_pinned() {
+    // §5.2 Q-DECLKEY DK4 (R-K18 N1 ; R-K20 / R-K21 D8): the callers OUTSIDE lexscope of fns whose
+    // callers no other table names, by (file, fn, entry) with a count, the HKI form —
+    // hit_clk_refused has none (its one caller is lexscope/walk.rs, SURF_OUTCALL's row ; bound_home's
+    // READ_LANES does not list it), snapshot has bound/undo.rs side_snapshot's eight and
+    // frames_static_init.rs's fixpoint, side_snapshot / side_restore (round 2) instance_array.rs's
+    // prepass, one each. A new caller of any fails by name (NP19-8 closed) ; an entry that names
+    // no fn of the crate fails `HCALL ENTRY NOT A FN`.
+    let rows = outside_calls(HCALL_ENTRIES);
+    let msgs = outside_calls_check(
+        "HCALL",
+        HCALL_ENTRIES,
+        &rows,
+        "a new caller outside lexscope of hit_clk_refused (a refused clocking alias asked outside the \
+         walk), of snapshot (a whole-store copy outside undo / the fixpoint) or of side_snapshot / \
+         side_restore (eight stores copied / put back whole outside the instance-array prepass): name \
+         the unit, read why it needs the call, add the row",
+    );
+    finish("HCALL", &msgs);
+}
+
+/// HKT's types: the key types (NewKey, AtKey, DeclKey) and the stores (Keyed, KeyedSet) of
+/// lexscope/key.rs. (`SlotKey` left at DK1-2d ; DK2's form (c) has no `Hit` type, R-K12.)
+const HKT_TYPES: &[&str] = &["NewKey", "AtKey", "DeclKey", "Keyed", "KeyedSet"];
+
+/// A visibility as written: `pub`, `pub(crate)`, `pub(super)`, `pub(in ..)`, `priv`.
+fn vis_str(v: &syn::Visibility) -> String {
+    match v {
+        syn::Visibility::Public(_) => "pub".into(),
+        syn::Visibility::Restricted(r) => {
+            let p: Vec<String> = r
+                .path
+                .segments
+                .iter()
+                .map(|s| s.ident.to_string())
+                .collect();
+            if r.in_token.is_some() {
+                format!("pub(in {})", p.join("::"))
+            } else {
+                format!("pub({})", p.join("::"))
+            }
+        }
+        syn::Visibility::Inherited => "priv".into(),
+    }
+}
+
+/// A struct's attributes but its doc lines, each `path` or `path(tokens)`, `;`-joined (`-` none).
+fn attrs_str(attrs: &[syn::Attribute]) -> String {
+    let v: Vec<String> = attrs
+        .iter()
+        .filter(|a| !a.path().is_ident("doc"))
+        .map(|a| {
+            let p: Vec<String> = a
+                .path()
+                .segments
+                .iter()
+                .map(|s| s.ident.to_string())
+                .collect();
+            match &a.meta {
+                syn::Meta::List(l) => format!(
+                    "{}({})",
+                    p.join("::"),
+                    l.tokens.to_string().replace(' ', "")
+                ),
+                // round 2 (R2): `#[must_use = ".."]` is not `#[must_use]`
+                syn::Meta::NameValue(nv) => format!("{}={}", p.join("::"), tx(&nv.value)),
+                syn::Meta::Path(_) => p.join("::"),
+            }
+        })
+        .collect();
+    if v.is_empty() {
+        "-".into()
+    } else {
+        v.join(";")
+    }
+}
+
+/// A generics list as written and its where clause: (`<'a, V: Default = String, const N: usize>`,
+/// ` where V: Sized`), each `` when none. Bounds and defaults are type_str's reading: a bound's
+/// associated-type, const and `Fn(..)` arguments and a lifetime's own bounds are not in the text.
+fn generics_text(g: &syn::Generics) -> (String, String) {
+    let bound = |b: &syn::TypeParamBound| match b {
+        syn::TypeParamBound::Trait(t) => format!(
+            "{}{}",
+            if matches!(t.modifier, syn::TraitBoundModifier::Maybe(_)) {
+                "?"
+            } else {
+                ""
+            },
+            syn_path_text(&t.path)
+        ),
+        syn::TypeParamBound::Lifetime(l) => format!("'{}", l.ident),
+        _ => "?".into(),
+    };
+    let bounds = |v: &Punctuated<syn::TypeParamBound, Token![+]>| {
+        v.iter().map(bound).collect::<Vec<_>>().join(" + ")
+    };
+    let ps: Vec<String> = g
+        .params
+        .iter()
+        .map(|p| match p {
+            syn::GenericParam::Lifetime(l) => format!("'{}", l.lifetime.ident),
+            syn::GenericParam::Type(t) => {
+                let mut s = t.ident.to_string();
+                if !t.bounds.is_empty() {
+                    write!(s, ": {}", bounds(&t.bounds)).expect("write");
+                }
+                if let Some(d) = &t.default {
+                    write!(s, " = {}", type_str(d)).expect("write");
+                }
+                s
+            }
+            syn::GenericParam::Const(c) => format!("const {}: {}", c.ident, type_str(&c.ty)),
+        })
+        .collect();
+    let wh: Vec<String> = g
+        .where_clause
+        .iter()
+        .flat_map(|w| w.predicates.iter())
+        .map(|p| match p {
+            syn::WherePredicate::Type(t) => {
+                format!("{}: {}", type_str(&t.bounded_ty), bounds(&t.bounds))
+            }
+            _ => "?".into(),
+        })
+        .collect();
+    let wrap = |open: &str, v: &[String], close: &str| {
+        if v.is_empty() {
+            String::new()
+        } else {
+            format!("{open}{}{close}", v.join(", "))
+        }
+    };
+    (wrap("<", &ps, ">"), wrap(" where ", &wh, ""))
+}
+
+/// A path as type_str reads it (each segment's angle-bracketed type and lifetime arguments kept).
+fn syn_path_text(p: &syn::Path) -> String {
+    type_str(&syn::Type::Path(syn::TypePath {
+        qself: None,
+        path: p.clone(),
+    }))
+}
+
+/// Round 2 (R2): a second item under one HKT key (a second `zn!` line for a type, a second struct
+/// of a key type's name in the file) keeps both texts, marked, so the row moves.
+fn put_once(out: &mut BTreeMap<String, String>, k: String, v: String) {
+    if let Some(prev) = out.insert(k.clone(), v.clone()) {
+        out.insert(k, format!("{prev} DUPLICATE {v}"));
+    }
+}
+
+/// HKT's census of one file, every item (round 2, B1: a `mod`'s, a `const _: () = { .. }` block's
+/// and a fn body's too): each struct of HKT_TYPES in lexscope by (file, `type:<T>`) -> (vis,
+/// fields, attrs, generics) ; each `impl <Trait> for <T>` (or `for &<T>`, round 2) with T one of
+/// HKT_TYPES by (file, `impl:<Trait> for <T>`) -> (count, each impl's header with its generics,
+/// self type and where clause) ; each `zn!(<type>: <traits>)` of lexscope by (file, `zn:<type>`)
+/// -> its trait list.
+fn hkt_file(rel: &str, file: &syn::File, out: &mut BTreeMap<String, String>, lex: bool) {
+    let mut v = HktV { rel, out, lex };
+    v.visit_file(file);
+}
+
+struct HktV<'o> {
+    rel: &'o str,
+    out: &'o mut BTreeMap<String, String>,
+    lex: bool,
+}
+
+impl<'a> Visit<'a> for HktV<'_> {
+    fn visit_item(&mut self, it: &'a syn::Item) {
+        match it {
+            syn::Item::Struct(s) => self.strukt(s),
+            syn::Item::Impl(i) => self.imp(i),
+            syn::Item::Macro(m) => self.zn(&m.mac),
+            _ => {}
+        }
+        // round 2 (B1): the items inside this one (a `mod`, a const block, a fn body, an impl's fns)
+        visit::visit_item(self, it);
+    }
+    fn visit_stmt_macro(&mut self, m: &'a syn::StmtMacro) {
+        self.zn(&m.mac);
+    }
+}
+
+impl HktV<'_> {
+    fn strukt(&mut self, s: &syn::ItemStruct) {
+        if !self.lex || !HKT_TYPES.contains(&s.ident.to_string().as_str()) {
+            return;
+        }
+        let fields: Vec<String> = s
+            .fields
+            .iter()
+            .enumerate()
+            .map(|(i, f)| {
+                let n = f
+                    .ident
+                    .as_ref()
+                    .map(|x| x.to_string())
+                    .unwrap_or_else(|| i.to_string());
+                format!("{n}:{} {}", vis_str(&f.vis), type_str(&f.ty))
+            })
+            .collect();
+        let (params, wh) = generics_text(&s.generics);
+        let g = format!("{params}{wh}");
+        put_once(
+            self.out,
+            format!("{}\ttype:{}", self.rel, s.ident),
+            format!(
+                "{}\t{}\t{}\t{}",
+                vis_str(&s.vis),
+                if fields.is_empty() {
+                    "-".to_string()
+                } else {
+                    fields.join(";")
+                },
+                attrs_str(&s.attrs),
+                if g.is_empty() { "-" } else { g.as_str() }
+            ),
+        );
+    }
+
+    fn imp(&mut self, i: &syn::ItemImpl) {
+        let Some((_, tr, _)) = &i.trait_ else {
+            return;
+        };
+        let mut ty = &*i.self_ty;
+        let mut refs = String::new();
+        // round 2 (B1): `impl .. for &Keyed<V>` is an impl for the type it refers to
+        while let syn::Type::Reference(r) = ty {
+            refs.push('&');
+            ty = &r.elem;
+        }
+        let syn::Type::Path(p) = ty else {
+            return;
+        };
+        let Some(last) = p.path.segments.last() else {
+            return;
+        };
+        let t = last.ident.to_string();
+        if !HKT_TYPES.contains(&t.as_str()) {
+            return;
+        }
+        let trs = syn_path_text(tr);
+        let (params, wh) = generics_text(&i.generics);
+        let hdr = format!("impl{params} {trs} for {}{wh}", type_str(&i.self_ty));
+        let k = format!("{}\timpl:{trs} for {refs}{t}", self.rel);
+        let (n, hs) = match self.out.get(&k).and_then(|v| v.split_once('\t')) {
+            Some((n, h)) => (n.parse::<usize>().unwrap_or(0), format!("{h};")),
+            None => (0, String::new()),
+        };
+        self.out.insert(k, format!("{}\t{hs}{hdr}", n + 1));
+    }
+
+    fn zn(&mut self, mac: &syn::Macro) {
+        if !self.lex || !mac.path.is_ident("zn") {
+            return;
+        }
+        // the type ends at the first lone `:` (a path's `::` is two)
+        let ts: Vec<char> = mac.tokens.to_string().replace(' ', "").chars().collect();
+        let cut = (0..ts.len())
+            .find(|&i| ts[i] == ':' && ts.get(i + 1) != Some(&':') && (i == 0 || ts[i - 1] != ':'))
+            .unwrap_or(ts.len());
+        let ty: String = ts[..cut].iter().collect();
+        let traits: String = ts.get(cut + 1..).unwrap_or(&[]).iter().collect();
+        put_once(self.out, format!("{}\tzn:{ty}", self.rel), traits);
+    }
+}
+
+#[test]
+fn hkt_reader_reads_its_fixture() {
+    // §5.2 Q-DECLKEY DK4 round 2 (B1, R2): HKT's reader on one fixture holding every shape round 2
+    // made it read — an impl in a `mod`, in a `const _` block and in a fn body ; a reference self
+    // type ; generics, bounds, a default, a where clause and a trait's arguments ; `#[must_use =
+    // ".."]` ; a second `zn!` line for one type. (A rule switched off fails here by name.)
+    let mut fx = BTreeMap::new();
+    let f: syn::File = syn::parse_str(
+        "#[must_use = \"k\"] #[derive(Clone)] pub(crate) struct AtKey(pub(super) String);\n\
+         pub(crate) struct Keyed<V = String>(BTreeMap<String, V>) where V: Sized;\n\
+         impl std::ops::Deref for AtKey { type Target = str; fn deref(&self) -> &str { &self.0 } }\n\
+         impl<V: Default> Default for Keyed<V> where V: Clone { fn default() -> Self { todo!() } }\n\
+         impl<V> From<Vec<V>> for Keyed<V> { fn from(v: Vec<V>) -> Self { todo!() } }\n\
+         impl<'a, V> IntoIterator for &'a Keyed<V> { }\n\
+         mod m { impl Clone for super::KeyedSet { } }\n\
+         const _: () = { impl core::fmt::Debug for NewKey { } };\n\
+         fn f() { impl PartialEq for DeclKey { } }\n\
+         zn!(Keyed<()>: Clone, core::hash::Hash);\n\
+         zn!(Keyed<()>: Clone);",
+    )
+    .expect("HKT fixture");
+    hkt_file("fx.rs", &f, &mut fx, true);
+    assert_eq!(
+        fx.into_iter()
+            .map(|(k, v)| format!("{k}={v}"))
+            .collect::<Vec<_>>(),
+        vec![
+            "fx.rs\timpl:Clone for KeyedSet=1\timpl Clone for super::KeyedSet".to_string(),
+            "fx.rs\timpl:Default for Keyed=1\timpl<V: Default> Default for Keyed<V> where V: Clone"
+                .to_string(),
+            "fx.rs\timpl:From<Vec<V>> for Keyed=1\timpl<V> From<Vec<V>> for Keyed<V>".to_string(),
+            "fx.rs\timpl:IntoIterator for &Keyed=1\timpl<'a, V> IntoIterator for &Keyed<V>"
+                .to_string(),
+            "fx.rs\timpl:PartialEq for DeclKey=1\timpl PartialEq for DeclKey".to_string(),
+            "fx.rs\timpl:core::fmt::Debug for NewKey=1\timpl core::fmt::Debug for NewKey".to_string(),
+            "fx.rs\timpl:std::ops::Deref for AtKey=1\timpl std::ops::Deref for AtKey".to_string(),
+            "fx.rs\ttype:AtKey=pub(crate)\t0:pub(super) String\tmust_use=\"k\";derive(Clone)\t-"
+                .to_string(),
+            "fx.rs\ttype:Keyed=pub(crate)\t0:priv BTreeMap<String, V>\t-\t<V = String> where V: Sized"
+                .to_string(),
+            "fx.rs\tzn:Keyed<()>=Clone,core::hash::Hash DUPLICATE Clone".to_string(),
+        ],
+        "HKT's reader on its fixture"
+    );
+}
+
+#[test]
+fn hkt_the_key_types_and_zn_lines_are_pinned() {
+    // §5.2 Q-DECLKEY DK4 (DELTA19 H4 (3) ; PLAN8 H2 (d) HT, (e) ZN): the key types and stores of
+    // lexscope/key.rs by their shape — visibility, each field's visibility and type, the attributes
+    // (derives and `must_use`, a name-value one with its value), the generics and where clause —
+    // every trait impl for one of them (or for a reference to one) in the crate with its header,
+    // wherever the impl stands (round 2: in a `mod`, a const block, a fn body), and every `zn!` line
+    // of lexscope with its trait list. A field, a derive, an attribute, a bound, a trait impl gained
+    // or lost, a ZN line that names one trait fewer, or a second ZN line for one type, fails by name
+    // (HKT's head lists what it does not read). A pub(crate) constructor is a SURF_ROWS row
+    // (HT-SURF), a construction an HKC row. The reader's fixture: hkt_reader_reads_its_fixture.
+    let mut rows = BTreeMap::new();
+    for s in load_src() {
+        hkt_file(&s.rel, &s.file, &mut rows, in_lexscope(&s.rel));
+    }
+    let dumped: Vec<String> = rows.iter().map(|(k, v)| format!("{k}\t{v}")).collect();
+    dump("HKT", "file\tthing\tvalue", &dumped);
+    let mut want = BTreeMap::new();
+    for row in table(&tables::get("HKT")) {
+        assert!(
+            row.len() >= 3,
+            "HKT table row has {} columns, fewer than 3: {row:?}",
+            row.len()
+        );
+        want.insert(row[..2].join("\t"), row[2..].join("\t"));
+    }
+    let mut msgs = diff_rows(
+        "HKT",
+        &rows,
+        &want,
+        "a key type's or store's field, attribute or trait impl, or a ZN line, is new: a key type \
+         that gains a field, a derive or a trait is a new door of the module — name the unit, add the row",
+        "STALE: a key type's, a store's or a ZN line's row has no item — name the unit, remove the row",
+    );
+    let n = |p: &str| {
+        rows.keys()
+            .filter(|k| k.split('\t').nth(1).is_some_and(|t| t.starts_with(p)))
+            .count()
+    };
+    let counts = format!("types={} impls={} zn={}", n("type:"), n("impl:"), n("zn:"));
+    if counts != tables::get("HKT_COUNTS") {
+        msgs.push(format!(
+            "HKT COUNTS table [{}] now [{counts}]",
+            tables::get("HKT_COUNTS")
+        ));
+    }
+    finish("HKT", &msgs);
 }
 
 mod tables {

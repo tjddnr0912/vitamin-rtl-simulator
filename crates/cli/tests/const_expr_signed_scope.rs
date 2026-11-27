@@ -26,12 +26,12 @@
 //!
 //! ## The fix
 //!
-//! That arm resolves with `self.walk_scopes(name, &self.param_meta)` — the outward
+//! That arm resolves with `self.name_meta(name)` (`walk_key_meta`) — the outward
 //! scope walk, and the same resolver the env twin `const_signed_env`
 //! (`const_fn_width.rs`) has always used. `const_signed_env` was already correct on
 //! every override / range / select / generate-if cell measured, so it is the
-//! specification here rather than a new rule. `walk_scopes` is the plain,
-//! deliberately NON-shadow-aware walk (see `scope.rs`); a same-named param declared
+//! specification here rather than a new rule. `walk_scopes_key` is the plain,
+//! deliberately NON-shadow-aware walk (see `lexscope/walk.rs`); a same-named param declared
 //! inside the block is bound under the inner prefix and therefore still wins,
 //! innermost-first, which `a_inner_param_shadows_outer_same_name` pins.
 //!
@@ -261,7 +261,7 @@ endmodule
     );
 }
 
-/// The SHADOW axis. `walk_scopes` is innermost-first, so a generate block that
+/// The SHADOW axis. `walk_scopes_key` is innermost-first, so a generate block that
 /// declares its OWN `g` reads the inner one (5 - 20 = -15) while module scope reads
 /// the outer (7 - 20 = -13). Both oracles print exactly this, PRE and POST, so the
 /// resolver change must not disturb it.

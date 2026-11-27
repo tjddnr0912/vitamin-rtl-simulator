@@ -210,7 +210,9 @@ struct_arm.rs	struct_arm_rhs	walk_key_net	symbols	SITE	symbols	1
 #         SURF BODY, e2d H6 ARM BLIND + SURF BODY / OUT-C / OUT-F.
 #  NP19-4 a guard, a negation or a formed key inside an entry's closure passes A1c / A2 ; SURF_BODY moves at least: g1 (`if name.starts_with('$')`)
 #         HSEG + BODY + OUT-C, g2 (`!self.symbols.contains_at(k)`) BODY only, g3 (`&& !name.is_empty()`) BODY + OUT-C, g4 (`AtKey(name.to_string())`)
-#         H6 + H6A + HKC + BODY.
+#         H6 + H6A + HKC + BODY. §5.2 Q-DECLKEY DK4 (R-K18 N5): the closure's own form — `move |k| ..`, `|k| -> bool { .. }`, its
+#         `#[inline(always)]` dropped — passes A1c / A2 too, and SURF_BODY moves (W/scopebind/dk4 ctrl n5_move, n5_ret, n5_attr on
+#         walk_key_net: HT-SURF BODY only, at 960b7d22 and at DK4).
 entry	kind	arm_text	order	set	sites
 walk_above_enum_label_type	scoped_key_at_or_above	enum_label_types	enum_label_types	enum_label_types	1
 walk_above_gen_loop_label	scoped_key_at_or_above	gen_loop_labels	gen_loop_labels	gen_loop_labels	1
@@ -1531,16 +1533,31 @@ ident=0 asserts=6
 #         `self.net_key_shown(0).is_some()`) are seen by HF by position only (bind_iface_port's site 1, e5 -> e6) ; in a fn with no HF site
 #         by none (m_x13_dyn, m_nks_dyn: dynarr.rs dyn_blocking_special, every table passes) ;
 #         bare_name_of_net's is also an L13 read, so HBR sees it as a NEW ROW (M7 m_bnn_2nd) — the read, not the NetId it is handed.
+#         Checked at §5.2 Q-DECLKEY DK4 (W/scopebind/dk4/ctrl np6_x13_dyn, np6_nks_dyn): DK4's tables watch hit_clk_refused, snapshot,
+#         key_show and show_miss, no NetId fn, so the line stands. Round 2 (W/scopebind/dk4/r2 np6_nnt_dyn): the line covers the other
+#         moved `Shown` entry too, `net_name_table` (lexscope/disp.rs, no argument, `Vec<Shown>`): `let _t = self.net_name_table();` in
+#         dynarr.rs dyn_blocking_special passes every table — HOUT pins its call only as a `scope_out` fn-value (scope_home.rs HOUT_CALLEES' doc).
 #  NP19-7 LEAVE_PERMANENT (hbr_the_bridge_reads_are_pinned) reads SURF_LEAVE's id column only: a row given id L13 (or L0) with closes
 #         `permanent` by a table edit passes it — a deliberate edit, not an accident ; an L13 row's reader outside still needs an HBR row,
 #         an L0 row is not HBR's (the entry list skips id L0) ; and another id's closes is checked only to differ from `permanent`.
+#         Checked at §5.2 Q-DECLKEY DK4: the line stands for LEAVE_PERMANENT ; HBR_END / LEAVE_IDS_END (the DK4 line below) now give each
+#         end read its id, so relabelling an END row (np7_relabel) fails `HBR END ID` (and HT-SURF's FLOW tag, before DK4 too) — a new
+#         row given L13 for an item no end read names still passes both.
 # NOT-PROMISED (one shape a line ; measured by the controls of §5.2 Q-DECLKEY DK3-b, W/scopebind/dk3b/ctrl and m7):
-#  NP19-8 a `snapshot` call outside bound/undo.rs and frames_static_init.rs is pinned by no rule (D8: an HF count by position only):
-#         control D8 (`self.symbols.snapshot()` beside bind_iface_port's alias call) is seen by HF by position only (bind_iface_port's
-#         site 1, e5 -> e6) ; in a fn with no HF site by none (D8b: dynarr.rs dyn_blocking_special, every table passes).
+#  NP19-8 CLOSED at §5.2 Q-DECLKEY DK4 (table HCALL): a `snapshot` call outside bound/undo.rs and frames_static_init.rs was pinned by
+#         no rule (D8: an HF count by position only ; D8b in dynarr.rs dyn_blocking_special: every table passed) ; HCALL pins every
+#         caller of `snapshot` (and of `hit_clk_refused`, R-K18 N1 ; round 2: of the wrappers side_snapshot / side_restore) outside
+#         lexscope by (file, fn, entry) with a count, so both fail HCALL NEW ROW. What HCALL does not read: its head (K1-K4, WC1-WC6).
 #  NP19-9 the window's end is pinned by HT-SURF, not by the compiler: a `Deref` (or `DerefMut`) impl for `Keyed` / `KeyedSet` written
 #         back compiles (D1: HT-SURF IMPL-TRAIT + BODY + SURF_ROWS NEW ROW only) ; a std map method or `.clone()` on a store outside
-#         lexscope is refused by the compiler (D2 D3 D5 D6: E0599).
+#         lexscope is refused by the compiler (D2 D3 D5 D6: E0599). §5.2 Q-DECLKEY DK4 (BRIEF-dk4 item 2, the five plants of PLAN8:296-298
+#         outside lexscope, W/scopebind/dk4/ctrl/SUMMARY_after.txt): a key built from text (z1: DeclKey / NewKey / AtKey), a text read off a
+#         key (z2: `.0`, found_text), `==` on two keys (z3) and a call of the private predicate walk (z4) are the compiler's (E0423 x3,
+#         E0616, E0425, E0369 x2, E0624) ; a `Deref` written back on a store (z5) compiles: at 960b7d22 HT-SURF alone saw it (IMPL-TRAIT +
+#         BODY + SURF_ROWS), at DK4 HT-SURF and HKT (NEW ROW impl:std::ops::Deref for Keyed) ; the predicate walk widened to pub(crate)
+#         compiles: widened alone (z4_wide_only, round 2) fails H6 (ENTRY FORM) and HT-SURF ; widened and called in a fn with no HF row
+#         (z4_wide_dyn, dynarr.rs dyn_blocking_special) fails H6, HM and HT-SURF ; widened and called in ports.rs bind_iface_port, an HF
+#         row's fn (z4_walk_wide, round 1), fails H6, HF, HM and HT-SURF — HF by position (the added statement), not by the widening.
 #  NP19-10 a text entry widened (`pub(super)` -> `pub(crate)`, D7) compiles ; it is seen by HT-SURF's rows and, at its first outside
 #         call, by HS / HSEG / HF (D7) — not by the compiler.
 #  NP19-11 a `pub(crate)` entry of lexscope respelled `pub` is pinned by no rule (M7 m_snap_pub: `Keyed::snapshot` made `pub`, every
@@ -1548,6 +1565,23 @@ ident=0 asserts=6
 #         SURF_ROWS hold no visibility column (vis_wider counts both wider than the module).
 #  NP19-12 a table's `#` head line is read by no rule: H7's DK3-b line naming the unit of the row `block_local/mod.rs
 #         gather_decl_positions 1 pos` with `DK3-b` removed passes (M7 m_h7_unit: every table passes) ; a row's unit is a comment, no column.
+# NOT-PROMISED (one shape a line ; measured by the controls of §5.2 Q-DECLKEY DK4, W/scopebind/dk4/ctrl):
+#  NP19-13 (q15) a key type or a store held outside lexscope is no HOLDERS row: HOLDER_TYPES names the scope and display types, no key
+#         type and no store, so a struct field or signature of type DeclKey / AtKey / NewKey outside the module (control k_hold: `struct
+#         ZzHold(DeclKey)` in ports.rs with a fn returning it) or of type Keyed<V> / KeyedSet (round 2, k_hold_store: `struct
+#         ZzHoldS(crate::Keyed<u8>)` in ports.rs) passes the four home tests ; HKT pins the key types' and stores' own shape, HKC the key
+#         types' constructions.
+# §5.2 Q-DECLKEY DK4 (2026-11-27, DELTA19 H4 (1)): the row's end in code — HBR_END (R's three reads at RS1: L3 cur_gen_rtn_key 2, L2
+# walk_rtn_scopes 1 ; L13's five: names_with_pkg_var_aliases 4, bare_name_of_net 1) and LEAVE_IDS_END (L0, L2, L3, L13), checked in this
+# test after the table: a sixth L13 read fails `HBR END NEW READ` even with this table and its COUNTS re-pinned (control h_l13_6th_repin),
+# a SURF_LEAVE id off the list `HBR END LEAVE ID` (h_leave_reid, h_leave_back), an end read whose SURF_LEAVE id moved `HBR END ID`
+# (np7_relabel: R's L3 row relabelled L13 `permanent` in SURF_LEAVE and SURF_ROWS, which NP19-7's LEAVE_PERMANENT alone admits ; at
+# 960b7d22 HT-SURF's FLOW tag `text:LEAVE-L3` already failed it, at DK4 HBR END ID x2 as well).
+# §5.2 Q-DECLKEY DK4 round 2 (W/scopebind/dk4/r2/claims.tsv): HBR_END reads every SURF_LEAVE id an item has, not the last one written,
+# so relabelling an item's FIRST row (r4_first_relabel: walk_rtn_scopes' L2 RET row -> L13 `permanent`, its SURF_ROWS tag with it ; at
+# round 1 every table passed) fails `HBR END ID`. NOT-PROMISED: HBR_END reads (entry, id, count), not the SINK column, so a SINK re-pinned
+# with its code (r4_sink_repin: a use of `tid` added and `LOCAL:tid#2` -> `#3` in this table) passes ; the reads walked are
+# watched_calls' (HKI's K1-K4, HSHOW's WC1-WC6: `(Self::names_with_pkg_var_aliases)(..)`, b2_paren_bridge, is no row).
 # §5.2 Q-DECLKEY DK3-b (2026-11-27): L11 and L12 CLOSED: frame_init_name_is_local_or_const reads DeclKey::has_func_segment (no found_text) ; key_spells_indexed_singleton moved into lexscope/hier.rs (found_text pub(super), indexed_gen_singleton private -> bool) — 3 rows gone
 file	fn	entry	sink	count
 block_local_feed.rs	feed_scoped_block_locals	names_with_pkg_var_aliases	LOCAL:shadow_names#3	1
@@ -1954,3 +1988,123 @@ lexscope/walk.rs	AtKey	write	5
 lexscope/walk.rs	DeclKey	ctor	3
 == HKC_COUNTS
 ctor[AtKey=8 DeclKey=4 NewKey=2] value[AtKey=0 DeclKey=0 NewKey=0] alias[AtKey=0 DeclKey=0 NewKey=0] write[AtKey=5 DeclKey=0 NewKey=0]
+== HSHOW
+# HSHOW (§5.2 Q-DECLKEY DK4 (2026-11-27), DELTA19 H4 (4), DELTA14 DK4 ; engine test hshow_the_display_sites_are_pinned): every call of
+# key_show (a NewKey's display text) and Scopes::show_miss (a name's display text in the current scope) outside lexscope, by (file, fn,
+# entry) with a count ; a new site fails NEW ROW, a row with no site is STALE. HOUT pins the twelve as `scope_out` arguments (ARG
+# column: eleven rows, 12 sites) ; a call whose Shown is not handed to `scope_out` (control s_naked: `let _s = key_show(&key);` in
+# net_util.rs add_net) is no HOUT row and passed the four home tests (scope_home, scope_surface, bound_home,
+# structure_ratchet) at 960b7d22 (W/scopebind/dk4/ctrl/SUMMARY_before.txt) ; a second `scope_out(show_miss)`
+# (s_second) is HOUT's (NEW ROW, HC LOCAL). Round 2 (W/scopebind/dk4/r2/claims.tsv, corrected): a site in a fn that already has
+# a row moves its count, so it fails CHANGED, not NEW ROW — s_naked (add_net 1 -> 2) fails HSHOW CHANGED + COUNTS, s_second (resolve_net
+# 1 -> 2) fails HOUT (NEW ROW, HC LOCAL) and HSHOW (CHANGED + COUNTS) ; NEW ROW is a site in a fn with no row (b2_helper: a wrapper fn
+# `zz_ks` in dynarr.rs fails HSHOW NEW ROW + HOLDERS NEW ROW). The entry named as a value counts 1 at the binding (b2_let_alias
+# `let zz_ks = key_show;` fails HSHOW CHANGED, count 2: the binding, not each call through it) ; a closure's body is read
+# (b2_closure `|n| self.lex.show_miss(n)` fails HSHOW CHANGED, count 2: the call in its body, not each call of the closure).
+# NOT-PROMISED (one shape a line ; HKI's K1 `use .. as` rename, K2 a cfg(test) fn, K3 a macro body, K4 a call inside lexscope, and):
+#  WC1 a callee that is no path: `(key_show)(&key)` (b2_paren_show), `{ Self::hit_clk_refused }(..)` (b2_block_call), `(key_show as
+#      fn(..) -> Shown)(&key)` (b2_cast_show) — the callee is walked as `callee`, where the fn-value arm does not count: every table passes.
+#  WC2 a fn pointer in a `const` / `static` item: `static ZZ_KS: fn(&NewKey) -> Shown = crate::key_show;` then `ZZ_KS(&key)`
+#      (b2_static_show), `const ZZ_SNAP: fn(..) = KeyedSet::snapshot;` (b2_const_call) — an item statement is not walked: every table passes.
+#  WC3 the calls through a binding: a `let` alias counts once at its binding, a closure once in its body, however often either is
+#      called (b2_let_alias, b2_closure: two calls each, one count).
+#  WC4 a wrapper's callers: a fn that calls the entry is a row ; its own callers are not followed (b2_helper's callers: no row).
+#  WC5 has_cfg_test's reading: a `#[cfg(..)]` whose tokens contain `test` and no `not` is read as a test fn and skipped —
+#      `#[cfg(any(test, debug_assertions))]` (n1_cfg_any) and `#[cfg(feature = "zz_test_hook")]` (n1_cfg_feature) pass every table,
+#      the same fn with no cfg (n1_nocfg) fails HCALL NEW ROW.
+#  WC6 a statement macro inside an `async { .. }` or `const { .. }` block (the walker reaches the block's statements through Kids, its
+#      child expressions, and a statement macro is none): n1_async `let _f = async { debug_assert!(!self.hit_clk_refused(..)); };` and
+#      n1_const `const { debug_assert!({ let _ = crate::key_show(unreachable!()); true }); }` compile and pass every table.
+file	fn	entry	count
+block_local/hoist.rs	hoist_one_block_local	key_show	1
+bound/write.rs	bind_param_range	key_show	1
+cover.rs	register_cover_instance	key_show	1
+inline_task_locals.rs	hoist_inline_task_locals	show_miss	1
+instance_array.rs	elaborate_instance_array	show_miss	1
+net_util.rs	add_net	key_show	1
+net_util.rs	declare_implicit_net	key_show	1
+net_util.rs	warn_implicit_net_truncation	show_miss	1
+scope.rs	resolve_net	show_miss	1
+sva_clocking.rs	lower_clocking_blocks	show_miss	2
+systask.rs	lower_systask	show_miss	1
+== HSHOW_COUNTS
+entries=2 sites=12
+== HCALL
+# HCALL (§5.2 Q-DECLKEY DK4 (2026-11-27), R-K18 N1, R-K20 / R-K21 D8 ; engine test hcall_the_watched_outside_callers_are_pinned): the
+# callers OUTSIDE lexscope, by (file, fn, entry) with a count, of held.rs's `hit_clk_refused` (0: its one caller is lexscope/walk.rs
+# walk_from_net_or_refused_clk, SURF_OUTCALL's row ; bound_home's READ_LANES does not list it) and of the stores' whole-copy entry
+# `snapshot` (bound/undo.rs side_snapshot 8, frames_static_init.rs's fixpoint 1). A new caller of either fails NEW ROW (controls
+# c_hcr, c_hcr_dyn, c_snap = DK3-b's D8, c_snap_dyn = D8b), a row with no call is STALE. NP19-8 is CLOSED by it (R-K18 N1 with it).
+# Measured on 960b7d22 (W/scopebind/dk4/ctrl/SUMMARY_before.txt, before this table): c_snap_dyn (dynarr.rs dyn_blocking_special, no HF
+# row) passed the four home tests (scope_home, scope_surface, bound_home, structure_ratchet) ; c_hcr_dyn failed HBR only, by its
+# argument (`&tid` renumbers bare_name_of_net's LOCAL sink tid#2 -> #3), not by the call ; c_hcr and c_snap (ports.rs bind_iface_port)
+# failed HF CHANGED only, by position (a statement added to an HF row's fn), not by the call.
+# Round 2 (W/scopebind/dk4/r2/claims.tsv): side_snapshot / side_restore (bound/undo.rs, the wrappers that copy / put back the eight stores
+# whole) are entries too, one caller each, instance_array.rs elaborate_instance_array — a second caller (b2_side_snap, b2_side_restore in
+# dynarr.rs dyn_blocking_special) passed every table at round 1 and fails HCALL NEW ROW ; an entry that names no fn of crates/elaborate/src
+# fails `HCALL ENTRY NOT A FN` (r1_rename: hit_clk_refused renamed in held.rs and its one caller ; M7 m2_hcall_entry_typo).
+# NOT-PROMISED: HKI's K1-K4 and HSHOW's WC1-WC6 (one walker, watched_calls) ; a caller of a wrapper the entries do not name.
+file	fn	entry	count
+bound/undo.rs	side_snapshot	snapshot	8
+frames_static_init.rs	emit_frame_static_prologue	snapshot	1
+instance_array.rs	elaborate_instance_array	side_restore	1
+instance_array.rs	elaborate_instance_array	side_snapshot	1
+== HCALL_COUNTS
+entries=4 sites=11
+== HKT
+# HKT (§5.2 Q-DECLKEY DK4 (2026-11-27), DELTA19 H4 (3), PLAN8 H2 (d) HT / (e) ZN ; engine test hkt_the_key_types_and_zn_lines_are_pinned):
+# the key types (NewKey, AtKey, DeclKey) and the stores (Keyed, KeyedSet) of lexscope/key.rs by their shape — `type:<T>` = visibility,
+# each field `<n>:<vis> <type>` (`;`-joined), the attributes but doc lines (`;`-joined) ; `impl:<Trait> for <T>` = every trait impl for
+# one of them in the crate, with a count ; `zn:<type>` = every `zn!` line of lexscope with its trait list (spaces dropped). A key type
+# that gains a field, a derive, an attribute or a trait impl, or a ZN line that names one trait fewer, is a NEW / CHANGED row ; a row
+# whose item is gone is STALE. Measured on 960b7d22 (W/scopebind/dk4/ctrl/SUMMARY_before.txt, before this table): a ZN line weakened (k_zn_weak: DeclKey's
+# without Clone), a ZN line deleted (k_zn_drop: KeyedSet's) and DeclKey's `#[must_use]` dropped (k_mustuse) passed the four home tests (scope_home, scope_surface,
+# bound_home, structure_ratchet) ; a
+# private field added (DeclKey(String, u8)) is the compiler's (E0423 at walk.rs's constructions), so the control k_field adds a
+# `pub(super)` one ; `impl Drop for DeclKey` is the compiler's (E0509 at the walk's `key.0` moves) ; a pub(crate) constructor (k_ctor)
+# failed HKC (DeclKey ctor 4 -> 5) and HT-SURF (SURF_ROWS NEW ROW, SURF_OUT_TYPES) ; a derive the zn! line forbids (k_derive_default
+# on DeclKey, k_derive_debug on NewKey) is the compiler's (E0283 at the zn! line). At DK4 k_field, k_mustuse, k_zn_weak and k_zn_drop
+# fail HKT (W/scopebind/dk4/ctrl/SUMMARY_after.txt).
+# The four key types of DELTA19 H4 (3) are three on the tree (SlotKey left at DK1-2d) and `Hit` is no type (DK2's form (c), R-K12).
+# Round 2 (W/scopebind/dk4/r2/claims.tsv ; the reader's fixture hkt_reader_reads_its_fixture): every item of a file is read, a `mod`'s, a
+# `const _: () = { .. }` block's and a fn body's too (b1_mod_lex, b1_const_lex, b1_struct_mod_lex in lexscope/key.rs and b1_const_out,
+# b1_mod_out, b1_fn_out in ports.rs: HT-SURF alone or no table at round 1, HKT now) ; `impl .. for &Keyed<V>` is an impl for Keyed,
+# keyed `impl:<Trait> for &Keyed` (b1_ref_lex) ; the key carries the trait's arguments (`impl:From<Vec<V>> for Keyed`) and the value
+# each impl's header with its generics, self type and where clause (`impl<V> Default for Keyed<V>`) ; a type row has a fifth column,
+# its generics and where clause (`<V>`, `-` none: r2_where_sized, r2_struct_default) ; a name-value attribute is read with its value
+# (`must_use="a found key"`, r2_must_use_nv) ; a second item under one key (a second `zn!` line for a type, r2_zn_dup) keeps both texts,
+# marked ` DUPLICATE `.
+# NOT-PROMISED (one shape a line):
+#  KT1 an alias: `type ZzDk = crate::DeclKey; impl ZzTr for ZzDk {}` (b1_alias_out) — the self type's last segment is `ZzDk`.
+#  KT2 a field's attributes: `DeclKey(#[allow(dead_code)] pub(super) String)` (r2_field_attr) — a field is `<n>:<vis> <type>`.
+#  KT3 lexscope/tests.rs (a `#[cfg(test)] mod tests;` file, not in load_src): an impl for a key type there (r2_tests_rs) is HT-SURF's
+#      (SURF_ROWS NEW ROW), not HKT's.
+#  KT4 what type_str and generics_text do not write: a bound's associated-type, const and `Fn(..)` arguments, a lifetime's own bounds,
+#      a where predicate on a lifetime (`?`).
+#  KT5 a trait a key type gains with no impl naming it: a blanket `impl<T: ?Sized> ZzTr for T {}` (kt5_blanket, ports.rs) passes HKT ;
+#      a key type as a trait's argument, `impl From<DeclKey> for String` (kt5_targ_key), meets the zn! line's `Into<String>` (E0283).
+file	thing	value
+lexscope/key.rs	impl:Default for Keyed	1	impl<V> Default for Keyed<V>
+lexscope/key.rs	type:AtKey	pub(crate)	0:pub(super) String	must_use	-
+lexscope/key.rs	type:DeclKey	pub(crate)	0:pub(super) String	must_use	-
+lexscope/key.rs	type:Keyed	pub(crate)	0:priv BTreeMap<String, V>	-	<V>
+lexscope/key.rs	type:KeyedSet	pub(crate)	0:priv BTreeSet<String>	derive(Default)	-
+lexscope/key.rs	type:NewKey	pub(crate)	0:priv String	must_use;derive(Clone)	-
+lexscope/mod.rs	zn:AtKey	Clone,Copy,PartialEq,Eq,PartialOrd,Ord,core::hash::Hash,core::fmt::Display,core::fmt::Debug,Default,AsRef<str>,core::borrow::Borrow<str>,core::borrow::Borrow<String>,core::ops::Deref<Target=str>,Into<String>,From<String>
+lexscope/mod.rs	zn:DeclKey	Clone,Copy,PartialEq,Eq,PartialOrd,Ord,core::hash::Hash,core::fmt::Display,core::fmt::Debug,Default,AsRef<str>,core::borrow::Borrow<str>,core::borrow::Borrow<String>,core::ops::Deref<Target=str>,Into<String>,From<String>
+lexscope/mod.rs	zn:Keyed<()>	Clone,Copy,PartialEq,PartialOrd,core::hash::Hash,core::fmt::Debug,IntoIterator
+lexscope/mod.rs	zn:KeyedSet	Clone,Copy,PartialEq,PartialOrd,core::hash::Hash,core::fmt::Debug,IntoIterator
+lexscope/mod.rs	zn:NewKey	Copy,PartialEq,Eq,PartialOrd,Ord,core::hash::Hash,core::fmt::Display,core::fmt::Debug,Default,AsRef<str>,core::borrow::Borrow<str>,core::borrow::Borrow<String>,core::ops::Deref<Target=str>,Into<String>,From<String>
+lexscope/mod.rs	zn:ReportedAt	Clone,Copy,PartialEq,PartialOrd,core::hash::Hash,core::fmt::Debug
+lexscope/mod.rs	zn:Saved	Clone,Copy,PartialEq,PartialOrd,core::hash::Hash,core::fmt::Debug,Default
+lexscope/mod.rs	zn:SavedChain	Clone,Copy,PartialEq,PartialOrd,core::hash::Hash,core::fmt::Debug,Default
+lexscope/mod.rs	zn:SavedMethod	Clone,Copy,PartialEq,PartialOrd,core::hash::Hash,core::fmt::Debug,Default
+lexscope/mod.rs	zn:SavedRoot	Clone,Copy,PartialEq,PartialOrd,core::hash::Hash,core::fmt::Debug,Default
+lexscope/mod.rs	zn:ScopeKeyed<()>	Clone,Copy,PartialEq,PartialOrd,core::hash::Hash,core::fmt::Debug,Default,IntoIterator
+lexscope/mod.rs	zn:ScopeRef	Copy,PartialEq,Eq,PartialOrd,Ord,core::hash::Hash,core::fmt::Display,Default,AsRef<str>,core::borrow::Borrow<str>,core::ops::Deref<Target=str>,Into<String>
+lexscope/mod.rs	zn:ScopeWitness	Clone,Copy,PartialEq,PartialOrd,core::hash::Hash,core::fmt::Debug,Default
+lexscope/mod.rs	zn:Scopes	Clone,Copy,PartialEq,PartialOrd,core::hash::Hash,core::fmt::Debug,Default
+lexscope/mod.rs	zn:Shown	PartialEq,Eq,PartialOrd,Ord,core::hash::Hash,core::fmt::Display,Copy,AsRef<str>,core::borrow::Borrow<str>,core::ops::Deref<Target=str>,Into<String>
+lexscope/mod.rs	zn:ShownCtx	PartialEq,Eq,PartialOrd,Ord,core::hash::Hash,core::fmt::Display,Copy,Default,IntoIterator
+== HKT_COUNTS
+types=5 impls=1 zn=16
