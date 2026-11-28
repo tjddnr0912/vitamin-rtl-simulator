@@ -214,7 +214,7 @@ pub(crate) fn ctx_widening_below(
     e: &ast::Expr,
     cw: Option<u32>,
     widths: &std::collections::HashMap<String, u32>,
-    func_widths: &std::collections::HashMap<String, u32>,
+    func_widths: &lexscope::RtnSpelledMap<u32>,
 ) -> bool {
     use ast::ExprKind::*;
     // A widening node is mis-lowered iff its own self width is below the context width.
@@ -258,7 +258,7 @@ pub(crate) fn ctx_widening_below(
 pub(crate) fn ast_expr_self_width(
     e: &ast::Expr,
     widths: &std::collections::HashMap<String, u32>,
-    func_widths: &std::collections::HashMap<String, u32>,
+    func_widths: &lexscope::RtnSpelledMap<u32>,
 ) -> Option<u32> {
     use ast::ExprKind::*;
     let rec = |x| ast_expr_self_width(x, widths, func_widths);
@@ -271,7 +271,7 @@ pub(crate) fn ast_expr_self_width(
         // A single-segment call is a function call → its return width. (A 2-segment
         // `h.method()` is a handle method — unknown here → conservative `None`.)
         Call { name, .. } => match name.segments.as_slice() {
-            [seg] => func_widths.get(&seg.name).copied(),
+            [seg] => func_widths.get_unwalked(&seg.name).copied(),
             _ => None,
         },
         IntLit {
@@ -336,7 +336,7 @@ pub(crate) fn assign_needs_context_width(
     s: &ast::Stmt,
     widths: &std::collections::HashMap<String, u32>,
     unknown_bv: &std::collections::HashSet<String>,
-    func_widths: &std::collections::HashMap<String, u32>,
+    func_widths: &lexscope::RtnSpelledMap<u32>,
 ) -> bool {
     use ast::Stmt::*;
     match s {

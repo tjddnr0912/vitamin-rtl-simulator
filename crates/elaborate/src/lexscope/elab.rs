@@ -13,6 +13,7 @@
 
 use std::collections::BTreeMap;
 
+use super::RtnKey;
 use super::{found_text, DeclKey, Mark, ReportedAt, ScopeRef};
 use crate::Elaborator;
 use diag::MsgCode;
@@ -31,7 +32,7 @@ impl Elaborator<'_> {
 
     /// The routine-table key this generate scope gives `bare`, or `None` when the
     /// current position is not inside a generate scope of this module instance.
-    pub(crate) fn cur_gen_rtn_key(&self, bare: &str) -> Option<String> {
+    pub(crate) fn cur_gen_rtn_key(&self, bare: &str) -> Option<RtnKey> {
         let inst = self.lex.mark_text(Mark::Inst);
         let cur = self.lex.cur_prefix_text();
         let rel = if inst.is_empty() {
@@ -51,7 +52,7 @@ impl Elaborator<'_> {
     /// so a call made from inside a generate-scoped function body — or from a named
     /// block nested in the generate block — composes the same key the declaration
     /// registered. Segments are joined with `$`, never `.` (see `rtn_decl_scope`).
-    fn gen_rtn_key(scope: &str, bare: &str) -> Option<String> {
+    fn gen_rtn_key(scope: &str, bare: &str) -> Option<RtnKey> {
         let mut key = String::new();
         for seg in scope.split('.') {
             // A `$…$` segment carries a `[` of its own when the routine it names is
@@ -82,7 +83,11 @@ impl Elaborator<'_> {
     /// Innermost-wins is what makes a generate `f` shadow a module `f`, and running
     /// out of relative scope (returning `None`) is what hands the module-level key
     /// back to the caller.
-    pub(crate) fn walk_rtn_scopes(&self, bare: &str, hit: impl Fn(&str) -> bool) -> Option<String> {
+    pub(super) fn walk_rtn_scopes(
+        &self,
+        bare: &str,
+        hit: impl Fn(&RtnKey) -> bool,
+    ) -> Option<RtnKey> {
         let inst = self.lex.mark_text(Mark::Inst);
         let cur = self.lex.cur_prefix_text();
         let mut rel: &str = if inst.is_empty() {

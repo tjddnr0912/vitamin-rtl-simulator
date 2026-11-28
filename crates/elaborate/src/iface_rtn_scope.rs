@@ -72,11 +72,11 @@ use super::*;
 /// * the PARENT's own tables never receive the carry. See [`StaticScopedCarry`] for
 ///   the two designs that measured.
 pub(crate) struct RoutineScope {
-    func_table: BTreeMap<String, ast::FunctionDef>,
-    task_table: BTreeMap<String, ast::TaskDef>,
-    rtn_pkg: BTreeMap<String, String>,
-    rtn_decl_scope: BTreeMap<String, ScopeRef>,
-    rtn_decl_genvars: BTreeMap<String, Vec<(NewKey, i64)>>,
+    func_table: BTreeMap<RtnKey, ast::FunctionDef>,
+    task_table: BTreeMap<RtnKey, ast::TaskDef>,
+    rtn_pkg: BTreeMap<RtnKey, String>,
+    rtn_decl_scope: BTreeMap<RtnKey, ScopeRef>,
+    rtn_decl_genvars: BTreeMap<RtnKey, Vec<(NewKey, i64)>>,
     tf_decl_scope: ScopeRef,
     /// The instance whose routines the tables describe (`%m`, the OBS
     /// `subroutine_calls[].name`, the relative-scope walks). Round 1 of the review
@@ -96,11 +96,11 @@ pub(crate) struct RoutineScope {
     /// facts lookup). Lifting that refusal makes the same walk resolve an
     /// interface's OWN children, which is the right scope for it.
     cur_module: String,
-    inout_func_names: BTreeSet<String>,
-    body_write_func_names: BTreeSet<String>,
-    dyn_formal_func_names: BTreeSet<String>,
-    frame_idx: BTreeMap<String, u32>,
-    task_frame_idx: BTreeMap<String, u32>,
+    inout_func_names: BTreeSet<RtnKey>,
+    body_write_func_names: BTreeSet<RtnKey>,
+    dyn_formal_func_names: BTreeSet<RtnKey>,
+    frame_idx: BTreeMap<RtnKey, u32>,
+    task_frame_idx: BTreeMap<RtnKey, u32>,
     const_func_table: BTreeMap<String, ast::FunctionDef>,
     const_fn_pkg: BTreeMap<String, String>,
     scope_imports: Vec<ast::ImportDecl>,
@@ -122,17 +122,17 @@ pub(crate) struct RoutineScope {
 /// same-package callees beside it under the same spelling. A bare name never
 /// contains `::`, so the import lane is untouched by this.
 fn static_scoped_keys(
-    func_table: &BTreeMap<String, ast::FunctionDef>,
-    task_table: &BTreeMap<String, ast::TaskDef>,
-) -> BTreeSet<String> {
+    func_table: &BTreeMap<RtnKey, ast::FunctionDef>,
+    task_table: &BTreeMap<RtnKey, ast::TaskDef>,
+) -> BTreeSet<RtnKey> {
     func_table
         .iter()
-        .filter(|(k, f)| k.contains("::") && !f.automatic)
+        .filter(|(k, f)| lexscope::is_pkg_scoped(k) && !f.automatic)
         .map(|(k, _)| k.clone())
         .chain(
             task_table
                 .iter()
-                .filter(|(k, t)| k.contains("::") && !t.automatic)
+                .filter(|(k, t)| lexscope::is_pkg_scoped(k) && !t.automatic)
                 .map(|(k, _)| k.clone()),
         )
         .collect()
@@ -140,9 +140,9 @@ fn static_scoped_keys(
 
 /// Move every `keys` entry from `from` into `to`, leaving an absent key alone.
 fn move_keyed_map<V>(
-    from: &mut BTreeMap<String, V>,
-    to: &mut BTreeMap<String, V>,
-    keys: &BTreeSet<String>,
+    from: &mut BTreeMap<RtnKey, V>,
+    to: &mut BTreeMap<RtnKey, V>,
+    keys: &BTreeSet<RtnKey>,
 ) {
     for k in keys {
         if let Some(v) = from.remove(k) {
@@ -152,7 +152,7 @@ fn move_keyed_map<V>(
 }
 
 /// [`move_keyed_map`] for the call-shape name sets.
-fn move_keyed_set(from: &mut BTreeSet<String>, to: &mut BTreeSet<String>, keys: &BTreeSet<String>) {
+fn move_keyed_set(from: &mut BTreeSet<RtnKey>, to: &mut BTreeSet<RtnKey>, keys: &BTreeSet<RtnKey>) {
     for k in keys {
         if from.remove(k) {
             to.insert(k.clone());
@@ -168,13 +168,13 @@ fn move_keyed_set(from: &mut BTreeSet<String>, to: &mut BTreeSet<String>, keys: 
 /// stayed behind is re-reserved as a second copy of a variable IEEE §6.21 keeps
 /// single. Naming them in one place is what makes "all seven or none" checkable.
 struct RtnTables<'a> {
-    func: &'a mut BTreeMap<String, ast::FunctionDef>,
-    task: &'a mut BTreeMap<String, ast::TaskDef>,
-    frame: &'a mut BTreeMap<String, u32>,
-    task_frame: &'a mut BTreeMap<String, u32>,
-    inout: &'a mut BTreeSet<String>,
-    body_write: &'a mut BTreeSet<String>,
-    dyn_formal: &'a mut BTreeSet<String>,
+    func: &'a mut BTreeMap<RtnKey, ast::FunctionDef>,
+    task: &'a mut BTreeMap<RtnKey, ast::TaskDef>,
+    frame: &'a mut BTreeMap<RtnKey, u32>,
+    task_frame: &'a mut BTreeMap<RtnKey, u32>,
+    inout: &'a mut BTreeSet<RtnKey>,
+    body_write: &'a mut BTreeSet<RtnKey>,
+    dyn_formal: &'a mut BTreeSet<RtnKey>,
 }
 
 /// Move `from`'s static scoped routine keys ([`static_scoped_keys`], computed from
@@ -243,13 +243,13 @@ fn move_static_scoped(from: RtnTables<'_>, to: RtnTables<'_>) {
 /// measured). The fix shape is the design-wide frame, not another rule here.
 #[derive(Default)]
 pub(crate) struct StaticScopedCarry {
-    func_table: BTreeMap<String, ast::FunctionDef>,
-    task_table: BTreeMap<String, ast::TaskDef>,
-    frame_idx: BTreeMap<String, u32>,
-    task_frame_idx: BTreeMap<String, u32>,
-    inout_func_names: BTreeSet<String>,
-    body_write_func_names: BTreeSet<String>,
-    dyn_formal_func_names: BTreeSet<String>,
+    func_table: BTreeMap<RtnKey, ast::FunctionDef>,
+    task_table: BTreeMap<RtnKey, ast::TaskDef>,
+    frame_idx: BTreeMap<RtnKey, u32>,
+    task_frame_idx: BTreeMap<RtnKey, u32>,
+    inout_func_names: BTreeSet<RtnKey>,
+    body_write_func_names: BTreeSet<RtnKey>,
+    dyn_formal_func_names: BTreeSet<RtnKey>,
 }
 
 impl StaticScopedCarry {

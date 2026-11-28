@@ -971,11 +971,11 @@ impl Elaborator<'_> {
         let mut set: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
         // Callee return widths (a call operand's self-width) for the ㊁ context-width
         // detection — built once so `f = g(x) + 1` sees `g(x)`'s width, not `None`.
-        let func_widths: std::collections::HashMap<String, u32> = self
-            .func_table
+        let mut func_widths = lexscope::RtnSpelledMap::new();
+        self.func_table
             .iter()
-            .filter_map(|(n, f)| ast_func_return_width(f).map(|w| (n.clone(), w)))
-            .collect();
+            .filter_map(|(n, f)| ast_func_return_width(f).map(|w| (n, w)))
+            .for_each(|(n, w)| func_widths.put_key(n, w));
         for (name, f) in &self.func_table {
             // R4: a `string`-returning function (IEEE §6.16) is materialized through a
             // frame `NetKind::String` return slot — the frame body writes it (a

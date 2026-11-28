@@ -47,11 +47,13 @@ impl Elaborator<'_> {
     pub(crate) fn register_declared_routine(&mut self, item: &ast::ModuleItem) -> bool {
         match item {
             ast::ModuleItem::Func(f) => {
-                self.func_table.insert(f.name.name.clone(), f.clone());
+                self.func_table
+                    .insert(lexscope::rtn_key_bound(&f.name.name), f.clone());
                 true
             }
             ast::ModuleItem::Task(t) => {
-                self.task_table.insert(t.name.name.clone(), t.clone());
+                self.task_table
+                    .insert(lexscope::rtn_key_bound(&t.name.name), t.clone());
                 true
             }
             _ => false,

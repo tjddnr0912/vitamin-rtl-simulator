@@ -133,6 +133,7 @@ mod inline_task_locals;
 mod instance;
 mod instance_array;
 mod lexscope;
+use lexscope::RtnKey;
 use lexscope::{
     at_same, key_in, key_same, key_show, scope_out, shown_from_spelling, AtKey, DeclKey, Keyed,
     KeyedSet, Mark, NewKey, ReportedAt, ScopeKeyed, ScopeRef, Shown, ShownCtx,
@@ -622,7 +623,7 @@ struct Elaborator<'s> {
     /// [`tables::SubroutineRoutes`]'s "NOT counted"). It still occupies its slot:
     /// the entry is the alignment, not the row. Minted only through
     /// [`Self::push_func`], which is what makes that alignment structural.
-    frame_keys: Vec<Option<String>>,
+    frame_keys: Vec<Option<RtnKey>>,
     /// R2 ⓒ: DECLARATION site per FuncId, parallel to `frame_func_names`.
     /// Drained into `Sidecars.func_decl_locs`. `None` = no `SpanResolver`.
     frame_decl_locs: Vec<Option<DeclLoc>>,
@@ -638,11 +639,11 @@ struct Elaborator<'s> {
     /// recursion cycle), and their reserved FuncId. PER-INSTANCE (saved/restored
     /// like `func_table`) so a sibling module never diverts to a stale id. The
     /// call-site divert (`inline_function`) consults this; empty ⇒ pure inline.
-    frame_idx: BTreeMap<String, u32>,
+    frame_idx: BTreeMap<RtnKey, u32>,
     /// B2 frame-call: names of recursive TASKS needing a frame → reserved FuncId.
     /// PER-INSTANCE (saved/restored). The task-call divert (`inline_task`) emits a
     /// `Terminator::Call` + a `TaskCallInfo` when the callee is here.
-    task_frame_idx: BTreeMap<String, u32>,
+    task_frame_idx: BTreeMap<RtnKey, u32>,
     /// Round-14 V3/V4: frame-TASK bodies whose reject decision is DEFERRED to a
     /// post-pass — `(fid, name, block_base, net_base, locals_len)`. Once every task is
     /// lowered, `sim_ir::compute_suspendable_tasks` gives the transitive suspendable set,
@@ -650,7 +651,7 @@ struct Elaborator<'s> {
     /// timing/nested/transitively-suspendable one stays loud (E3009). The trailing bool
     /// = the AST had a `repeat(...)` with a timing body (a shared-counter hazard — keep
     /// loud), captured from the AST before it is lost to the IR desugar.
-    frame_task_pending: Vec<(u32, String, u32, u32, bool)>,
+    frame_task_pending: Vec<(u32, RtnKey, u32, u32, bool)>,
     /// B2: accumulated process-body task-call sites (→ `Sidecars.task_calls_proc`).
     task_calls_proc: TaskCallProc,
     /// B2: accumulated nested (task-body) task-call sites (→ `task_calls_func`).
@@ -694,7 +695,7 @@ struct Elaborator<'s> {
     // divert to the frame path) therefore share ONE formal-local net per formal,
     // allocated at the first call site and reused at every later site (keyed by
     // task name → per-formal net ids, in port order). elaborate-LOCAL only.
-    task_arg_locals: std::collections::HashMap<String, Vec<u32>>,
+    task_arg_locals: std::collections::HashMap<RtnKey, Vec<u32>>,
     // Heap-handle nets (dyn array/queue/assoc) whose ELEMENT type is 2-state
     // (int/bit/byte/shortint/longint). These skip the regular `record_dim_desc`
     // path (and thus `intro_kind`), so the `two_state_nets` sidecar would miss
@@ -1057,7 +1058,7 @@ struct Elaborator<'s> {
     // name (matches the per-instance net isolation of `walk_scopes_key`). Cloning the
     // small defs sidesteps threading an AST lifetime through the whole driver; the
     // tables are point-queried only (BTreeMap), never iterated into arena order.
-    func_table: BTreeMap<String, ast::FunctionDef>,
+    func_table: BTreeMap<RtnKey, ast::FunctionDef>,
     // §4.5.186 constant-function evaluation: the SAME per-module function defs as
     // `func_table`, but populated EARLIER (before the module's parameter fold) so a
     // `localparam W = f(N)` can interpret `f` at compile time (`func_table` itself is
@@ -1088,7 +1089,7 @@ struct Elaborator<'s> {
     decl_wins: std::cell::RefCell<
         BTreeMap<(String, String, decl_scope::RtnKind), std::rc::Rc<decl_scope::DeclWin>>,
     >,
-    task_table: BTreeMap<String, ast::TaskDef>,
+    task_table: BTreeMap<RtnKey, ast::TaskDef>,
     // The package a routine in `func_table`/`task_table` was DECLARED in, when it got
     // there through an import. A routine's body must resolve in its own declaring
     // scope (IEEE 1800 §26.3) but vita lowers every body with the caller module's flat
@@ -1097,7 +1098,7 @@ struct Elaborator<'s> {
     // whose frame key is a bare name (an explicit `import p::f;` — the `pkg::name`
     // frame key of a `p::f()` call already carries it in the key). Saved/restored with
     // `func_table`.
-    rtn_pkg: BTreeMap<String, String>,
+    rtn_pkg: BTreeMap<RtnKey, String>,
     // IEEE 1800-2017 §27.3: the GENERATE scope a routine in `func_table`/`task_table`
     // was declared in, keyed by that routine's table key. Twin of `rtn_pkg`, and the
     // marker that a key is generate-scoped at all (a module routine has no entry).
@@ -1113,7 +1114,7 @@ struct Elaborator<'s> {
     // `lower_frame_funcs` restores around the reserve+lower of that body (so it reads
     // the generate scope's nets and its iteration's genvar) and what `frame_path`
     // spells for `%m`. Saved/restored with `func_table`.
-    rtn_decl_scope: BTreeMap<String, ScopeRef>,
+    rtn_decl_scope: BTreeMap<RtnKey, ScopeRef>,
     // The GENVAR bindings in force where a §27.3 generate-scoped routine was
     // registered, keyed like `rtn_decl_scope`: `[(t.u.i, 1)]` for the `gl[1]`
     // iteration. A genvar binding is transient — it lives only for the duration of
@@ -1122,7 +1123,7 @@ struct Elaborator<'s> {
     // resolved `i` against nothing and reported an undeclared net. Replayed by
     // `with_rtn_decl_scope` around that body's reserve+lower, which is what gives
     // each iteration's copy its own value. Saved/restored with `func_table`.
-    rtn_decl_genvars: BTreeMap<String, Vec<(NewKey, i64)>>,
+    rtn_decl_genvars: BTreeMap<RtnKey, Vec<(NewKey, i64)>>,
     // The genvar bindings the generate walk currently has in force, innermost last.
     // Pushed per ITERATION by the generate-for arm, so it is what a registration
     // inside that iteration's body copies out.
@@ -1172,7 +1173,7 @@ struct Elaborator<'s> {
     // `Terminator::Call` (statement context) via `emit_frame_func_out_call` rather
     // than a pure `Expr::Call`. EMPTY for any design without such a function, so the
     // hoist pre-pass in `lower_stmt` is skipped and all other code is byte-identical.
-    inout_func_names: std::collections::BTreeSet<String>,
+    inout_func_names: std::collections::BTreeSet<RtnKey>,
     // §3.b: names of FRAMED functions whose own body writes a MODULE net
     // (`func_body_writes_outside_name`). Filled from the AST in `lower_frame_funcs` BEFORE
     // any body is lowered — a caller is lowered before its callee whenever its name sorts
@@ -1180,7 +1181,7 @@ struct Elaborator<'s> {
     // `lower_frame_func_body` (to let `classify_frame_body` accept the write) and by
     // `emit_frame_call` (to refuse a call the hoist could not turn into a statement).
     // EMPTY for any design without such a function, so every other design is byte-identical.
-    body_write_func_names: std::collections::BTreeSet<String>,
+    body_write_func_names: std::collections::BTreeSet<RtnKey>,
     // §3.b, the per-FuncId twin of `body_write_func_names`, and it has to be a SECOND
     // record rather than a lookup: the name set is per-MODULE (rebuilt by each
     // `lower_frame_funcs`, saved/restored in `elaborate_instance`), while a HIERARCHICAL
@@ -1202,7 +1203,7 @@ struct Elaborator<'s> {
     // temp `__t = f(a)` — itself a direct-rhs blocking assign that re-triggers §4.5.177's
     // snapshot marker. EMPTY for any design without such a function → the hoist pre-pass in
     // `lower_stmt` is skipped and all other code is byte-identical.
-    dyn_formal_func_names: std::collections::BTreeSet<String>,
+    dyn_formal_func_names: std::collections::BTreeSet<RtnKey>,
     // Named SVA declarations (Phase-3 named-SVA slice): bare name → decl, collected
     // per-instance like func_table/task_table (saved/restored so siblings don't
     // inherit). Kept SEPARATE from the net symbol table so a net and a sequence of

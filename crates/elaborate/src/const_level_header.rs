@@ -330,7 +330,7 @@ impl Elaborator<'_> {
     pub(crate) fn body_suspend_blocker(
         &self,
         s: &ast::Stmt,
-        callers: &mut Vec<String>,
+        callers: &mut Vec<RtnKey>,
     ) -> Option<T0Decline> {
         use ast::Stmt as S;
         let body = |what: &str, split: bool| {
@@ -435,7 +435,7 @@ impl Elaborator<'_> {
     fn task_enable_blocker(
         &self,
         name: &ast::HierPath,
-        callers: &mut Vec<String>,
+        callers: &mut Vec<RtnKey>,
     ) -> Option<T0Decline> {
         let text = name
             .segments

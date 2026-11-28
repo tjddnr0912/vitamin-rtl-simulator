@@ -179,7 +179,6 @@ lvalue.rs	collect_lval_chunks	walk_shadowed_string_array_elem	string_array_elems
 package.rs	bare_hit_is_shadowed_pkg_alias	walk_key_genvar	genvar_decls	SITE	genvar_decls	1
 package.rs	bare_hit_is_shadowed_pkg_alias	walk_key_net	symbols	SITE	symbols	1
 package.rs	dotted_hit_is_pkg_alias	walk_key_net	symbols	SITE	symbols	1
-package.rs	resolve_rtn_key	walk_rtn_scopes	func_table|task_table	RTN	func_table+task_table	1
 param_query.rs	real_param_is_non_integral	walk_key_real_value_or_net	hit_real_value_or_net	SITE	params+real_param_val+symbols	1
 param_query.rs	real_param_lowers_real	walk_key_real_value_or_net	hit_real_value_or_net	SITE	params+real_param_val+symbols	1
 params.rs	param_sel_range	walk_key_value_or_net	hit_value_or_net	SITE	params+symbols	1
@@ -191,6 +190,7 @@ scope.rs	lookup_scoped	walk_key_value	hit_value	SITE	params	1
 strings.rs	is_string_array_base	walk_shadowed_string_array_elem	string_array_elems	SITE	string_array_elems	1
 strings.rs	string_array_elem_net	walk_shadowed_string_array_elem	string_array_elems	SITE	string_array_elems	1
 struct_arm.rs	struct_arm_rhs	walk_key_net	symbols	SITE	symbols	1
+lexscope/rtn.rs	resolve_rtn_key	walk_rtn_scopes	func_table|task_table	RTN	func_table+task_table	1
 == H6_COUNTS
 {"FOUND": 2, "HIER": 10, "INTERNAL": 4, "PROBE": 1, "RTN": 1, "SITE": 51} site_texts 23 site_sets 20
 == H6A
@@ -316,7 +316,6 @@ lvalue.rs	collect_lval_chunks	D	WBIND
 md_return.rs	md_return_callee	D	XKIND
 net_util.rs	net_is_undeclared	D	OWN
 package.rs	bare_hit_is_shadowed_pkg_alias	D	OWN
-package.rs	resolve_rtn_key	D	RNS
 package.rs	apply_import_routines	D	RNS
 packed.rs	expr_packed_chain	D	SAME
 packed_lval.rs	bound_by_inline_formal	D	OWN
@@ -348,6 +347,7 @@ sva_prop.rs	chain_consequent_property	D	XKIND
 sva_prop.rs	flatten_overlap_property	D	XKIND
 sva_prop.rs	prop_bool_operand	D	RNS
 sva_prop.rs	sva_prev_for	D	SAME
+lexscope/rtn.rs	resolve_rtn_key	D	RNS
 == H6C_COUNTS
 rows 102 {"COPY": 15, "FRAME": 3, "OWN": 36, "PLACE": 5, "R5": 1, "R5TAIL": 2, "RNS": 18, "SAME": 13, "WBIND": 2, "XKIND": 7}
 == H7
@@ -413,7 +413,7 @@ frames_call/emit.rs	emit_frame_task_call	1	out_array_unpacks
 frames_classify.rs	body_duplicates_a_non_repeatable_local	1	pending
 frames_classify.rs	body_reads_only_locals	1	locals
 frames_classify.rs	body_selects_mdpacked_local	1	names
-frames_classify.rs	build_frame_set	3	set,func_widths,edges
+frames_classify.rs	build_frame_set	2	set,edges
 frames_classify.rs	build_task_frame_set	1	edges
 frames_classify_write.rs	ast_func_body_writes_outside	UNTYPED	own=rtn_declared_names
 frames_static_init.rs	block_wrap_prefix	1	segs
@@ -432,7 +432,6 @@ hoist/general.rs	hoist_inout_general_seq	1	snaps
 hoist/general.rs	hoist_inout_general_seq	UNTYPED	roots=order_plan
 iface_inst.rs	elaborate_iface_instances	5	local_const_funcs,wc_const_fn,explicit_const_fn,wc_rtn,explicit_rtn
 iface_inst.rs	elaborate_iface_instances	UNTYPED	local_names=gather_local_decl_names,dpos=gather_decl_positions,dbl=gather_block_local_names,shadow_names=names_with_pkg_var_aliases,scoped_blocks=compute_scoped_block_locals,per_entry_blocks=compute_per_entry_block_locals,coalesced=compute_coalesced_block_locals
-iface_rtn_scope.rs	move_static_scoped	UNTYPED	keys=static_scoped_keys
 inline_fn.rs	body_needs_context_width	2	widths,unknown_bv
 inline_fn.rs	inline_pkg_function	1	pkg_rtn_names
 inline_fn.rs	inline_pkg_function	UNTYPED	pkg_const_names=pkg_scope_names,refused=inject_pkg_callees
@@ -522,7 +521,7 @@ block_local_class.rs	compute_timed_blocks	let	path
 block_local_class.rs	compute_timed_blocks	field:Acc	sharers
 block_local_class.rs	compute_timed_blocks	field:Acc	scoped
 == H7_COUNTS
-lets 156 fns 87 untyped 30 readers 26
+lets 155 fns 87 untyped 29 readers 26
 == HM
 # HM: the mints of scope-qualified text, by (file, fn, mint kind, name) with a count — g3 mints.tsv's rule
 # (census_g3.rs + link.py): `call` a call of a mint fn (MINT_CALLS), `fmt` / `fmt-tempname` a `format!` /
@@ -757,8 +756,6 @@ netdecl.rs	elaborate_netvar_decl_inner	fmt-tempname	format	1	spelling
 package.rs	bare_hit_is_shadowed_pkg_alias	call	walk_key_genvar	1	key
 package.rs	bare_hit_is_shadowed_pkg_alias	call	walk_key_net	1	key
 package.rs	dotted_hit_is_pkg_alias	call	walk_key_net	1	key
-package.rs	resolve_rtn_key	call	walk_rtn_scopes	1	key
-package.rs	resolve_rtn_key	derived-fn	resolve_rtn_key	1	key
 packed.rs	expr_packed_chain	join	join	1	spelling
 packed_lval.rs	lval_packed_chain	join	join	1	spelling
 param_query.rs	real_param_is_non_integral	call	walk_key_real_value_or_net	1	key
@@ -787,8 +784,9 @@ sva_clocking.rs	lower_clocking_blocks	fmt	format	3	spelling
 sva_clocking.rs	lower_clocking_blocks	join	join	2	spelling
 systask.rs	lower_systask	join	join	1	spelling
 systask.rs	unformatted_call_proxy	join	join	1	spelling
+lexscope/rtn.rs	resolve_rtn_key	call	walk_rtn_scopes	1	key
 == HM_COUNTS
-mints 281 kinds {"call": 101, "curp": 5, "derived-fn": 10, "fmt": 46, "fmt-tempname": 25, "join": 87, "push": 7} tags {"display": 21, "key": 121, "scope": 17, "segment": 17, "spelling": 105}
+mints 280 kinds {"call": 101, "curp": 5, "derived-fn": 9, "fmt": 46, "fmt-tempname": 25, "join": 87, "push": 7} tags {"display": 21, "key": 120, "scope": 17, "segment": 17, "spelling": 105}
 == HS_STORES
 # HS: the store set — every `Elaborator` field whose type is a map / set keyed by `String`
 # (through Option / RefCell / Rc / Box / Bound) ; g3 name_keyed_fields.txt's 86 less its
@@ -918,7 +916,6 @@ frames_reserve.rs	reserve_frame_task	contains	"::"	1	key	RS1
 frames_reserve.rs	reserve_frame_task	contains	'$'	1	key	RS1
 gen_scope_name.rs	gen_seg_label	rsplit_once	'['	1	scope	DK1
 gen_scope_name.rs	gen_seg_label	starts_with	'$'	1	scope	DK1
-iface_rtn_scope.rs	static_scoped_keys	contains	"::"	2	key	RS1
 lexscope/disp.rs	cur_context	strip_prefix	"$pkg$"	1	display	B3k
 lexscope/disp.rs	display_of	contains	'['	1	display	B3k
 lexscope/disp.rs	display_of	split	'.'	1	display	B3k
@@ -931,20 +928,20 @@ lexscope/disp.rs	stmt_loc_instance	strip_prefix	'.'	1	display	-
 lexscope/elab.rs	alias_iface_port	split	'.'	1	key	DK3
 lexscope/elab.rs	alias_iface_port	starts_with	<src_prefix>	1	key	DK3
 lexscope/elab.rs	bare_name_of_net	rsplit	'.'	1	key	DK3
-lexscope/elab.rs	cur_gen_rtn_key	strip_prefix	'.'	1	scope	RS1
-lexscope/elab.rs	cur_gen_rtn_key	strip_prefix	<inst>	1	scope	RS1
+lexscope/elab.rs	cur_gen_rtn_key	strip_prefix	'.'	1	scope	B3k
+lexscope/elab.rs	cur_gen_rtn_key	strip_prefix	<inst>	1	scope	B3k
 lexscope/elab.rs	flush_block_local_inits	split	'.'	1	scope	B3k
 lexscope/elab.rs	flush_block_local_inits	starts_with	"$blk$"	1	scope	B3k
 lexscope/elab.rs	flush_block_local_inits	strip_prefix	<dot>	1	scope	B3k
-lexscope/elab.rs	gen_rtn_key	is_gen_scope_segment	-	1	scope	RS1
-lexscope/elab.rs	gen_rtn_key	split	'.'	1	scope	RS1
-lexscope/elab.rs	gen_rtn_key	starts_with	'$'	1	scope	RS1
+lexscope/elab.rs	gen_rtn_key	is_gen_scope_segment	-	1	scope	B3k
+lexscope/elab.rs	gen_rtn_key	split	'.'	1	scope	B3k
+lexscope/elab.rs	gen_rtn_key	starts_with	'$'	1	scope	B3k
 lexscope/elab.rs	names_with_pkg_var_aliases	rsplit_once	'.'	1	key	DK1
 lexscope/elab.rs	net_is_compiler_internal	rsplit	'.'	1	key	DK3
 lexscope/elab.rs	net_is_compiler_internal	starts_with	'$'	1	key	DK3
-lexscope/elab.rs	walk_rtn_scopes	rfind	'.'	1	scope	RS1
-lexscope/elab.rs	walk_rtn_scopes	strip_prefix	'.'	1	scope	RS1
-lexscope/elab.rs	walk_rtn_scopes	strip_prefix	<inst>	1	scope	RS1
+lexscope/elab.rs	walk_rtn_scopes	rfind	'.'	1	scope	B3k
+lexscope/elab.rs	walk_rtn_scopes	strip_prefix	'.'	1	scope	B3k
+lexscope/elab.rs	walk_rtn_scopes	strip_prefix	<inst>	1	scope	B3k
 lexscope/hier.rs	hier_resolve	split	'.'	1	scope	walk
 lexscope/hier.rs	is_hier_scope	starts_with	<probe>	1	key	DK3
 lexscope/hier.rs	key_spells_indexed_singleton	split	'.'	1	key	DK3
@@ -986,8 +983,9 @@ scope.rs	lookup_net_scoped	split	'.'	1	spelling	DK3
 scope.rs	rtn_key_bare	rfind	'$'	1	key	RS1
 stmt_main.rs	lower_stmt_inner	starts_with	"$f"	1	spelling	-
 stmt_main.rs	lower_stmt_inner	starts_with	'$'	2	spelling	-
+lexscope/rtn.rs	is_pkg_scoped	contains	"::"	1	key	-
 == HSEG_COUNTS
-tests 98 tags {"display": 9, "key": 24, "scope": 37, "spelling": 28} units {"-": 29, "B3a": 2, "B3k": 25, "DK1": 4, "DK3": 10, "RS1": 19, "walk": 9}
+tests 97 tags {"display": 9, "key": 23, "scope": 37, "spelling": 28} units {"-": 30, "B3a": 2, "B3k": 33, "DK1": 4, "DK3": 10, "RS1": 9, "walk": 9}
 == H5
 # H5: the name-typed fields — census_fields.rs's rule: the structs reached from Elaborator and ConstFrame
 # through field types (aliases expanded), each field whose type names String / str / Symbol / Ident ; 215 =
@@ -1030,11 +1028,11 @@ Elaborator	lib.rs	pkg_own_tasks	BTreeMap<String, BTreeSet<String>>	BINDING	R	-
 Elaborator	lib.rs	const_call_fn	std::cell::RefCell<Option<String>>	BINDING	R	-
 Elaborator	lib.rs	pkg_tasks	BTreeMap<String, BTreeMap<String, ast::TaskDef>>	BINDING	R	-
 Elaborator	lib.rs	subroutine_routes	SubroutineRoutes	NOT	I	-
-Elaborator	lib.rs	frame_keys	Vec<Option<String>>	NOT	I	-
-Elaborator	lib.rs	frame_idx	BTreeMap<String, u32>	BINDING	R	ROUTINE
-Elaborator	lib.rs	task_frame_idx	BTreeMap<String, u32>	BINDING	R	ROUTINE
-Elaborator	lib.rs	frame_task_pending	Vec<(u32, String, u32, u32, bool)>	NOT	I	-
-Elaborator	lib.rs	task_arg_locals	std::collections::HashMap<String, Vec<u32>>	BINDING	V	ROUTINE
+Elaborator	lib.rs	frame_keys	Vec<Option<RtnKey>>	NOT	I	-
+Elaborator	lib.rs	frame_idx	BTreeMap<RtnKey, u32>	BINDING	R	ROUTINE
+Elaborator	lib.rs	task_frame_idx	BTreeMap<RtnKey, u32>	BINDING	R	ROUTINE
+Elaborator	lib.rs	frame_task_pending	Vec<(u32, RtnKey, u32, u32, bool)>	NOT	I	-
+Elaborator	lib.rs	task_arg_locals	std::collections::HashMap<RtnKey, Vec<u32>>	BINDING	V	ROUTINE
 Elaborator	lib.rs	array_iter	Option<String>	BINDING	V	-
 Elaborator	lib.rs	ifaces	BTreeMap<String, ast::ModuleDecl>	NOT	DEF	-
 Elaborator	lib.rs	iface_insts	Keyed<String>	BINDING	S	KEYED-PLAN26
@@ -1074,21 +1072,21 @@ Elaborator	lib.rs	gen_enum_carried	BTreeMap<String, std::collections::BTreeSet<(
 Elaborator	lib.rs	cond_census	BTreeMap<String, cond_names::CondCensus>	BINDING	V	-
 Elaborator	lib.rs	defparams	ScopeKeyed<Vec<DefparamOverride>>	NOT	INPUT	KEYED-OTHER
 Elaborator	lib.rs	inst_stack	Vec<String>	NOT	G	-
-Elaborator	lib.rs	func_table	BTreeMap<String, ast::FunctionDef>	BINDING	R	ROUTINE
+Elaborator	lib.rs	func_table	BTreeMap<RtnKey, ast::FunctionDef>	BINDING	R	ROUTINE
 Elaborator	lib.rs	const_func_table	BTreeMap<String, ast::FunctionDef>	BINDING	R	ROUTINE
 Elaborator	lib.rs	const_fn_pkg	BTreeMap<String, String>	BINDING	R	-
 Elaborator	lib.rs	const_call_pkg	std::cell::RefCell<Option<String>>	NOT	CTX	-
 Elaborator	lib.rs	decl_wins	std::cell::RefCell<BTreeMap<(String, String, decl_scope::RtnKind), std::rc::Rc<decl_scope::DeclWin>>>	BINDING	V	-
-Elaborator	lib.rs	task_table	BTreeMap<String, ast::TaskDef>	BINDING	R	ROUTINE
-Elaborator	lib.rs	rtn_pkg	BTreeMap<String, String>	BINDING	R	ROUTINE
-Elaborator	lib.rs	rtn_decl_scope	BTreeMap<String, ScopeRef>	BINDING	R	ROUTINE
-Elaborator	lib.rs	rtn_decl_genvars	BTreeMap<String, Vec<(NewKey, i64)>>	BINDING	R	ROUTINE
+Elaborator	lib.rs	task_table	BTreeMap<RtnKey, ast::TaskDef>	BINDING	R	ROUTINE
+Elaborator	lib.rs	rtn_pkg	BTreeMap<RtnKey, String>	BINDING	R	ROUTINE
+Elaborator	lib.rs	rtn_decl_scope	BTreeMap<RtnKey, ScopeRef>	BINDING	R	ROUTINE
+Elaborator	lib.rs	rtn_decl_genvars	BTreeMap<RtnKey, Vec<(NewKey, i64)>>	BINDING	R	ROUTINE
 Elaborator	lib.rs	decl_pos	BTreeMap<String, u32>	BINDING	V	KEYED-OTHER
 Elaborator	lib.rs	decl_block_locals	std::collections::BTreeSet<String>	BINDING	V	-
 Elaborator	lib.rs	wide_param_bits	Bound<Keyed<ir::ConstVal>>	BINDING	V	KEYED-PLAN26
-Elaborator	lib.rs	inout_func_names	std::collections::BTreeSet<String>	BINDING	R	ROUTINE
-Elaborator	lib.rs	body_write_func_names	std::collections::BTreeSet<String>	BINDING	R	ROUTINE
-Elaborator	lib.rs	dyn_formal_func_names	std::collections::BTreeSet<String>	BINDING	R	ROUTINE
+Elaborator	lib.rs	inout_func_names	std::collections::BTreeSet<RtnKey>	BINDING	R	ROUTINE
+Elaborator	lib.rs	body_write_func_names	std::collections::BTreeSet<RtnKey>	BINDING	R	ROUTINE
+Elaborator	lib.rs	dyn_formal_func_names	std::collections::BTreeSet<RtnKey>	BINDING	R	ROUTINE
 Elaborator	lib.rs	seq_table	BTreeMap<String, ast::SeqDecl>	BINDING	R	-
 Elaborator	lib.rs	prop_table	BTreeMap<String, ast::PropDecl>	BINDING	R	-
 Elaborator	lib.rs	let_table	BTreeMap<String, ast::LetDecl>	BINDING	R	-
@@ -1180,13 +1178,13 @@ ModuleFacts	expr_size_hier.rs	real_nets	BTreeSet<String>	BINDING	V	-
 ModuleFacts	expr_size_hier.rs	funcs	BTreeMap<String, (WidthFact, bool)>	BINDING	R	-
 ModuleFacts	expr_size_hier.rs	body_write_funcs	BTreeMap<String, ast::FunctionDef>	BINDING	R	-
 ParamSlot	expr_size_hier.rs	name	String	BINDING	V	-
-StaticScopedCarry	iface_rtn_scope.rs	func_table	BTreeMap<String, ast::FunctionDef>	NOT	COPY	-
-StaticScopedCarry	iface_rtn_scope.rs	task_table	BTreeMap<String, ast::TaskDef>	NOT	COPY	-
-StaticScopedCarry	iface_rtn_scope.rs	frame_idx	BTreeMap<String, u32>	NOT	COPY	-
-StaticScopedCarry	iface_rtn_scope.rs	task_frame_idx	BTreeMap<String, u32>	NOT	COPY	-
-StaticScopedCarry	iface_rtn_scope.rs	inout_func_names	BTreeSet<String>	NOT	COPY	-
-StaticScopedCarry	iface_rtn_scope.rs	body_write_func_names	BTreeSet<String>	NOT	COPY	-
-StaticScopedCarry	iface_rtn_scope.rs	dyn_formal_func_names	BTreeSet<String>	NOT	COPY	-
+StaticScopedCarry	iface_rtn_scope.rs	func_table	BTreeMap<RtnKey, ast::FunctionDef>	NOT	COPY	-
+StaticScopedCarry	iface_rtn_scope.rs	task_table	BTreeMap<RtnKey, ast::TaskDef>	NOT	COPY	-
+StaticScopedCarry	iface_rtn_scope.rs	frame_idx	BTreeMap<RtnKey, u32>	NOT	COPY	-
+StaticScopedCarry	iface_rtn_scope.rs	task_frame_idx	BTreeMap<RtnKey, u32>	NOT	COPY	-
+StaticScopedCarry	iface_rtn_scope.rs	inout_func_names	BTreeSet<RtnKey>	NOT	COPY	-
+StaticScopedCarry	iface_rtn_scope.rs	body_write_func_names	BTreeSet<RtnKey>	NOT	COPY	-
+StaticScopedCarry	iface_rtn_scope.rs	dyn_formal_func_names	BTreeSet<RtnKey>	NOT	COPY	-
 DeclLoc	tables.rs	file	String	NOT	D	-
 ConstSeedRead	tables.rs	function	String	NOT	D	-
 ConstSeedRead	tables.rs	variable	String	NOT	D	-
@@ -1585,11 +1583,8 @@ ident=0 asserts=6
 # §5.2 Q-DECLKEY DK3-b (2026-11-27): L11 and L12 CLOSED: frame_init_name_is_local_or_const reads DeclKey::has_func_segment (no found_text) ; key_spells_indexed_singleton moved into lexscope/hier.rs (found_text pub(super), indexed_gen_singleton private -> bool) — 3 rows gone
 file	fn	entry	sink	count
 block_local_feed.rs	feed_scoped_block_locals	names_with_pkg_var_aliases	LOCAL:shadow_names#3	1
-generate.rs	register_gen_func	cur_gen_rtn_key	OTHER:let-pattern	1
-generate.rs	register_gen_task	cur_gen_rtn_key	OTHER:let-pattern	1
 iface_inst.rs	elaborate_iface_instances	names_with_pkg_var_aliases	LOCAL:shadow_names#2	1
 instance.rs	elaborate_instance	names_with_pkg_var_aliases	LOCAL:shadow_names#4	2
-package.rs	resolve_rtn_key	walk_rtn_scopes	COND	1
 dynarr.rs	dyn_blocking_special	bare_name_of_net	LOCAL:tid#2	1
 == HBR_COUNTS
 # LS2-d: 68 -> 66, display_prefix's and cur_context's reads moved into lexscope/disp.rs (not a bridge read) ;
@@ -1610,7 +1605,7 @@ dynarr.rs	dyn_blocking_special	bare_name_of_net	LOCAL:tid#2	1
 # §5.2 Q-DECLKEY DK1-5b (2026-11-25): cur_prefix_text 3 -> 0 (L1 closed), key_text 6 -> 0 (L7 closed), + names_with_pkg_var_aliases 4 (L13)
 # §5.2 Q-DECLKEY DK3-a (2026-11-26): at_text 1 -> 0 (L9 closed), display_of_key_text 1 -> 0 (L4 closed), found_text 3 -> 2 (L11: ports.rs
 # bind_iface_port's read moved in as alias_iface_port), + bare_name_of_net 1 (L13: dynarr.rs dyn_blocking_special) — 13 -> 11
-{"bare_name_of_net": 1, "cur_gen_rtn_key": 2, "names_with_pkg_var_aliases": 4, "walk_rtn_scopes": 1}
+{"bare_name_of_net": 1, "names_with_pkg_var_aliases": 4}
 == HC_ARGS
 # HC ARGS (LS2a ; DELTA11 R4 N-8, DELTA12 S2 r4): keyed by SURF_ENTER's to-scope rows — the token text of
 # the argument at that parameter in every call of the entry, crate-wide (lexscope included), by (file, fn,
@@ -1868,7 +1863,6 @@ iface_rtn_scope.rs	Elaborator::adopt_static_scoped_frames	IN:parent	&ScopeRef	1
 iface_rtn_scope.rs	Elaborator::release_static_scoped_frames	IN:parent	&ScopeRef	1
 iface_rtn_scope.rs	Elaborator::take_routine_scope	IN:decl_scope	&ScopeRef	1
 iface_rtn_scope.rs	RoutineScope.inst_prefix	FIELD	ScopeRef	1
-iface_rtn_scope.rs	RoutineScope.rtn_decl_scope	FIELD	BTreeMap<String, ScopeRef>	1
 iface_rtn_scope.rs	RoutineScope.tf_decl_scope	FIELD	ScopeRef	1
 instance.rs	Elaborator::elaborate_instance	IN:inst_path	&ScopeRef	1
 lexscope/disp.rs	Elaborator::ctx_here	RET	ShownCtx	1
@@ -1947,7 +1941,6 @@ lib.rs	Elaborator.pending_block_local_inits	FIELD	ScopeKeyed<Vec<BlockLocalInit>
 lib.rs	Elaborator.pending_scoped_presize	FIELD	ScopeKeyed<Vec<PresizeEntry>>	1
 lib.rs	Elaborator.proc_inst_scopes	FIELD	Vec<lexscope::Shown>	1
 lib.rs	Elaborator.proc_scopes	FIELD	Vec<lexscope::Shown>	1
-lib.rs	Elaborator.rtn_decl_scope	FIELD	BTreeMap<String, ScopeRef>	1
 lib.rs	Elaborator.stmt_scopes	FIELD	std::collections::BTreeMap<u32, lexscope::Shown>	1
 ports.rs	Elaborator::bind_iface_port	IN:parent_prefix	&crate::ScopeRef	1
 ports.rs	Elaborator::wire_array_port	IN:parent_prefix	&crate::ScopeRef	1
@@ -1956,6 +1949,8 @@ proc_ident.rs	ProcIdentRow.scope	FIELD	Shown	1
 read_set.rs	StarSite.ctx	FIELD	ShownCtx	1
 readmem_assoc.rs	ReadmemAssocSite.prefix	FIELD	crate::ScopeRef	1
 sva_prop.rs	PendingSva.scope	FIELD	crate::ScopeRef	1
+iface_rtn_scope.rs	RoutineScope.rtn_decl_scope	FIELD	BTreeMap<RtnKey, ScopeRef>	1
+lib.rs	Elaborator.rtn_decl_scope	FIELD	BTreeMap<RtnKey, ScopeRef>	1
 == HKC
 # HKC (§5.2 Q-DECLKEY DK1-4b-1 (2026-11-24), DELTA16 R-H8 (d)): how many times each lexscope file names a key type's constructor (a call, a struct literal,
 # a pattern, a macro argument) — AtKey's field is `pub(super)` since DK1-4b-1 (the walk forms its candidates: walk.rs), so its

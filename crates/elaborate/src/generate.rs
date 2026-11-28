@@ -864,7 +864,8 @@ impl Elaborator<'_> {
             // generate REGION is transparent (§27.3), so this IS a module routine
             // and belongs on the bare key — the same rule the region's nets follow.
             self.check_block_local_scope_leaks(&f.body);
-            self.func_table.insert(f.name.name.clone(), f.clone());
+            self.func_table
+                .insert(lexscope::rtn_key_bound(&f.name.name), f.clone());
             return;
         };
         self.check_block_local_scope_leaks(&f.body);
@@ -883,7 +884,8 @@ impl Elaborator<'_> {
     pub(crate) fn register_gen_task(&mut self, t: &ast::TaskDef) {
         let Some(key) = self.cur_gen_rtn_key(&t.name.name) else {
             self.check_block_local_scope_leaks(&t.body);
-            self.task_table.insert(t.name.name.clone(), t.clone());
+            self.task_table
+                .insert(lexscope::rtn_key_bound(&t.name.name), t.clone());
             return;
         };
         self.check_block_local_scope_leaks(&t.body);

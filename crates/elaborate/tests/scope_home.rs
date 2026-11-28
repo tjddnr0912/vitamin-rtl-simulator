@@ -3225,6 +3225,9 @@ const KEYED_COLL: &[&str] = &[
 /// a `BTreeMap<String, V>` / `BTreeSet<String>` held privately (window w9's `Deref` / `DerefMut` deleted
 /// at DK3-b), so a field of one is still a `String`-keyed store (HS's store set, H5's name-typed fields).
 const WINDOW_TYPES: &[&str] = &["Keyed", "KeyedSet"];
+/// HS / H5 (§5.2 Q-RTNSCOPE RS1, RS-8 ; q7): the key records, by their exact names: a store retyped to one is still a
+/// `String`-keyed store (HS_STORES / HS) and a name-typed field (H5) — a retype is no structure change in a store census.
+const KEY_RECORDS: &[&str] = &["RtnKey"];
 /// HH: a probe of a store (k4.py READ less the compiler-only ops).
 const HH_READ: &[&str] = &[
     "get",
@@ -4086,7 +4089,8 @@ fn string_keyed(ty: &syn::Type) -> bool {
     let Some(first) = first else { return false };
     let id = last.ident.to_string();
     if KEYED_COLL.contains(&id.as_str()) {
-        return matches!(first, syn::Type::Path(fp) if fp.path.is_ident("String"));
+        return matches!(first, syn::Type::Path(fp) if fp.path.is_ident("String")
+            || KEY_RECORDS.iter().any(|k| fp.path.is_ident(k)));
     }
     matches!(id.as_str(), "Option" | "RefCell" | "Rc" | "Box" | "Bound") && string_keyed(first)
 }
@@ -4558,10 +4562,11 @@ fn h5_the_name_typed_fields_are_classified() {
         for si in c.structs.get(&sn).map(Vec::as_slice).unwrap_or(&[]) {
             for (f, ty) in &si.fields {
                 let ids = c.expand(ty);
-                if ids
-                    .iter()
-                    .any(|i| NAME_TYPES.contains(&i.as_str()) || WINDOW_TYPES.contains(&i.as_str()))
-                {
+                if ids.iter().any(|i| {
+                    NAME_TYPES.contains(&i.as_str())
+                        || WINDOW_TYPES.contains(&i.as_str())
+                        || KEY_RECORDS.contains(&i.as_str())
+                }) {
                     let k = format!("{sn}\t{}\t{f}", si.file);
                     let t = type_str(ty);
                     dumped.push(format!("{k}\t{t}"));
@@ -7245,21 +7250,6 @@ fn hbr_the_bridge_reads_are_pinned() {
 /// read or a moved count fails `HBR END` by name.
 const HBR_END: &[(&str, &str, &str, &str, usize)] = &[
     (
-        "L3",
-        "generate.rs",
-        "register_gen_func",
-        "cur_gen_rtn_key",
-        1,
-    ),
-    (
-        "L3",
-        "generate.rs",
-        "register_gen_task",
-        "cur_gen_rtn_key",
-        1,
-    ),
-    ("L2", "package.rs", "resolve_rtn_key", "walk_rtn_scopes", 1),
-    (
         "L13",
         "block_local_feed.rs",
         "feed_scoped_block_locals",
@@ -7291,7 +7281,7 @@ const HBR_END: &[(&str, &str, &str, &str, usize)] = &[
 
 /// The SURF_LEAVE ids the row ends with: L0 (the BOUNDARY) and L13 (permanent), L2 / L3 (R, RS1's).
 /// Any other id (a new bridge, or L4 / L9 / L11 / L12 written back) fails `HBR END LEAVE ID`.
-const LEAVE_IDS_END: &[&str] = &["L0", "L2", "L3", "L13"];
+const LEAVE_IDS_END: &[&str] = &["L0", "L13"];
 
 /// `HBR == R + the permanent class` (HBR_END, LEAVE_IDS_END) against the computed reads (`rows`,
 /// keyed `file\tfn\tentry\tsink`) and SURF_LEAVE's rows ; each message names its row.
@@ -9173,5 +9163,26 @@ mod tables {
             .join("\n")
             .trim()
             .to_string()
+    }
+}
+
+/// RS-8's fixture (§5.2 Q-RTNSCOPE RS1): string_keyed takes a map / set keyed by a KEY_RECORDS type as String-keyed, by the
+/// exact name only, through Option as for String.
+#[test]
+fn hs_key_record_fixture() {
+    let ty = |s: &str| syn::parse_str::<syn::Type>(s).unwrap();
+    for s in [
+        "BTreeMap<RtnKey, u32>",
+        "BTreeSet<RtnKey>",
+        "Option<BTreeMap<RtnKey, u32>>",
+    ] {
+        assert!(string_keyed(&ty(s)), "{s} is a key-record-keyed store");
+    }
+    for s in [
+        "BTreeMap<u32, RtnKey>",
+        "Vec<RtnKey>",
+        "BTreeMap<RtnKeyX, u32>",
+    ] {
+        assert!(!string_keyed(&ty(s)), "{s} is not");
     }
 }

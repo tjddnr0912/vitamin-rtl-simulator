@@ -327,8 +327,9 @@ impl Elaborator<'_> {
                 for it in &decl.body {
                     if let ast::ModuleItem::Modport(mp) = it {
                         let n = &mp.name.name;
-                        if (self.func_table.contains_key(n) || self.task_table.contains_key(n))
-                            && !self.rtn_pkg.contains_key(n)
+                        let k = lexscope::rtn_key_bound(n);
+                        if (self.func_table.contains_key(&k) || self.task_table.contains_key(&k))
+                            && !self.rtn_pkg.contains_key(&k)
                         {
                             self.error(
                                 MsgCode::ElabUnsupported,

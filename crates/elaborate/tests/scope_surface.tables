@@ -85,6 +85,15 @@ AtKey	struct
 DeclKey	struct
 Keyed	struct
 KeyedSet	struct
+RtnKey	struct
+RtnSpelledMap	struct
+== SURF_KEY_DERIVES
+# KEY-DERIVE (§5.2 Q-RTNSCOPE RS1, R-M9): the comparison derives of RtnKey (lexscope/rtn.rs) ; ALLOWED_DERIVES is not widened
+type	derive
+== SURF_TWIN
+# TWIN-ALIAS (§5.2 Q-RTNSCOPE RS1, RS-5, R-M10 q25): pre-flip stages only ; deleted at the flip (a row with no alias is STALE)
+name
+RtnKey
 == SURF_TRAITS
 # the crate-visible traits allowed (plan10/g/surface.tsv: 1, the boundary trait)
 name
@@ -100,7 +109,7 @@ zn	d8f9c54aafb2a97e923fc75a6a47a199be52921f7246d60927f08b10862815cf
 == SURF_PRESENT
 present
 == SURF_COUNTS
-present=present files=7 rows=240 out_types=30 e_fns=71 text_flows=80
+present=present files=8 rows=255 out_types=32 e_fns=72 text_flows=81
 == SURF_ROWS
 # the computed surface: one row per OUT position / IN text parameter / type / impl / use
 # §5.2 Q-DECLKEY DK1-4a (2026-11-24): the walk's 18 rows at lexscope/walk.rs (L10 8, ENTER 5, CB 4, PASS 1)
@@ -131,7 +140,7 @@ lexscope/elab.rs	E	FN	Elaborator::assert_block_local_inits_drained	RET	()	PASS	-
 lexscope/elab.rs	E	FN	Elaborator::bare_name_of_net	IN:net_id	u32	ENTER:lookup	-
 lexscope/elab.rs	E	FN	Elaborator::bare_name_of_net	RET	Option<String>	LEAVE:L13	-
 lexscope/elab.rs	E	FN	Elaborator::cur_gen_rtn_key	IN:bare	&str	ENTER:lookup	-
-lexscope/elab.rs	E	FN	Elaborator::cur_gen_rtn_key	RET	Option<String>	LEAVE:L3	-
+lexscope/elab.rs	E	FN	Elaborator::cur_gen_rtn_key	RET	Option<RtnKey>	CARD:hit:the routine-table key this generate scope gives the name	-
 lexscope/elab.rs	E	FN	Elaborator::flush_block_local_inits	RET	()	PASS	-
 lexscope/elab.rs	E	FN	Elaborator::hoisted_at_decl_pos	IN:name	&str	ENTER:lookup	-
 lexscope/elab.rs	E	FN	Elaborator::hoisted_at_decl_pos	RET	bool	PASS	-
@@ -150,10 +159,6 @@ lexscope/elab.rs	E	FN	Elaborator::report_at	IN:span	Option<ast::Span>	ENTER:inde
 lexscope/elab.rs	E	FN	Elaborator::report_at	RET	()	PASS	-
 lexscope/elab.rs	E	FN	Elaborator::walk_hits_decl_pos	IN:name	&str	ENTER:lookup	-
 lexscope/elab.rs	E	FN	Elaborator::walk_hits_decl_pos	RET	bool	PASS	-
-lexscope/elab.rs	E	FN	Elaborator::walk_rtn_scopes	CB:hit	impl Fn(&str) -> bool	CB:probe:the routine tables for one composed key	-
-lexscope/elab.rs	E	FN	Elaborator::walk_rtn_scopes	CB:hit.0	&str	LEAVE:L2	REF
-lexscope/elab.rs	E	FN	Elaborator::walk_rtn_scopes	IN:bare	&str	ENTER:lookup	-
-lexscope/elab.rs	E	FN	Elaborator::walk_rtn_scopes	RET	Option<String>	LEAVE:L2	-
 lexscope/elab.rs	E	FN	Elaborator::with_scope	CB:f	impl FnOnce(&mut Self) -> R	CB:once	-
 lexscope/elab.rs	E	FN	Elaborator::with_scope	IN:f	impl FnOnce(&mut Self) -> R	INTERIOR:the receiver lent to its callback	-
 lexscope/elab.rs	E	FN	Elaborator::with_scope	IN:seg	&str	ENTER:to-scope	-
@@ -235,6 +240,11 @@ lexscope/mod.rs	-	USE	key::at_same	-	-	PASS	-
 lexscope/mod.rs	-	USE	key::key_in	-	-	PASS	-
 lexscope/mod.rs	-	USE	key::key_same	-	-	PASS	-
 lexscope/mod.rs	-	USE	key::key_show	-	-	PASS	-
+lexscope/mod.rs	-	USE	rtn::RtnKey	-	-	PASS	-
+lexscope/mod.rs	-	USE	rtn::RtnSpelledMap	-	-	PASS	-
+lexscope/mod.rs	-	USE	rtn::is_pkg_scoped	-	-	PASS	-
+lexscope/mod.rs	-	USE	rtn::rtn_key_bound	-	-	PASS	-
+lexscope/mod.rs	-	USE	rtn::rtn_key_scoped	-	-	PASS	-
 lexscope/mod.rs	K	FN	Outgoing::plain	RET	Self::Plain	LEAVE:L0	-
 lexscope/mod.rs	K	FN	ScopeKeyed::drain_keys_shown	RET	Vec<Shown>	CARD:list:the scopes still holding a value	-
 lexscope/mod.rs	K	FN	ScopeKeyed::entry_under_cur	IN:name	&str	ENTER:to-scope	-
@@ -304,6 +314,20 @@ lexscope/mod.rs	K	FN	Scopes::swap_to_mark	RET	Saved	PASS	-
 lexscope/mod.rs	K	FN	scope_out	RET	T::Plain	LEAVE:L0	-
 lexscope/mod.rs	K	FN	shown_from_spelling	IN:s	String	ENTER:to-display	-
 lexscope/mod.rs	K	FN	shown_from_spelling	RET	Shown	PASS	-
+lexscope/rtn.rs	-	TYPE	RtnKey	-	-	PASS	-
+lexscope/rtn.rs	-	TYPE	RtnSpelledMap	-	-	PASS	-
+lexscope/rtn.rs	E	FN	Elaborator::resolve_rtn_key	IN:bare	&str	ENTER:lookup	-
+lexscope/rtn.rs	E	FN	Elaborator::resolve_rtn_key	RET	RtnKey	PASS	-
+lexscope/rtn.rs	K	FN	RtnSpelledMap::get_unwalked	IN:spelling	&str	ENTER:lookup	-
+lexscope/rtn.rs	K	FN	RtnSpelledMap::get_unwalked	RET	Option<&V>	CARD:hit:a value filed under the key the spelling names	REF
+lexscope/rtn.rs	K	FN	RtnSpelledMap::new	RET	RtnSpelledMap<V>	PASS	-
+lexscope/rtn.rs	K	FN	RtnSpelledMap::put_key	RET	()	PASS	-
+lexscope/rtn.rs	K	FN	is_pkg_scoped	RET	bool	PASS	-
+lexscope/rtn.rs	K	FN	rtn_key_bound	IN:name	&str	ENTER:lookup	-
+lexscope/rtn.rs	K	FN	rtn_key_bound	RET	RtnKey	PASS	-
+lexscope/rtn.rs	K	FN	rtn_key_scoped	IN:bare	&str	ENTER:lookup	-
+lexscope/rtn.rs	K	FN	rtn_key_scoped	IN:pkg	&str	ENTER:lookup	-
+lexscope/rtn.rs	K	FN	rtn_key_scoped	RET	RtnKey	PASS	-
 lexscope/walk.rs	E	FN	Elaborator::walk_above_enum_label_type	IN:name	&str	ENTER:lookup	-
 lexscope/walk.rs	E	FN	Elaborator::walk_above_enum_label_type	RET	Option<DeclKey>	CARD:hit:the declaration key the walk found	-
 lexscope/walk.rs	E	FN	Elaborator::walk_above_gen_loop_label	IN:name	&str	ENTER:lookup	-
@@ -355,17 +379,19 @@ lexscope/walk.rs	E	FN	Elaborator::walk_shadowed_string_array_elem	RET	Option<Dec
 type
 &V
 &mut V
-&str
 ()
 AtKey
 NewKey
 Option<&V>
 Option<DeclKey>
+Option<RtnKey>
 Option<Shown>
 Option<String>
 Option<V>
 R
 ReportedAt
+RtnKey
+RtnSpelledMap<V>
 Saved
 SavedChain
 SavedMethod
@@ -404,9 +430,6 @@ std::collections::BTreeSet<String>
 id	item	position	type	closes
 L13	Elaborator::names_with_pkg_var_aliases	RET	std::collections::BTreeSet<String>	permanent
 L13	Elaborator::bare_name_of_net	RET	Option<String>	permanent
-L2	Elaborator::walk_rtn_scopes	RET	Option<String>	RS1
-L2	Elaborator::walk_rtn_scopes	CB:hit.0	&str	RS1
-L3	Elaborator::cur_gen_rtn_key	RET	Option<String>	RS1
 L0	scope_out	RET	T::Plain	permanent
 L0	Outgoing::plain	RET	Self::Plain	permanent
 == SURF_ENTER
@@ -423,7 +446,6 @@ L0	Outgoing::plain	RET	Self::Plain	permanent
 item	param	role	holds
 Elaborator::names_with_pkg_var_aliases	names	lookup	TEXT String
 Elaborator::with_scope	seg	to-scope	TEXT str
-Elaborator::walk_rtn_scopes	bare	lookup	TEXT str
 Elaborator::cur_gen_rtn_key	bare	lookup	TEXT str
 Scopes::cur_frame_routine_is_any	fids	lookup	TEXT String
 Scopes::hier_path_is_self	segs	lookup	TEXT hdl_ast::Ident.name -> String
@@ -485,6 +507,11 @@ Elaborator::net_is_compiler_internal	net_id	lookup	NUMBER u32
 Elaborator::alias_iface_port	pname	lookup	TEXT str
 Elaborator::alias_iface_port	input_of	lookup	TEXT String
 Elaborator::key_spells_indexed_singleton	user_segs	index	NUMBER usize
+Elaborator::resolve_rtn_key	bare	lookup	TEXT str
+RtnSpelledMap::get_unwalked	spelling	lookup	TEXT str
+rtn_key_bound	name	lookup	TEXT str
+rtn_key_scoped	bare	lookup	TEXT str
+rtn_key_scoped	pkg	lookup	TEXT str
 == SURF_ENUMS
 # crate-visible enums allowed (payload-free): the mark selector at LS3
 name
@@ -566,7 +593,7 @@ Elaborator::cur_gen_rtn_key	FN	-	-	-
 Elaborator::cur_gen_rtn_key	OUT-C	.cur_prefix_text	1	in
 Elaborator::cur_gen_rtn_key	OUT-C	.is_empty	1	in
 Elaborator::cur_gen_rtn_key	OUT-C	.mark_text	1	in
-Elaborator::cur_gen_rtn_key	OUT-C	.strip_prefix	2	text:LEAVE-L3
+Elaborator::cur_gen_rtn_key	OUT-C	.strip_prefix	2	text:RtnKey
 Elaborator::decl_pos_key	FN	-	-	-
 Elaborator::decl_pos_key	OUT-C	.is_empty	1	in
 Elaborator::decl_pos_key	OUT-C	.mark_text	1	in
@@ -786,6 +813,16 @@ Elaborator::report_at	OUT-C	.scope_restore	1	in
 Elaborator::report_at	OUT-C	.scope_swap	1	in
 Elaborator::report_at	OUT-C	.scope_text	1	text:ReportedAt
 Elaborator::report_at	OUT-C	.to_string	1	text:ReportedAt
+Elaborator::resolve_rtn_key	FN	-	-	-
+Elaborator::resolve_rtn_key	OUT-C	.as_str	1	text:RtnKey
+Elaborator::resolve_rtn_key	OUT-C	.contains_key	4	in
+Elaborator::resolve_rtn_key	OUT-C	.is_empty	1	in
+Elaborator::resolve_rtn_key	OUT-C	.last	1	in
+Elaborator::resolve_rtn_key	OUT-C	.map	1	in
+Elaborator::resolve_rtn_key	OUT-F	cur_rtn_pkg	1	in
+Elaborator::resolve_rtn_key	OUT-F	func_table	2	in
+Elaborator::resolve_rtn_key	OUT-F	rtn_decl_scope	1	in
+Elaborator::resolve_rtn_key	OUT-F	task_table	2	in
 Elaborator::scope_chain_abs	FN	-	-	-
 Elaborator::scope_chain_abs	OUT-C	.clone	1	text:Shown
 Elaborator::scope_chain_abs	OUT-C	.collect	1	text:Shown
@@ -898,9 +935,9 @@ Elaborator::walk_rtn_scopes	OUT-C	.cur_prefix_text	1	in
 Elaborator::walk_rtn_scopes	OUT-C	.is_empty	2	in
 Elaborator::walk_rtn_scopes	OUT-C	.mark_text	1	in
 Elaborator::walk_rtn_scopes	OUT-C	.rfind	1	in
-Elaborator::walk_rtn_scopes	OUT-C	.strip_prefix	2	text:LEAVE-L2
-Elaborator::walk_rtn_scopes	OUT-C	Some	1	text:LEAVE-L2
-Elaborator::walk_rtn_scopes	OUT-C	hit	1	text:LEAVE-L2
+Elaborator::walk_rtn_scopes	OUT-C	.strip_prefix	2	text:RtnKey
+Elaborator::walk_rtn_scopes	OUT-C	Some	1	text:RtnKey
+Elaborator::walk_rtn_scopes	OUT-C	hit	1	text:RtnKey
 Elaborator::walk_scopes_key	FN	-	-	-
 Elaborator::walk_scopes_key_from	FN	-	-	-
 Elaborator::walk_scopes_key_from	OUT-C	.as_str	1	in
@@ -1013,7 +1050,7 @@ Elaborator::error
 Elaborator::error_at
 == SURF_OUTCALL_COUNTS
 # calls by style (SELF / RECV / FREE), (item, callee) rows, the blind list's names used and their calls
-self=21 recv=1 free=2 rows=22 blind_names=1 blind_calls=44
+self=21 recv=1 free=2 rows=22 blind_names=1 blind_calls=45
 == SURF_CARD
 # CARD (DELTA11 R2): an OUT position holding Option / Vec / a slice / an array / two or more
 # `bool`, with MEANS (hand): caller | hit:<question> | list:<what> ; a missing row FAILS CARD,
@@ -1058,6 +1095,8 @@ Elaborator::walk_shadowed_fixed_string_dyn	RET	Option<DeclKey>	hit:the declarati
 Elaborator::walk_shadowed_string_array_elem	RET	Option<DeclKey>	hit:the declaration key the walk found
 Elaborator::net_key_shown	RET	Option<Shown>	hit:the first key in symbols' order that holds the net
 Elaborator::net_name_table	RET	Vec<Shown>	list:one display name per NetId, in NetId order
+Elaborator::cur_gen_rtn_key	RET	Option<RtnKey>	hit:the routine-table key this generate scope gives the name
+RtnSpelledMap::get_unwalked	RET	Option<&V>	hit:a value filed under the key the spelling names
 == SURF_CB
 # CB (DELTA11 R2): a callback parameter of a surface item, kind Fn | FnMut | FnOnce | fn, its
 # argument types, CALLS (hand): once (FnOnce) | per:<what> | probe:<what>. First rows at LS2a.
@@ -1066,7 +1105,6 @@ Elaborator::net_name_table	RET	Vec<Shown>	list:one display name per NetId, in Ne
 # §5.2 Q-DECLKEY DK2 (2026-11-26, form (c)): the four walks are private (off the surface): their four rows gone ; walk_rtn_scopes' stays (outside the claim, L-listed)
 item	param	kind	args	calls
 Elaborator::with_scope	f	FnOnce	&mut Self	once
-Elaborator::walk_rtn_scopes	hit	Fn	&str	probe:the routine tables for one composed key
 == SURF_BODY
 # BODY-ALL (DELTA11 R2, R4 N-5): the sha256 of the body tokens of every fn of the file set.
 # First rows at LS2a ; each unit's verify prints the rows that changed.
@@ -1236,6 +1274,13 @@ lexscope/mod.rs	shown_from_spelling	540bc990dd416b3323a7b9a2a681705625eced002fe6
 lexscope/mod.rs	wrap_ctx	12c3d43da0a4fe4699c4ec3a25824e28c4c665d4b1a01260f32b759f17d6627d
 lexscope/mod.rs	wrap_root	53ad3e41ea3d62362b4139f5104eec8ff2fab5db8e7f830dfd7500a67372696c
 lexscope/mod.rs	wrap_shown	540bc990dd416b3323a7b9a2a681705625eced002fe6975882e5e18ce51038a0
+lexscope/rtn.rs	Elaborator::resolve_rtn_key	c61617170f6d0a09d648e1a1012285a11be83eb20659f8b8f542313fc503e564
+lexscope/rtn.rs	RtnSpelledMap::get_unwalked	5ab15010bb4b793d204a7b1b28fca7e1d908f7b7755551ab8e0884bd5f03f620
+lexscope/rtn.rs	RtnSpelledMap::new	18d19eab915d0df15807d7b99b68bd228843566c33a03571996bdf612cc8863f
+lexscope/rtn.rs	RtnSpelledMap::put_key	1171d2fde8c398a434fefdde5df39ec147095fbac95901f29588d650a05cdd78
+lexscope/rtn.rs	is_pkg_scoped	b0181cdbf3891805bc565edd45ac0bee98d0e782b5c6ac52bed9139f073f262d
+lexscope/rtn.rs	rtn_key_bound	567b18dab9ec5e43c25e4ad23984f5fce8160d8844b6acfa40fe3748b012d07b
+lexscope/rtn.rs	rtn_key_scoped	5153b9ea5e1b48c289f40d3792870202705501dc710c63056abee98886ec9ecc
 lexscope/tests.rs	fb_cur_is_inst_top_or_synth_below_truth_table	e58b73778279550c946409caf27937b7af95ef2fb1fa1e20079c194b2cd23307
 lexscope/tests.rs	fb_cur_shown_and_quoted_or	db87cbfc7b8a236be569f82de1df932c8e188f7d9a05ff444f7f7621b526961d
 lexscope/tests.rs	fb_disp_chain_take_push_pop_restore	2a42b6329bbc34ed7ed14b1c9ab551a7f1196790c190191a88f2c84ebd85ca5b
@@ -1336,9 +1381,9 @@ LS2-d	frame_path	lexscope/disp.rs	-	E	(&self, name: &str) -> String	FAIL	RET=TEX
 LS2-d	frame_path_of	lexscope/disp.rs	-	E	(&self, key: &str, bare: &str) -> String	FAIL	RET=TEXT(String)	key,bare
 LS2-d	scope_chain_abs	lexscope/disp.rs	-	E	(&self) -> String	FAIL	RET=TEXT(String)	-
 LS2a	child_prefix	lexscope/mod.rs	-	K	(&self, inst_name: &str) -> String	FAIL	RET=TEXT(String)	inst_name
-LS2a	cur_gen_rtn_key	lexscope/elab.rs	pub(crate)	E	(&self, bare: &str) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	bare
-LS2a	gen_rtn_key	lexscope/elab.rs	-	K	(scope: &str, bare: &str) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	scope,bare
-LS2a	walk_rtn_scopes	lexscope/elab.rs	pub(crate)	E	(&self, bare: &str, hit: impl Fn(&str) -> bool) -> Option<String>	FAIL	CB:hit=CB(a callback Fn(&str)); CB:hit.0=TEXT(str); RET=CARD(Option in Option<String>); RET=TEXT(String)	bare
+LS2a	cur_gen_rtn_key	lexscope/elab.rs	pub(crate)	E	(&self, bare: &str) -> Option<RtnKey>	FAIL	RET=CARD(Option in Option<RtnKey>); RET=UNKNOWN(RtnKey)	bare
+LS2a	gen_rtn_key	lexscope/elab.rs	-	K	(scope: &str, bare: &str) -> Option<RtnKey>	FAIL	RET=CARD(Option in Option<RtnKey>); RET=UNKNOWN(RtnKey)	scope,bare
+LS2a	walk_rtn_scopes	lexscope/elab.rs	pub(super)	E	(&self, bare: &str, hit: impl Fn(&RtnKey) -> bool) -> Option<RtnKey>	FAIL	CB:hit=CB(a callback Fn(&RtnKey)); CB:hit.0=UNKNOWN(RtnKey); RET=CARD(Option in Option<RtnKey>); RET=UNKNOWN(RtnKey)	bare
 LS2a	with_scope	lexscope/elab.rs	pub(crate)	E	(&mut self, seg: &str, f: impl FnOnce(&mut Self) -> R) -> R	FAIL	CB:f=CB(a callback FnOnce(&mut Self)); IN:f=INTERIOR(Self = Elaborator -> Elaborator.const_call_fn -> RefCell)	seg
 LS3	assert_block_local_inits_drained	lexscope/elab.rs	pub(crate)	E	(&mut self)	PASS	-	-
 LS3	drain_scoped_presize	lexscope/elab.rs	-	E	(&mut self)	PASS	-	-
@@ -1347,7 +1392,7 @@ LS3	push_block_local_init	lexscope/elab.rs	pub(crate)	E	(&mut self, scope: Optio
 LS3	scoped_init_key	lexscope/elab.rs	-	E	(&self, scope: Option<&str>) -> String	FAIL	RET=TEXT(String)	scope
 LS3	report_at	lexscope/elab.rs	pub(crate)	E	(&mut self, span: Option<ast::Span>, prefix: &ScopeRef, msg: &str, reported: &mut ReportedAt)	FAIL	ARG:reported=UNKNOWN(ReportedAt)	span,prefix,msg
 == SURF_PLAN_COUNTS
-fns=31 pass=6 fail=25 ret_fail=22 ret_text=14 callback_text=1 mut_text=0 card=14 cb=8 interior=1 enter=38 enter_number=6 in_unknown=0
+fns=31 pass=6 fail=25 ret_fail=22 ret_text=11 callback_text=0 mut_text=0 card=14 cb=8 interior=1 enter=38 enter_number=6 in_unknown=0
 == FIX_LEAVE
 id	item	position	type	closes
 L0	scope_out	RET	T::Plain	permanent
@@ -1585,6 +1630,12 @@ String
 T::Plain
 Vec<Shown>
 bool
+== FIX_KEY_DERIVES
+# the fixtures' KEY_DERIVES: none (NB14-NB16 add theirs by `@@ table:` hunks)
+type	derive
+== FIX_TWIN
+# TWIN-ALIAS (RS-5): the fixtures' TWIN rows: none (NB17 / NB19 add theirs by `@@ table:` hunks)
+name
 == FIX_EXPECT
 # BODY-ALL (LS1 part 5): a fixture that adds or edits a fn also fails `<fn> BODY BODY`.
 # LS1 part 7: ADDR / ADDR-FN / UNWIND rows name the fn holding the site (`-` outside a fn) and
@@ -1887,3 +1938,15 @@ NO32	Elaborator::outward	OUT:Elaborator::flush_slot	CLASS
 NO33	Elaborator::outward	OUT:Elaborator::note_key	CLASS
 NO34	Elaborator::outward	OUT:Elaborator::note_key	CLASS
 NO35	Elaborator::outward	OUT:Elaborator::flush_slot	CLASS
+NB14	ShownCtx	ATTR	DERIVE
+NB15	Shown	ATTR	DERIVE
+NB16	Shown	ATTR	STALE
+NB17	nb17	BODY	BODY
+NB18	RtnKey	ALIAS	TEXT
+NB18	RtnKey	DEF	VOCAB-SHADOW
+NB18	nb17	BODY	BODY
+NB18	nb17	IN:k	ENTER
+NB18	nb17	RET	TEXT
+NB19	RtnKey	ALIAS	NUMBER
+NB19	RtnKey	DEF	VOCAB-SHADOW
+NB19	RtnKey	TWIN	STALE

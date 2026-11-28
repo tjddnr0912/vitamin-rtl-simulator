@@ -798,3 +798,6 @@ impl<T> ScopeKeyed<Vec<T>> {
         self.0.entry(s.cur_prefix.clone()).or_default().push(item);
     }
 }
+
+mod rtn;
+pub(crate) use rtn::{is_pkg_scoped, rtn_key_bound, rtn_key_scoped, RtnKey, RtnSpelledMap};

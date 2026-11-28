@@ -750,6 +750,10 @@ struct Cfg {
     outcall_blind: Vec<Vec<String>>,
     /// OUTCALL's error sinks: callee
     outcall_sinks: BTreeSet<String>,
+    /// KEY-DERIVE (§5.2 Q-RTNSCOPE RS1, R-M9): type, derive — a derive off ALLOWED_DERIVES, admitted on that item only
+    key_derives: Vec<Vec<String>>,
+    /// TWIN-ALIAS (§5.2 Q-RTNSCOPE RS1, RS-5): the vocabulary structs present as `type <name> = String` (pre-flip only)
+    twin: BTreeSet<String>,
 }
 
 fn rows_of(text: &str, cols: usize, what: &str) -> Vec<Vec<String>> {
@@ -823,6 +827,8 @@ fn cfg_with(prefix: &str, over: &BTreeMap<String, String>) -> Cfg {
         outcall: rows_of(&get(&format!("{prefix}_OUTCALL")), 5, "OUTCALL"),
         outcall_blind: rows_of(&get(&format!("{prefix}_OUTCALL_BLIND")), 2, "OUTCALL_BLIND"),
         outcall_sinks: one(&format!("{prefix}_OUTCALL_SINKS")),
+        key_derives: rows_of(&get(&format!("{prefix}_KEY_DERIVES")), 2, "KEY_DERIVES"),
+        twin: one(&format!("{prefix}_TWIN")),
     }
 }
 
@@ -934,6 +940,8 @@ struct Defs {
     enums: BTreeMap<String, usize>,
     traits: BTreeSet<String>,
     aliases: BTreeMap<String, (Type, bool)>,
+    /// TWIN-ALIAS (RS-5): a SURF_TWIN name defined as `type <name> = String`, judged as the struct it will become
+    twins: BTreeSet<String>,
     free_fns: BTreeSet<String>,
     /// impl self type (last segment) -> its methods
     type_fns: BTreeMap<String, BTreeSet<String>>,
@@ -949,7 +957,7 @@ struct Defs {
 
 impl Defs {
     fn defined_type(&self, n: &str) -> bool {
-        self.structs.contains_key(n) || self.enums.contains_key(n)
+        self.structs.contains_key(n) || self.enums.contains_key(n) || self.twins.contains(n)
     }
 }
 
@@ -1235,6 +1243,10 @@ impl J<'_> {
                 return;
             }
             if last == "bool" {
+                return;
+            }
+            if self.defs.twins.contains(last) {
+                // TWIN-ALIAS (RS-5): the struct it will become, not its target
                 return;
             }
             if let Some((ty, has_gen)) = self.defs.aliases.get(last) {
@@ -3384,6 +3396,7 @@ struct Eng<'a> {
     defs: Defs,
     s: Surface,
     leave_used: BTreeSet<usize>,
+    key_derive_used: BTreeSet<usize>,
     enter_used: BTreeSet<usize>,
     card_used: BTreeSet<usize>,
     cb_used: BTreeSet<usize>,
@@ -3400,6 +3413,7 @@ impl Eng<'_> {
             defs: Defs::default(),
             s: Surface::default(),
             leave_used: BTreeSet::new(),
+            key_derive_used: BTreeSet::new(),
             enter_used: BTreeSet::new(),
             card_used: BTreeSet::new(),
             cb_used: BTreeSet::new(),
@@ -3961,7 +3975,18 @@ impl Eng<'_> {
                     .map(|p| p.iter().map(last_name).collect::<Vec<_>>())
                     .unwrap_or_else(|_| vec!["?".into()]);
                 for d in ds {
-                    if !ALLOWED_DERIVES.contains(&d.as_str()) {
+                    if ALLOWED_DERIVES.contains(&d.as_str()) {
+                        continue;
+                    }
+                    // KEY-DERIVE (§5.2 Q-RTNSCOPE RS1, R-M9): off the list, only the item and the names KEY_DERIVES lists
+                    let kd = self
+                        .cfg
+                        .key_derives
+                        .iter()
+                        .position(|r| r[0] == item && r[1] == d);
+                    if let Some(i) = kd {
+                        self.key_derive_used.insert(i);
+                    } else {
                         self.fail(file, item, "ATTR", "DERIVE", format!("derive({d})"));
                     }
                 }
@@ -4428,6 +4453,14 @@ fn pass1(eng: &mut Eng<'_>, ats: &[At<'_>]) {
                 eng.defs.traits.insert(t.ident.to_string());
             }
             Item::Type(t) => {
+                let n = t.ident.to_string();
+                if eng.cfg.twin.contains(&n)
+                    && eng.cfg.vocab.get(&n).is_some_and(|k| k == "struct")
+                    && t.generics.params.is_empty()
+                    && matches!(&*t.ty, Type::Path(p) if p.qself.is_none() && p.path.is_ident("String"))
+                {
+                    eng.defs.twins.insert(n);
+                }
                 eng.defs.aliases.insert(
                     t.ident.to_string(),
                     ((*t.ty).clone(), !t.generics.params.is_empty()),
@@ -4485,6 +4518,7 @@ fn pass2<'a>(eng: &mut Eng<'_>, at: &At<'a>, fn_index: &mut BTreeMap<String, FnI
         let kind = match at.item {
             Item::Struct(_) => Some("struct"),
             Item::Enum(_) => Some("enum"),
+            Item::Type(_) if eng.defs.twins.contains(&n) => Some("struct"),
             Item::Trait(_) | Item::Type(_) | Item::Union(_) => Some("other"),
             _ => None,
         };
@@ -4705,7 +4739,21 @@ fn pass2<'a>(eng: &mut Eng<'_>, at: &At<'a>, fn_index: &mut BTreeMap<String, FnI
         }
         Item::Type(t) => {
             eng.check_attrs(file, &name, &t.attrs);
-            if !at.in_body && vis_wider(&t.vis, at.depth) {
+            if eng.defs.twins.contains(&name) {
+                // TWIN-ALIAS (RS-5): the struct's TYPE row (listed: PASS), no ALIAS position
+                if !at.in_body && vis_wider(&t.vis, at.depth) {
+                    eng.s.rows.push(Row {
+                        refs: "-".into(),
+                        file: file.into(),
+                        tier: "-".into(),
+                        kind: "TYPE".into(),
+                        item: name.clone(),
+                        pos: "-".into(),
+                        ty: "-".into(),
+                        verdict: "PASS".into(),
+                    });
+                }
+            } else if !at.in_body && vis_wider(&t.vis, at.depth) {
                 let r = eng.out_reasons(None, &Gen::new(), None, &t.ty);
                 let k = eng.card_of(&t.ty);
                 eng.position(file, "-", "ALIAS", &name, "ALIAS", nt(&t.ty), r, k);
@@ -6486,6 +6534,32 @@ fn outcall_check(
 }
 
 fn stale_checks(eng: &mut Eng<'_>) {
+    // KEY-DERIVE (§5.2 Q-RTNSCOPE RS1): a row whose item the file set does not define, or whose derive it does not carry
+    let kd = eng.cfg.key_derives.clone();
+    for (i, r) in kd.iter().enumerate() {
+        if !eng.key_derive_used.contains(&i) {
+            eng.fail(
+                "-",
+                &r[0],
+                "ATTR",
+                "STALE",
+                format!("KEY_DERIVES {} matches no derive", r[1]),
+            );
+        }
+    }
+    // TWIN-ALIAS (RS-5): a row naming no `type <name> = String` of a listed struct
+    let tw = eng.cfg.twin.clone();
+    for n in &tw {
+        if !eng.defs.twins.contains(n) {
+            eng.fail(
+                "-",
+                n,
+                "TWIN",
+                "STALE",
+                "a TWIN row names no `type _ = String` alias of a listed struct",
+            );
+        }
+    }
     let leave = eng.cfg.leave.clone();
     for (i, l) in leave.iter().enumerate() {
         if !eng.leave_used.contains(&i) {
@@ -6968,12 +7042,12 @@ fn ht_surf_engine_on_fixtures() {
         }
     }
     // NS1-NS22 (DELTA10 L1) + NS23-NS31 (DELTA11 R2) + NS32 (DELTA12 N-1) ; NB1-NB8 (LS1
-    // part 4) + NB9-NB13 ; NI1-NI10 (LS1 part 6, INTERIOR) ; NA1-NA7 (ADDR), NU1 (UNWIND),
+    // part 4) + NB9-NB13 + NB14-NB16 (KEY-DERIVE, §5.2 Q-RTNSCOPE RS1) ; NI1-NI10 (LS1 part 6, INTERIOR) ; NA1-NA7 (ADDR), NU1 (UNWIND),
     // NT1-NT9 (IN-TOTAL) (LS1 part 7, DELTA12 S1 S2 S4) ; NO1-NO16 (OUTCALL and E3, §5.2
     // Q-DECLKEY DK1-6, DELTA18 G2.4 E4) + NO17-NO35 (DK1-6 round 2)
     for (pre, set, last) in [
         ("NS", &ns_failing, 32),
-        ("NB", &nb_failing, 13),
+        ("NB", &nb_failing, 19),
         ("NI", &ni_failing, 10),
         ("NA", &na_failing, 7),
         ("NU", &nu_failing, 1),

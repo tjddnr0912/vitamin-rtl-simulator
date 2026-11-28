@@ -66,7 +66,7 @@ pub(crate) fn ast_func_return_width(f: &ast::FunctionDef) -> Option<u32> {
 /// `func_widths` maps a callee name to its return width (a call operand's self-width).
 pub(crate) fn body_needs_context_width(
     f: &ast::FunctionDef,
-    func_widths: &std::collections::HashMap<String, u32>,
+    func_widths: &lexscope::RtnSpelledMap<u32>,
 ) -> bool {
     let mut widths: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
     let mut unknown_bv: std::collections::HashSet<String> = std::collections::HashSet::new();

@@ -1766,45 +1766,6 @@ impl Elaborator<'_> {
         }
     }
 
-    /// Bind one import's FUNCTION/TASK symbols (local definitions win —
-    /// skip-if-present, called after the module's own (3.5) collection).
-    /// The `func_table`/`task_table` key a BARE callee name resolves to.
-    ///
-    /// Normally the name itself. Inside the body of a routine declared in package
-    /// `p`, `p::name` wins when it exists — that is the whole point of the scoped
-    /// injection in `apply_import_routines`: a package routine's body must see its
-    /// OWN siblings, not whatever the importing module gave the same name. Without
-    /// this, `import p::f2;` in a module that also declares its own `helper` made
-    /// `f2`'s body call the module's `helper` at exit 0 (measured: 1002 where
-    /// iverilog says 4 — an earlier note said 2002, which the design as written does
-    /// not produce).
-    ///
-    /// IEEE 1800-2017 §27.3: a routine declared inside a GENERATE block lives in that
-    /// block's scope, so a bare callee resolves innermost-first — the enclosing
-    /// generate scopes outward, then the module. That is what makes a generate `f`
-    /// shadow a module `f`, and what keeps the two branches of a generate-if (or two
-    /// iterations of a generate-for) from ever seeing each other's `f`. The walk sits
-    /// AFTER the package check (a package routine's body is not inside any generate
-    /// scope of the instantiating module) and BEFORE the bare fallback.
-    pub(crate) fn resolve_rtn_key(&self, bare: &str) -> String {
-        if let Some(pkg) = self.cur_rtn_pkg.last().map(|s| s.pkg.as_str()) {
-            let scoped = format!("{pkg}::{bare}");
-            if self.func_table.contains_key(&scoped) || self.task_table.contains_key(&scoped) {
-                return scoped;
-            }
-        }
-        // Nothing to walk when this module declares no generate-scoped routine at
-        // all, which is every design that predates §27.3 support.
-        if !self.rtn_decl_scope.is_empty() {
-            if let Some(k) = self.walk_rtn_scopes(bare, |k| {
-                self.func_table.contains_key(k) || self.task_table.contains_key(k)
-            }) {
-                return k;
-            }
-        }
-        bare.to_string()
-    }
-
     /// The `func_table` entry a BARE callee name names here, generate scopes included.
     ///
     /// ONE funnel for every membership predicate that used to index `func_table`
@@ -1899,7 +1860,7 @@ impl Elaborator<'_> {
             if f.is_none() && t.is_none() {
                 continue; // not this package's — a local, or another import
             }
-            let key = format!("{pkg}::{n}");
+            let key = lexscope::rtn_key_scoped(&pkg, &n);
             if let Some(f) = f {
                 collect_callee_func(&f, &mut want);
                 if pkg_func_self_contained(&f, &const_names, &var_names, &rtn_names) {

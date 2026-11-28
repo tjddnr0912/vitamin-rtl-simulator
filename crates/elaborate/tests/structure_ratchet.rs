@@ -524,7 +524,8 @@ fn string_keyed(t: &syn::Type) -> bool {
         return false;
     };
     matches!(a.args.first(), Some(syn::GenericArgument::Type(syn::Type::Path(k)))
-        if k.qself.is_none() && k.path.segments.last().is_some_and(|s| s.ident == "String"))
+        // §5.2 Q-RTNSCOPE RS1 (q7): a routine key (`RtnKey`, lexscope/rtn.rs) is a String-keyed key by its exact name
+        if k.qself.is_none() && k.path.segments.last().is_some_and(|s| s.ident == "String" || s.ident == "RtnKey"))
 }
 
 fn scan_elaborator_fields(src: &str) -> Option<Vec<String>> {
@@ -876,6 +877,8 @@ fn self_test_other_counters() {
             h: Bound<BTreeMap<u32, String>>,
             i: Bounded<BTreeMap<String, i64>>,
             j: Bound<Vec<BTreeMap<String, u32>>>,
+            k: BTreeMap<RtnKey, u32>,
+            l: BTreeSet<RtnKey>,
         }
     "#;
     assert_eq!(
@@ -885,7 +888,9 @@ fn self_test_other_counters() {
             "b".into(),
             "e".into(),
             "f".into(),
-            "g".into()
+            "g".into(),
+            "k".into(),
+            "l".into()
         ])
     );
 
