@@ -56,18 +56,18 @@ impl Elaborator<'_> {
     /// (no `SpanResolver`) never overwrites a site already resolved.
     fn seed_subroutine_routes(
         &mut self,
-        frame_set: &std::collections::BTreeSet<String>,
-        task_set: &std::collections::BTreeSet<String>,
+        frame_set: &std::collections::BTreeSet<RtnKey>,
+        task_set: &std::collections::BTreeSet<RtnKey>,
     ) {
         let module = self.inst_stack.last().cloned().unwrap_or_default();
         // The spans are collected FIRST: `decl_loc` borrows `self`, and the
         // `entry()` below borrows it mutably.
-        let fnames: Vec<(String, ast::Span)> = self
+        let fnames: Vec<(RtnKey, ast::Span)> = self
             .func_table
             .iter()
             .map(|(n, d)| (n.clone(), d.name.span))
             .collect();
-        let tnames: Vec<(String, ast::Span)> = self
+        let tnames: Vec<(RtnKey, ast::Span)> = self
             .task_table
             .iter()
             .map(|(n, d)| (n.clone(), d.name.span))
@@ -77,7 +77,7 @@ impl Elaborator<'_> {
             let decl = self.decl_loc(sp);
             let e = self
                 .subroutine_routes
-                .entry((module.clone(), name))
+                .entry((module.clone(), lexscope::rtn_obs_name(&name)))
                 .or_default();
             e.is_task = false;
             e.framed = framed;
@@ -90,7 +90,7 @@ impl Elaborator<'_> {
             let decl = self.decl_loc(sp);
             let e = self
                 .subroutine_routes
-                .entry((module.clone(), name))
+                .entry((module.clone(), lexscope::rtn_obs_name(&name)))
                 .or_default();
             e.is_task = true;
             e.framed = framed;
@@ -138,7 +138,7 @@ impl Elaborator<'_> {
     /// site must not erase one the seam or the seed already resolved.
     pub(crate) fn note_subroutine_route(
         &mut self,
-        name: &str,
+        name: &RtnKey,
         is_task: bool,
         framed: bool,
         decl: Option<DeclLoc>,
@@ -146,7 +146,7 @@ impl Elaborator<'_> {
         let module = self.inst_stack.last().cloned().unwrap_or_default();
         let e = self
             .subroutine_routes
-            .entry((module, name.to_string()))
+            .entry((module, lexscope::rtn_obs_name(name)))
             .or_default();
         e.is_task = is_task;
         e.framed = framed;
@@ -165,19 +165,19 @@ impl Elaborator<'_> {
     /// scoped `pk::g()` call injects AFTER that barrier — the same predicate decides
     /// both, so a late-framed callee reaches the engine in the same call shape its
     /// early-framed import twin does.
-    pub(crate) fn note_frame_func_flags(&mut self, name: &str, f: &ast::FunctionDef) {
+    pub(crate) fn note_frame_func_flags(&mut self, name: &RtnKey, f: &ast::FunctionDef) {
         // R5-B: an output/inout formal routes the call to the copy-out path
         // (`emit_frame_func_out_call`) + the hoist.
         if f.ports
             .iter()
             .any(|p| !matches!(p.dir, ast::PortDir::Input))
         {
-            self.inout_func_names.insert(name.to_string());
+            self.inout_func_names.insert(name.clone());
         }
         // §4.5.179: an `input` dyn-array formal makes a BURIED call hoist to a
         // `__t = f(a)` temp (re-triggering §4.5.177's marker).
         if f.ports.iter().any(|p| self.is_input_dyn_array_formal(p)) {
-            self.dyn_formal_func_names.insert(name.to_string());
+            self.dyn_formal_func_names.insert(name.clone());
         }
         // §3.b: a body that writes a MODULE net needs the `&mut` statement
         // executor, and needs the `Terminator::Call` shape to be routed there —
@@ -188,8 +188,8 @@ impl Elaborator<'_> {
         // would not exist yet (`f2` calling `fw` reached the engine as a plain
         // `Expr::Call` and panicked `frame write targets a frame-local net`).
         if self.func_body_writes_outside_name(f) {
-            self.body_write_func_names.insert(name.to_string());
-            self.inout_func_names.insert(name.to_string());
+            self.body_write_func_names.insert(name.clone());
+            self.inout_func_names.insert(name.clone());
         }
     }
 
@@ -309,7 +309,12 @@ impl Elaborator<'_> {
     /// Lower a frame function's body into the GLOBAL `func_blocks` arena: build a
     /// process-local CFG (reusing `lower_stmt`), append it with every `Goto`/
     /// `Branch` target rebased by `+base`, set `FuncDef.entry`, then validate.
-    pub(crate) fn lower_frame_func_body(&mut self, name: &str, func: &ast::FunctionDef, fid: u32) {
+    pub(crate) fn lower_frame_func_body(
+        &mut self,
+        name: &RtnKey,
+        func: &ast::FunctionDef,
+        fid: u32,
+    ) {
         // §4.5.426: a frame body is its own `%m` scope (`module.func`, appended by the
         // engine from `func_names`) — no caller block chain leaks into it.
         let saved_block_scope = self.lex.disp_chain_take();
@@ -325,7 +330,7 @@ impl Elaborator<'_> {
 
     fn lower_frame_body_inner_lower_frame_func_body(
         &mut self,
-        name: &str,
+        name: &RtnKey,
         func: &ast::FunctionDef,
         fid: u32,
     ) {
@@ -354,7 +359,7 @@ impl Elaborator<'_> {
             );
             self.push_rtn_pkg_scope(p, &func.name.name, decl_scope::RtnKind::Func, declared);
         }
-        let scope_seg = format!("$func${name}");
+
         // return-kw: a frame function's `return [expr]` assigns the func-named return
         // var (base_net + return_slot) and jumps to a single exit block; the body also
         // falls through to it. Mirrors class-method lowering — IR-0 (exit BB + Goto/
@@ -392,7 +397,7 @@ impl Elaborator<'_> {
         // functions") — pass `false` so `disable <funcname>` falls to the loud
         // reject. A `disable <inner named block>` (break/continue) still lowers
         // via `lower_stmt` either way.
-        let (body, entry) = self.with_scope(&scope_seg, |s| {
+        let (body, entry) = self.with_func_scope(name, |s| {
             // Round-9 PKG2: inject same-package constants (enum labels +
             // localparams) BEFORE the body-local labels so a body-local label
             // can still shadow a same-name package const (innermost body decl
@@ -425,11 +430,11 @@ impl Elaborator<'_> {
             if has_ret {
                 let exit = b.new_block();
                 s.cur_return = Some((Some(retvar), exit));
-                s.lower_frame_body_stmt(&mut b, &func.body, &func.name.name, false);
+                s.lower_frame_body_stmt(&mut b, &func.body, None);
                 b.goto(exit);
                 b.start_block(exit);
             } else {
-                s.lower_frame_body_stmt(&mut b, &func.body, &func.name.name, false);
+                s.lower_frame_body_stmt(&mut b, &func.body, None);
             }
             let out = b.finish();
             s.wext_body_exit(wext_tok);
@@ -482,7 +487,7 @@ impl Elaborator<'_> {
             self.body_write_fids.insert(fid);
         }
         self.validate_frame_body(
-            name,
+            &scope_out(lexscope::rtn_show(name)),
             entry_bb,
             m.base_net,
             m.locals_len,
@@ -499,7 +504,7 @@ impl Elaborator<'_> {
     /// `lower_frame_func_body`, but a NESTED task call (`inline_task` divert)
     /// registers into `pending_task_calls` (keyed by the process-LOCAL block),
     /// which is rebased by `+base` into `task_calls_func` on append.
-    pub(crate) fn lower_frame_task_body(&mut self, name: &str, task: &ast::TaskDef, fid: u32) {
+    pub(crate) fn lower_frame_task_body(&mut self, name: &RtnKey, task: &ast::TaskDef, fid: u32) {
         // §4.5.426: a frame body is its own `%m` scope (`module.func`, appended by the
         // engine from `func_names`) — no caller block chain leaks into it.
         let saved_block_scope = self.lex.disp_chain_take();
@@ -513,7 +518,7 @@ impl Elaborator<'_> {
 
     fn lower_frame_body_inner_lower_frame_task_body(
         &mut self,
-        name: &str,
+        name: &RtnKey,
         task: &ast::TaskDef,
         fid: u32,
     ) {
@@ -532,7 +537,7 @@ impl Elaborator<'_> {
             );
             self.push_rtn_pkg_scope(pk, &task.name.name, decl_scope::RtnKind::Task, declared);
         }
-        let scope_seg = format!("$func${name}");
+
         let saved_owner = self.cur_frame_owner;
         self.cur_frame_owner = self.func_metas.get(fid as usize).map(|m| m.base_net);
         let saved_ftl = self.frame_task_lowering;
@@ -568,7 +573,7 @@ impl Elaborator<'_> {
         );
         let saved_hoist = std::mem::take(&mut self.frame_hoisted_decls);
         let saved_nonh = std::mem::take(&mut self.frame_nonhoistable);
-        let (body, entry) = self.with_scope(&scope_seg, |s| {
+        let (body, entry) = self.with_func_scope(name, |s| {
             // Gap B: body-local enum labels → constants under `$func$<name>` (this
             // scope), mirroring `lower_frame_func_body` — so a task body enum's
             // labels resolve inside the body without leaking to the module.
@@ -596,11 +601,11 @@ impl Elaborator<'_> {
             if has_ret {
                 let exit = b.new_block();
                 s.cur_return = Some((None, exit));
-                s.lower_frame_body_stmt(&mut b, &task.body, name, self_disable);
+                s.lower_frame_body_stmt(&mut b, &task.body, self_disable.then_some(name));
                 b.goto(exit);
                 b.start_block(exit);
             } else {
-                s.lower_frame_body_stmt(&mut b, &task.body, name, self_disable);
+                s.lower_frame_body_stmt(&mut b, &task.body, self_disable.then_some(name));
             }
             let out = b.finish();
             s.wext_body_exit(wext_tok);
@@ -671,13 +676,8 @@ impl Elaborator<'_> {
         // engine's suspendable-frame path, so its reject can only be decided once the full
         // transitive suspendable set is known.
         let unsafe_repeat = self.ast_has_repeat_with_timing(&task.body);
-        self.frame_task_pending.push((
-            fid,
-            name.to_string(),
-            m.base_net,
-            m.locals_len,
-            unsafe_repeat,
-        ));
+        self.frame_task_pending
+            .push((fid, name.clone(), m.base_net, m.locals_len, unsafe_repeat));
     }
 
     /// B3: lower a frame function/task body, registering a self-disable target
@@ -880,15 +880,14 @@ impl Elaborator<'_> {
         &mut self,
         b: &mut ProcessBuilder,
         body: &ast::Stmt,
-        name: &str,
-        self_disable: bool,
+        self_disable: Option<&RtnKey>,
     ) {
         // §5.2 Q-WEXTPOS C3: the body's own text is located again under a mask (`wext.rs`).
         self.wext_located(|s| {
-            if !self_disable {
+            let Some(name) = self_disable else {
                 s.lower_parsed(b, body);
                 return;
-            }
+            };
             // A `disable <name>` (and every normal exit) jumps to this block, which
             // Returns — the single-frame unwind. `disable_fork_floor` is already 0 at
             // step 6.5 (no fork/process context), so the name is visible to the lookup.

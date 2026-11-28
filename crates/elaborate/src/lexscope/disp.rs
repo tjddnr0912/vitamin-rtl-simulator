@@ -7,6 +7,7 @@
 //! `display_of_key_text` is private and LEAVE L4 is closed) and `net_key_shown` (the key of a net
 //! id as display text, for the three diagnostics that print it).
 
+use super::RtnKey;
 use super::{wrap_ctx, wrap_root, wrap_shown, Mark, SavedRoot, Shown, ShownCtx};
 use crate::Elaborator;
 
@@ -137,7 +138,7 @@ impl Elaborator<'_> {
     /// `top.gi.t`; `top.f` for every level of a recursion, not `top.f.f.f`; `top.a`
     /// for a task called from another task). A class method keeps its bare name
     /// (relative): its declaring instance is not known to a global class table.
-    fn frame_path(&self, name: &str) -> String {
+    fn frame_path(&self, name: &RtnKey) -> String {
         // §27.3: a GENERATE-scoped routine is declared in the generate BLOCK, so
         // that block is what `%m` names — `t.u.g.show`, not `t.u.g[0]$show` (the
         // storage key) and not `t.u.show` (the enclosing module). Measured against
@@ -157,9 +158,9 @@ impl Elaborator<'_> {
         }
         let inst = self.display_of(self.lex.mark_text(Mark::Inst));
         if inst.is_empty() {
-            name.to_string()
+            (*name).to_string()
         } else {
-            format!(".{inst}.{name}")
+            format!(".{inst}.{}", (*name))
         }
     }
 
@@ -168,17 +169,22 @@ impl Elaborator<'_> {
     /// `f`) and for a §27.3 generate-scoped key (`g[0]$f`, whose `%m` is the scope the
     /// key names). Only the key can answer the second, and only the bare name can
     /// answer the first, so both are passed.
-    fn frame_path_of(&self, key: &str, bare: &str) -> String {
+    fn frame_path_of(&self, key: &RtnKey, bare: &str) -> String {
         if self.rtn_decl_scope.contains_key(key) {
             self.frame_path(key)
         } else {
-            self.frame_path(bare)
+            self.frame_path_bare(bare)
         }
+    }
+
+    /// `frame_path` of a DECLARED bare name (C-8's text form, T10): the one birth (b5) at the first meeting, then the keyed form.
+    fn frame_path_bare(&self, name: &str) -> String {
+        self.frame_path(&super::rtn::rtn_key_unwalked(name))
     }
 
     /// §4.5.435: a frame body's `%m` chain is rooted at the frame's own declaring
     /// path `<inst>.<name>` (`frame_path`) — the same string `func_names` carries.
-    fn enter_frame_scope_root(&mut self, name: &str) -> Option<String> {
+    fn enter_frame_scope_root(&mut self, name: &RtnKey) -> Option<String> {
         let fp = self.frame_path(name);
         let root = fp.strip_prefix('.').unwrap_or(&fp).to_string();
         self.lex.disp_root.replace(root)
@@ -212,13 +218,13 @@ impl Elaborator<'_> {
     }
 
     /// SHIM: the `%m` of a frame subroutine (`frame_path_of`).
-    pub(crate) fn disp_frame_path_of(&self, key: &str, bare: &str) -> Shown {
+    pub(crate) fn disp_frame_path_of(&self, key: &RtnKey, bare: &str) -> Shown {
         wrap_shown(self.frame_path_of(key, bare))
     }
 
     /// SHIM: a frame body's display root is entered ; the root that was in effect is saved
     /// (`enter_frame_scope_root`).
-    pub(crate) fn disp_enter_frame_root(&mut self, name: &str) -> SavedRoot {
+    pub(crate) fn disp_enter_frame_root(&mut self, name: &RtnKey) -> SavedRoot {
         wrap_root(self.enter_frame_scope_root(name))
     }
 

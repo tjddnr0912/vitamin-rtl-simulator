@@ -131,10 +131,12 @@ pub(crate) fn fresh_suspend(entry: u32) -> ir::SuspendState {
 /// B3 frame-call: does this body contain a `disable <name>` targeting the frame
 /// function/task ITSELF (a self-disable = early return)? Used to lazily add the
 /// convergence exit block ONLY when needed (otherwise the body is byte-identical).
-pub(crate) fn stmt_disables_name(s: &ast::Stmt, name: &str) -> bool {
+pub(crate) fn stmt_disables_name(s: &ast::Stmt, name: &RtnKey) -> bool {
     use ast::Stmt::*;
     match s {
-        Disable { target, .. } => target.segments.len() == 1 && target.segments[0].name == name,
+        Disable { target, .. } => {
+            target.segments.len() == 1 && lexscope::rtn_spells(name, &target.segments[0].name)
+        }
         Block { stmts, .. } | Fork { stmts, .. } => {
             stmts.iter().any(|st| stmt_disables_name(st, name))
         }

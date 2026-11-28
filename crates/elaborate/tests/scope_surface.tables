@@ -109,7 +109,7 @@ zn	d8f9c54aafb2a97e923fc75a6a47a199be52921f7246d60927f08b10862815cf
 == SURF_PRESENT
 present
 == SURF_COUNTS
-present=present files=8 rows=268 out_types=33 e_fns=72 text_flows=80
+present=present files=8 rows=277 out_types=34 e_fns=74 text_flows=80
 == SURF_ROWS
 # the computed surface: one row per OUT position / IN text parameter / type / impl / use
 # §5.2 Q-DECLKEY DK1-4a (2026-11-24): the walk's 18 rows at lexscope/walk.rs (L10 8, ENTER 5, CB 4, PASS 1)
@@ -121,10 +121,8 @@ present=present files=8 rows=268 out_types=33 e_fns=72 text_flows=80
 file	tier	kind	item	position	type	verdict	refs
 lexscope/disp.rs	E	FN	Elaborator::ctx_here	RET	ShownCtx	PASS	-
 lexscope/disp.rs	E	FN	Elaborator::disp_chain_abs	RET	Shown	PASS	-
-lexscope/disp.rs	E	FN	Elaborator::disp_enter_frame_root	IN:name	&str	ENTER:lookup	-
 lexscope/disp.rs	E	FN	Elaborator::disp_enter_frame_root	RET	SavedRoot	PASS	-
 lexscope/disp.rs	E	FN	Elaborator::disp_frame_path_of	IN:bare	&str	ENTER:lookup	-
-lexscope/disp.rs	E	FN	Elaborator::disp_frame_path_of	IN:key	&str	ENTER:lookup	-
 lexscope/disp.rs	E	FN	Elaborator::disp_frame_path_of	RET	Shown	PASS	-
 lexscope/disp.rs	E	FN	Elaborator::disp_here	RET	Shown	PASS	-
 lexscope/disp.rs	E	FN	Elaborator::disp_inst_top	RET	Shown	PASS	-
@@ -201,6 +199,7 @@ lexscope/key.rs	K	FN	Scopes::at_cur	IN:local	&str	ENTER:lookup	-
 lexscope/key.rs	K	FN	Scopes::at_cur	RET	AtKey	PASS	-
 lexscope/key.rs	K	FN	Scopes::new_key	IN:local	&str	ENTER:lookup	-
 lexscope/key.rs	K	FN	Scopes::new_key	RET	NewKey	PASS	-
+lexscope/key.rs	K	FN	Scopes::new_key_of_rtn	RET	NewKey	PASS	-
 lexscope/key.rs	K	FN	Scopes::show_miss	IN:local	&str	ENTER:to-display	-
 lexscope/key.rs	K	FN	Scopes::show_miss	RET	Shown	PASS	-
 lexscope/key.rs	K	FN	at_same	RET	bool	PASS	-
@@ -242,14 +241,17 @@ lexscope/mod.rs	-	USE	key::key_same	-	-	PASS	-
 lexscope/mod.rs	-	USE	key::key_show	-	-	PASS	-
 lexscope/mod.rs	-	USE	rtn::RtnKey	-	-	PASS	-
 lexscope/mod.rs	-	USE	rtn::RtnSpelledMap	-	-	PASS	-
+lexscope/mod.rs	-	USE	rtn::is_gen_scoped	-	-	PASS	-
 lexscope/mod.rs	-	USE	rtn::is_pkg_scoped	-	-	PASS	-
 lexscope/mod.rs	-	USE	rtn::rtn_bare_name	-	-	PASS	-
 lexscope/mod.rs	-	USE	rtn::rtn_key_bound	-	-	PASS	-
 lexscope/mod.rs	-	USE	rtn::rtn_key_scoped	-	-	PASS	-
 lexscope/mod.rs	-	USE	rtn::rtn_key_unwalked	-	-	PASS	-
 lexscope/mod.rs	-	USE	rtn::rtn_key_unwalked_owned	-	-	PASS	-
+lexscope/mod.rs	-	USE	rtn::rtn_obs_name	-	-	PASS	-
 lexscope/mod.rs	-	USE	rtn::rtn_show	-	-	PASS	-
 lexscope/mod.rs	-	USE	rtn::rtn_spelled_in	-	-	PASS	-
+lexscope/mod.rs	-	USE	rtn::rtn_spells	-	-	PASS	-
 lexscope/mod.rs	K	FN	Outgoing::plain	RET	Self::Plain	LEAVE:L0	-
 lexscope/mod.rs	K	FN	ScopeKeyed::drain_keys_shown	RET	Vec<Shown>	CARD:list:the scopes still holding a value	-
 lexscope/mod.rs	K	FN	ScopeKeyed::entry_under_cur	IN:name	&str	ENTER:to-scope	-
@@ -323,10 +325,14 @@ lexscope/rtn.rs	-	TYPE	RtnKey	-	-	PASS	-
 lexscope/rtn.rs	-	TYPE	RtnSpelledMap	-	-	PASS	-
 lexscope/rtn.rs	E	FN	Elaborator::resolve_rtn_key	IN:bare	&str	ENTER:lookup	-
 lexscope/rtn.rs	E	FN	Elaborator::resolve_rtn_key	RET	RtnKey	PASS	-
+lexscope/rtn.rs	E	FN	Elaborator::with_func_scope	CB:f	impl FnOnce(&mut Self) -> R	CB:once	-
+lexscope/rtn.rs	E	FN	Elaborator::with_func_scope	IN:f	impl FnOnce(&mut Self) -> R	INTERIOR:the receiver lent to its callback	-
+lexscope/rtn.rs	E	FN	Elaborator::with_func_scope	RET	R	PASS	-
 lexscope/rtn.rs	K	FN	RtnSpelledMap::get_unwalked	IN:spelling	&str	ENTER:lookup	-
 lexscope/rtn.rs	K	FN	RtnSpelledMap::get_unwalked	RET	Option<&V>	CARD:hit:a value filed under the key the spelling names	REF
 lexscope/rtn.rs	K	FN	RtnSpelledMap::new	RET	RtnSpelledMap<V>	PASS	-
 lexscope/rtn.rs	K	FN	RtnSpelledMap::put_key	RET	()	PASS	-
+lexscope/rtn.rs	K	FN	is_gen_scoped	RET	bool	PASS	-
 lexscope/rtn.rs	K	FN	is_pkg_scoped	RET	bool	PASS	-
 lexscope/rtn.rs	K	FN	rtn_bare_name	RET	&str	LEAVE:L14	REF
 lexscope/rtn.rs	K	FN	rtn_key_bound	IN:name	&str	ENTER:lookup	-
@@ -338,9 +344,12 @@ lexscope/rtn.rs	K	FN	rtn_key_unwalked	IN:spelling	&str	ENTER:lookup	-
 lexscope/rtn.rs	K	FN	rtn_key_unwalked	RET	RtnKey	PASS	-
 lexscope/rtn.rs	K	FN	rtn_key_unwalked_owned	IN:spelling	String	ENTER:lookup	-
 lexscope/rtn.rs	K	FN	rtn_key_unwalked_owned	RET	RtnKey	PASS	-
+lexscope/rtn.rs	K	FN	rtn_obs_name	RET	String	LEAVE:L15	-
 lexscope/rtn.rs	K	FN	rtn_show	RET	Shown	PASS	-
 lexscope/rtn.rs	K	FN	rtn_spelled_in	IN:set	&BTreeSet<String>	ENTER:lookup	-
 lexscope/rtn.rs	K	FN	rtn_spelled_in	RET	bool	PASS	-
+lexscope/rtn.rs	K	FN	rtn_spells	IN:s	&str	ENTER:lookup	-
+lexscope/rtn.rs	K	FN	rtn_spells	RET	bool	PASS	-
 lexscope/walk.rs	E	FN	Elaborator::walk_above_enum_label_type	IN:name	&str	ENTER:lookup	-
 lexscope/walk.rs	E	FN	Elaborator::walk_above_enum_label_type	RET	Option<DeclKey>	CARD:hit:the declaration key the walk found	-
 lexscope/walk.rs	E	FN	Elaborator::walk_above_gen_loop_label	IN:name	&str	ENTER:lookup	-
@@ -418,6 +427,7 @@ Self
 Self::Plain
 Shown
 ShownCtx
+String
 T::Plain
 Vec<&NewKey>
 Vec<Shown>
@@ -445,6 +455,7 @@ id	item	position	type	closes
 L13	Elaborator::names_with_pkg_var_aliases	RET	std::collections::BTreeSet<String>	permanent
 L13	Elaborator::bare_name_of_net	RET	Option<String>	permanent
 L14	rtn_bare_name	RET	&str	permanent
+L15	rtn_obs_name	RET	String	permanent
 L0	scope_out	RET	T::Plain	permanent
 L0	Outgoing::plain	RET	Self::Plain	permanent
 == SURF_ENTER
@@ -466,9 +477,7 @@ Scopes::cur_frame_routine_is_any	fids	lookup	TEXT String
 Scopes::hier_path_is_self	segs	lookup	TEXT hdl_ast::Ident.name -> String
 Scopes::scope_swap_text	text	to-scope	TEXT String
 Scopes::scope_swap_pkg	pkg	to-scope	TEXT str
-Elaborator::disp_frame_path_of	key	lookup	TEXT str
 Elaborator::disp_frame_path_of	bare	lookup	TEXT str
-Elaborator::disp_enter_frame_root	name	lookup	TEXT str
 Scopes::disp_chain_push	label	to-display	TEXT String
 Scopes::disp_chain_swap_single	seg	to-display	TEXT str
 Scopes::disp_class_method_swap	method	to-display	TEXT String
@@ -530,6 +539,7 @@ rtn_key_scoped	pkg	lookup	TEXT str
 rtn_key_unwalked	spelling	lookup	TEXT str
 rtn_key_unwalked_owned	spelling	lookup	TEXT String
 rtn_spelled_in	set	lookup	TEXT String
+rtn_spells	s	lookup	TEXT str
 == SURF_ENUMS
 # crate-visible enums allowed (payload-free): the mark selector at LS3
 name
@@ -715,6 +725,7 @@ Elaborator::frame_path	OUT-C	.scope_text	1	in
 Elaborator::frame_path	OUT-C	.to_string	2	text:Shown+SavedRoot
 Elaborator::frame_path	OUT-F	rtn_decl_scope	1	in
 Elaborator::frame_path	OUT-M	format	2	text:Shown+SavedRoot
+Elaborator::frame_path_bare	FN	-	-	-
 Elaborator::frame_path_of	FN	-	-	-
 Elaborator::frame_path_of	OUT-C	.contains_key	1	in
 Elaborator::frame_path_of	OUT-F	rtn_decl_scope	1	in
@@ -973,6 +984,8 @@ Elaborator::walk_shadowed_fixed_string_dyn	OUT-F	fixed_string_dyn_key	1	in
 Elaborator::walk_shadowed_string_array_elem	FN	-	-	-
 Elaborator::walk_shadowed_string_array_elem	OUT-C	.contains_at	1	in
 Elaborator::walk_shadowed_string_array_elem	OUT-F	string_array_elems	1	in
+Elaborator::with_func_scope	FN	-	-	-
+Elaborator::with_func_scope	OUT-M	format	1	in
 Elaborator::with_scope	FN	-	-	-
 Elaborator::with_scope	OUT-C	.scope_enter	1	in
 Elaborator::with_scope	OUT-C	.scope_restore	1	in
@@ -1121,6 +1134,7 @@ RtnSpelledMap::get_unwalked	RET	Option<&V>	hit:a value filed under the key the s
 # §5.2 Q-DECLKEY DK2 (2026-11-26, form (c)): the four walks are private (off the surface): their four rows gone ; walk_rtn_scopes' stays (outside the claim, L-listed)
 item	param	kind	args	calls
 Elaborator::with_scope	f	FnOnce	&mut Self	once
+Elaborator::with_func_scope	f	FnOnce	&mut Self	once
 == SURF_BODY
 # BODY-ALL (DELTA11 R2, R4 N-5): the sha256 of the body tokens of every fn of the file set.
 # First rows at LS2a ; each unit's verify prints the rows that changed.
@@ -1147,8 +1161,9 @@ lexscope/disp.rs	Elaborator::display_of	ee9935d33e213aafafc0eb2c8bd582cc863776ce
 lexscope/disp.rs	Elaborator::display_of_key_text	433111e369e73d8544a55faa18429c94dff41a87877114f4f063d88ce93fb22c
 lexscope/disp.rs	Elaborator::display_prefix	b8f0d3020e9b4c149da08ca57d00c95e420da3a7c67288a88a649ee241eb1393
 lexscope/disp.rs	Elaborator::enter_frame_scope_root	0c3429c08abc678bd1233a3c442c45dad19994c59d1cfe484b012f126542eeac
-lexscope/disp.rs	Elaborator::frame_path	e91364f500b060fe9902849d65b4f0fc49205c03ec3a45653579e9fa6515760a
-lexscope/disp.rs	Elaborator::frame_path_of	823ba84312a47cec1fe5a422c8df2b42892f809d0260fc0afa30738ac77e0fde
+lexscope/disp.rs	Elaborator::frame_path	d4c4e12d0d0ea6e7784b177eb27a654c5dbf0f29b03fa68f0cb2a8feb7428e76
+lexscope/disp.rs	Elaborator::frame_path_bare	9d1ea1c4c8e74ea6d9ecd50ed7191cd94f9a4d160abeab0c7bd8a94b927d6892
+lexscope/disp.rs	Elaborator::frame_path_of	ea1cdc1c66df8ab06e775635b0e63a59881c46daa18cf3d84df64c0808b797e8
 lexscope/disp.rs	Elaborator::net_key_shown	b5fe8fbec64632235a788753bc4c679494c357519378da17dab262acb548d91b
 lexscope/disp.rs	Elaborator::net_name_table	c5def04c74b82343e0b26659bb34d0f98bf3cb6a9d52581f2cee28873bca9969
 lexscope/disp.rs	Elaborator::scope_chain_abs	08982b08354d4fb83357eabf54dbc92cddca5f06e42670a29e43f9780fc2ee90
@@ -1211,6 +1226,7 @@ lexscope/key.rs	KeyedSet::same_key_count	f21aac80cba3ac553f01c37216b9254331b842c
 lexscope/key.rs	KeyedSet::snapshot	3f8e64137d3269228e5b56d876023223dd4e94ce60226d4e1fc378fe8d90c792
 lexscope/key.rs	Scopes::at_cur	3d582b863ab0e29f57edea8a089557b3963d49bec59c7917f377289a2af5c7bb
 lexscope/key.rs	Scopes::new_key	90dd5e8de6c4251f8a07e8fefea3668e34f8959476c5118c5d2ae75061e42bd3
+lexscope/key.rs	Scopes::new_key_of_rtn	95bc94ad5bf3f638f6d8de63d3bdba66b563f02b8e97ab44684173c1eef7f68e
 lexscope/key.rs	Scopes::show_miss	b1f4dc8341919651502a4bffd2103726163292a19a886fb2f728b18b733a7ef8
 lexscope/key.rs	at_same	bf297f95d0e553dd42c2d1c834d4d2e7fc8619999b662301c6e6247a542b7787
 lexscope/key.rs	found_text	80304ba5cdaae492d0bc0ab625c80f4162571f6352864fbed7cc41853ad277ad
@@ -1292,17 +1308,21 @@ lexscope/mod.rs	wrap_root	53ad3e41ea3d62362b4139f5104eec8ff2fab5db8e7f830dfd7500
 lexscope/mod.rs	wrap_shown	540bc990dd416b3323a7b9a2a681705625eced002fe6975882e5e18ce51038a0
 lexscope/rtn.rs	Elaborator::resolve_rtn_key	c61617170f6d0a09d648e1a1012285a11be83eb20659f8b8f542313fc503e564
 lexscope/rtn.rs	Elaborator::rtn_key_bare	ca42730874f8632c228011bf156fedf3cd08b3b0ee0adebc84e22acba76f5fa9
+lexscope/rtn.rs	Elaborator::with_func_scope	741c6aebba81055527ff43f2eb8ccb3118f1e5209f3685a95f0df2dd663cfaee
 lexscope/rtn.rs	RtnSpelledMap::get_unwalked	5ab15010bb4b793d204a7b1b28fca7e1d908f7b7755551ab8e0884bd5f03f620
 lexscope/rtn.rs	RtnSpelledMap::new	18d19eab915d0df15807d7b99b68bd228843566c33a03571996bdf612cc8863f
 lexscope/rtn.rs	RtnSpelledMap::put_key	1171d2fde8c398a434fefdde5df39ec147095fbac95901f29588d650a05cdd78
+lexscope/rtn.rs	is_gen_scoped	20460e07cfbe0b82c57a7a463ea8231b470cbda349f194130452542a07568260
 lexscope/rtn.rs	is_pkg_scoped	b0181cdbf3891805bc565edd45ac0bee98d0e782b5c6ac52bed9139f073f262d
 lexscope/rtn.rs	rtn_bare_name	13d826b2795998dda3bb46bca2d2c2afa584dd9388829a39ddff9bec9e9093f4
 lexscope/rtn.rs	rtn_key_bound	567b18dab9ec5e43c25e4ad23984f5fce8160d8844b6acfa40fe3748b012d07b
 lexscope/rtn.rs	rtn_key_scoped	5153b9ea5e1b48c289f40d3792870202705501dc710c63056abee98886ec9ecc
 lexscope/rtn.rs	rtn_key_unwalked	7e9598ad9aee8afc94ec3d17e03bb99f009da832e67795276f94dc29d5128a38
 lexscope/rtn.rs	rtn_key_unwalked_owned	a6105b32383e5e20e5406c0c9287982566716707e587936641395037ee13eff3
+lexscope/rtn.rs	rtn_obs_name	ff7c7ab53451c132cdf7068c2d861644339b9e7a5fa047d618601d66e98f33c0
 lexscope/rtn.rs	rtn_show	a8864b2f4a09df6c7f9ee4c4df634b28bd47b95f0be9f05d6edd625aa2fed846
 lexscope/rtn.rs	rtn_spelled_in	e466de67d7d945a66f8564719e7cf9ad8e4078f643c6a94b5f912fdff017017a
+lexscope/rtn.rs	rtn_spells	dce7364cacca42cb8b3be264c8e5165c4f04d47f106053eecce0e46823e49485
 lexscope/tests.rs	fb_cur_is_inst_top_or_synth_below_truth_table	e58b73778279550c946409caf27937b7af95ef2fb1fa1e20079c194b2cd23307
 lexscope/tests.rs	fb_cur_shown_and_quoted_or	db87cbfc7b8a236be569f82de1df932c8e188f7d9a05ff444f7f7621b526961d
 lexscope/tests.rs	fb_disp_chain_take_push_pop_restore	2a42b6329bbc34ed7ed14b1c9ab551a7f1196790c190191a88f2c84ebd85ca5b
@@ -1361,6 +1381,7 @@ lexscope/walk.rs	Elaborator::walk_shadowed_string_array_elem	32feee643841f76d21a
 # path moved FAILS INTERIOR ; a row matching no position is STALE. Empty.
 item	position	reaches	why
 Elaborator::with_scope	IN:f	Self = Elaborator -> Elaborator.const_call_fn -> RefCell	the receiver lent to its callback
+Elaborator::with_func_scope	IN:f	Self = Elaborator -> Elaborator.const_call_fn -> RefCell	the receiver lent to its callback
 == SURF_PLAN
 # SURF-PLAN: the 30 fns of plan10/g/moved.tsv (DELTA10 L2), judged by I-SURF on today's signature
 # (vis, tier, the normalised signature, verdict, the failing positions, the text IN parameters) ;
@@ -1398,9 +1419,9 @@ DK4	net_name_table	lexscope/disp.rs	pub(crate)	E	(&self) -> Vec<Shown>	FAIL	RET=
 LS2-d	cur_context	lexscope/disp.rs	-	E	(&self) -> Vec<diag::Frame>	FAIL	RET=CARD(Vec in Vec<diag::Frame>); RET=UNKNOWN(named type of another module diag::Frame)	-
 LS2-d	display_of	lexscope/disp.rs	-	E	(&self, prefix: &str) -> String	FAIL	RET=TEXT(String)	prefix
 LS2-d	display_prefix	lexscope/disp.rs	-	E	(&self) -> String	FAIL	RET=TEXT(String)	-
-LS2-d	enter_frame_scope_root	lexscope/disp.rs	-	E	(&mut self, name: &str) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	name
-LS2-d	frame_path	lexscope/disp.rs	-	E	(&self, name: &str) -> String	FAIL	RET=TEXT(String)	name
-LS2-d	frame_path_of	lexscope/disp.rs	-	E	(&self, key: &str, bare: &str) -> String	FAIL	RET=TEXT(String)	key,bare
+LS2-d	enter_frame_scope_root	lexscope/disp.rs	-	E	(&mut self, name: &RtnKey) -> Option<String>	FAIL	RET=CARD(Option in Option<String>); RET=TEXT(String)	name
+LS2-d	frame_path	lexscope/disp.rs	-	E	(&self, name: &RtnKey) -> String	FAIL	RET=TEXT(String)	name
+LS2-d	frame_path_of	lexscope/disp.rs	-	E	(&self, key: &RtnKey, bare: &str) -> String	FAIL	RET=TEXT(String)	key,bare
 LS2-d	scope_chain_abs	lexscope/disp.rs	-	E	(&self) -> String	FAIL	RET=TEXT(String)	-
 LS2a	child_prefix	lexscope/mod.rs	-	K	(&self, inst_name: &str) -> String	FAIL	RET=TEXT(String)	inst_name
 LS2a	cur_gen_rtn_key	lexscope/elab.rs	pub(crate)	E	(&self, bare: &str) -> Option<RtnKey>	FAIL	RET=CARD(Option in Option<RtnKey>); RET=UNKNOWN(RtnKey)	bare

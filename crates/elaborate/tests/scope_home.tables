@@ -407,7 +407,6 @@ expr_size_hier_exact.rs	env_exact	1	bound
 expr_size_hier_exact.rs	hier_leaf_width_exact	1	exact
 frames_body.rs	lower_frame_body_inner_lower_frame_func_body	UNTYPED	declared=rtn_declared_names
 frames_body.rs	lower_frame_body_inner_lower_frame_task_body	UNTYPED	declared=rtn_declared_names
-frames_body.rs	seed_subroutine_routes	2	fnames,tnames
 frames_call/emit.rs	emit_frame_task_call	1	out_array_unpacks
 frames_classify.rs	body_duplicates_a_non_repeatable_local	1	pending
 frames_classify.rs	body_reads_only_locals	1	locals
@@ -514,7 +513,7 @@ block_local_class.rs	compute_timed_blocks	let	path
 block_local_class.rs	compute_timed_blocks	field:Acc	sharers
 block_local_class.rs	compute_timed_blocks	field:Acc	scoped
 == H7_COUNTS
-lets 146 fns 82 untyped 27 readers 26
+lets 144 fns 81 untyped 27 readers 26
 == HM
 # HM: the mints of scope-qualified text, by (file, fn, mint kind, name) with a count — g3 mints.tsv's rule
 # (census_g3.rs + link.py): `call` a call of a mint fn (MINT_CALLS), `fmt` / `fmt-tempname` a `format!` /
@@ -597,16 +596,12 @@ events.rs	sens_event_net	join	join	2	spelling
 expr_main.rs	lower_expr_ungated	join	join	1	spelling
 expr_special.rs	bits_of_view	call	walk_key_value_or_net	1	key
 expr_special.rs	lower_bits_fold	join	join	1	spelling
-frames_body.rs	lower_frame_body_inner_lower_frame_func_body	fmt	format	1	segment
-frames_body.rs	lower_frame_body_inner_lower_frame_task_body	fmt	format	1	segment
 frames_call/emit.rs	emit_frame_task_call	fmt-tempname	format	1	spelling
 frames_call/mod.rs	fresh_ret_temp	fmt-tempname	format	1	spelling
 frames_concat.rs	reserve_frame_concat_tmps	fmt-tempname	format	1	spelling
 frames_reserve.rs	reserve_frame_case_tmps	fmt-tempname	format	1	spelling
-frames_reserve.rs	reserve_frame_func	fmt	format	1	segment
 frames_reserve.rs	reserve_frame_repeat_counters	fmt-tempname	format	1	spelling
 frames_reserve.rs	reserve_frame_static_guard	fmt-tempname	format	1	spelling
-frames_reserve.rs	reserve_frame_task	fmt	format	1	segment
 frames_static_init.rs	admitted_local_keys	call	walk_key_net	1	key
 frames_static_init.rs	block_wrap_prefix	derived-fn	block_wrap_prefix	1	segment
 frames_static_init.rs	block_wrap_prefix	join	join	1	segment
@@ -778,8 +773,9 @@ sva_clocking.rs	lower_clocking_blocks	join	join	2	spelling
 systask.rs	lower_systask	join	join	1	spelling
 systask.rs	unformatted_call_proxy	join	join	1	spelling
 lexscope/rtn.rs	resolve_rtn_key	call	walk_rtn_scopes	1	key
+lexscope/rtn.rs	with_func_scope	fmt	format	1	segment
 == HM_COUNTS
-mints 280 kinds {"call": 101, "curp": 5, "derived-fn": 9, "fmt": 46, "fmt-tempname": 25, "join": 87, "push": 7} tags {"display": 21, "key": 120, "scope": 17, "segment": 17, "spelling": 105}
+mints 277 kinds {"call": 101, "curp": 5, "derived-fn": 9, "fmt": 43, "fmt-tempname": 25, "join": 87, "push": 7} tags {"display": 21, "key": 120, "scope": 17, "segment": 14, "spelling": 105}
 == HS_STORES
 # HS: the store set — every `Elaborator` field whose type is a map / set keyed by `String`
 # (through Option / RefCell / Rc / Box / Bound) ; g3 name_keyed_fields.txt's 86 less its
@@ -902,10 +898,6 @@ edge_gate.rs	source_name	strip_prefix	"__forvar_"	1	spelling	-
 elab_task.rs	try_elab_task	strip_prefix	<ELAB_TASK_PREFIX>	1	spelling	-
 events.rs	lower_delay	contains	'.'	1	spelling	-
 expr_main.rs	lower_expr_ungated	starts_with	"$__vita_stream_"	1	spelling	-
-frames_reserve.rs	reserve_frame_func	contains	"::"	1	key	RS1
-frames_reserve.rs	reserve_frame_func	contains	'$'	1	key	RS1
-frames_reserve.rs	reserve_frame_task	contains	"::"	1	key	RS1
-frames_reserve.rs	reserve_frame_task	contains	'$'	1	key	RS1
 gen_scope_name.rs	gen_seg_label	rsplit_once	'['	1	scope	DK1
 gen_scope_name.rs	gen_seg_label	starts_with	'$'	1	scope	DK1
 lexscope/disp.rs	cur_context	strip_prefix	"$pkg$"	1	display	B3k
@@ -975,8 +967,9 @@ stmt_main.rs	lower_stmt_inner	starts_with	'$'	2	spelling	-
 lexscope/rtn.rs	is_pkg_scoped	contains	"::"	1	key	-
 lexscope/rtn.rs	rtn_bare_name	rsplit	"::"	1	key	-
 lexscope/rtn.rs	rtn_key_bare	rfind	'$'	1	key	-
+lexscope/rtn.rs	is_gen_scoped	contains	'$'	1	key	-
 == HSEG_COUNTS
-tests 95 tags {"display": 9, "key": 21, "scope": 37, "spelling": 28} units {"-": 32, "B3a": 2, "B3k": 33, "DK1": 4, "DK3": 10, "RS1": 5, "walk": 9}
+tests 92 tags {"display": 9, "key": 18, "scope": 37, "spelling": 28} units {"-": 33, "B3a": 2, "B3k": 33, "DK1": 4, "DK3": 10, "RS1": 1, "walk": 9}
 == H5
 # H5: the name-typed fields — census_fields.rs's rule: the structs reached from Elaborator and ConstFrame
 # through field types (aliases expanded), each field whose type names String / str / Symbol / Ident ; 215 =
@@ -1256,10 +1249,6 @@ class_lower.rs	lower_class_method_body	with_scope	1	CLASS-METHOD
 classes.rs	reserve_class_method	with_scope	1	CLASS-METHOD
 driver.rs	run	elaborate_instance	1	ROOT-INSTANCE
 frames_blocal.rs	reserve_frame_block_locals	with_scope	1	BLOCK-CHAIN
-frames_body.rs	lower_frame_body_inner_lower_frame_func_body	with_scope	1	FRAME-ROUTINE
-frames_body.rs	lower_frame_body_inner_lower_frame_task_body	with_scope	1	FRAME-ROUTINE
-frames_reserve.rs	reserve_frame_func	with_scope	1	FRAME-ROUTINE
-frames_reserve.rs	reserve_frame_task	with_scope	1	FRAME-ROUTINE
 frames_static_init.rs	emit_frame_static_prologue	with_scope	5	BLOCK-CHAIN
 generate.rs	elaborate_gen_item	with_scope	1	GEN-LOOP
 generate.rs	elaborate_gen_scoped	with_scope	1	GEN-SINGLETON
@@ -1269,8 +1258,13 @@ inline_task_locals.rs	hoist_inline_task_locals	with_scope	2	BLOCK-CHAIN
 instance.rs	elaborate_child_instances_inner	elaborate_instance	1	INSTANCE
 instance_array.rs	elaborate_instance_array	elaborate_instance	1	INSTANCE-ARRAY-ELEM
 stmt_main.rs	lower_stmt_inner	with_scope	1	BLOCK
+frames_body.rs	lower_frame_body_inner_lower_frame_func_body	with_func_scope	1	FRAME-ROUTINE
+frames_body.rs	lower_frame_body_inner_lower_frame_task_body	with_func_scope	1	FRAME-ROUTINE
+frames_reserve.rs	reserve_frame_func	with_func_scope	1	FRAME-ROUTINE
+frames_reserve.rs	reserve_frame_task	with_func_scope	1	FRAME-ROUTINE
+lexscope/rtn.rs	with_func_scope	with_scope	1	FRAME-ROUTINE
 == HK_COUNTS
-{"cur_prefix:BY-CALLER": 2, "cur_prefix:DEFINITION": 1, "cur_prefix:EMPTY": 2, "cur_prefix:INTERFACE-INSTANCE": 2, "cur_prefix:PACKAGE": 2, "cur_prefix:RECORDED": 17, "elaborate_instance:INSTANCE": 1, "elaborate_instance:INSTANCE-ARRAY-ELEM": 1, "elaborate_instance:ROOT-INSTANCE": 1, "with_scope:BLOCK": 3, "with_scope:BLOCK-CHAIN": 9, "with_scope:CLASS-METHOD": 2, "with_scope:FRAME-ROUTINE": 4, "with_scope:GEN-LOOP": 1, "with_scope:GEN-SINGLETON": 1, "with_scope:INLINE-TASK": 1}
+{"cur_prefix:BY-CALLER": 2, "cur_prefix:DEFINITION": 1, "cur_prefix:EMPTY": 2, "cur_prefix:INTERFACE-INSTANCE": 2, "cur_prefix:PACKAGE": 2, "cur_prefix:RECORDED": 17, "elaborate_instance:INSTANCE": 1, "elaborate_instance:INSTANCE-ARRAY-ELEM": 1, "elaborate_instance:ROOT-INSTANCE": 1, "with_func_scope:FRAME-ROUTINE": 4, "with_scope:BLOCK": 3, "with_scope:BLOCK-CHAIN": 9, "with_scope:CLASS-METHOD": 2, "with_scope:FRAME-ROUTINE": 1, "with_scope:GEN-LOOP": 1, "with_scope:GEN-SINGLETON": 1, "with_scope:INLINE-TASK": 1}
 == HF
 # HF: the shape of each write site of `cur_prefix` (H3's 25), by (file, fn, site = the site's ordinal in the fn in
 # source order). A site is a `mem::replace` / `take` / `swap` opener, a clone save (`let b = <recv>.cur_prefix.clone()`
@@ -1317,7 +1311,7 @@ readmem_assoc.rs	check_readmem_assoc_waits	1	scope_hold	prefix	-	body	s3	e0	&s.p
 scope.rs	default_binding_matches_decl_scope	1	swap_to_mark	saved	Mark::TfDecl	body	s5	e1	-	yes	-	end=r1	-	FIT	-
 sva_check.rs	materialize_sva_checkers	1	scope_swap	saved_prefix	&sva.scope	s3/for	s0	e0	-	yes	-	end=r1	-	FIT	-
 == HF_COUNTS
-sites 26 {"calls:elaborate_instance": 3, "calls:with_scope": 21, "every-path-once:-": 1, "every-path-once:yes": 25, "exit-between:-": 1, "exit-between:local": 6, "exit-between:none": 18, "exit-between:out": 1, "plan8:CTOR": 1, "plan8:FIT": 21, "plan8:NOT-FIT": 4, "same-block:-": 1, "same-block:no": 1, "same-block:yes": 24}
+sites 26 {"calls:elaborate_instance": 3, "calls:with_func_scope": 4, "calls:with_scope": 18, "every-path-once:-": 1, "every-path-once:yes": 25, "exit-between:-": 1, "exit-between:local": 6, "exit-between:none": 18, "exit-between:out": 1, "plan8:CTOR": 1, "plan8:FIT": 21, "plan8:NOT-FIT": 4, "same-block:-": 1, "same-block:no": 1, "same-block:yes": 24}
 == HF_CALLS
 # HF_CALLS: the `with_scope` / `elaborate_instance` calls (HK's 21 + 3 lines) by (file, fn, callee, ARG = the
 # scope argument's tokens: with_scope's first, elaborate_instance's second), with a count. The 9 chain lines are HK's
@@ -1329,10 +1323,6 @@ class_lower.rs	lower_class_method_body	with_scope	&scope_seg	1
 classes.rs	reserve_class_method	with_scope	&scope_seg	1
 driver.rs	run	elaborate_instance	&top_path	1
 frames_blocal.rs	reserve_frame_block_locals	with_scope	&seg	1
-frames_body.rs	lower_frame_body_inner_lower_frame_func_body	with_scope	&scope_seg	1
-frames_body.rs	lower_frame_body_inner_lower_frame_task_body	with_scope	&scope_seg	1
-frames_reserve.rs	reserve_frame_func	with_scope	&scope_seg	1
-frames_reserve.rs	reserve_frame_task	with_scope	&scope_seg	1
 frames_static_init.rs	emit_frame_static_prologue	with_scope	&seg	2
 frames_static_init.rs	emit_frame_static_prologue	with_scope	seg	3
 generate.rs	elaborate_gen_item	with_scope	&block_prefix	1
@@ -1343,6 +1333,11 @@ inline_task_locals.rs	hoist_inline_task_locals	with_scope	&sg	2
 instance.rs	elaborate_child_instances_inner	elaborate_instance	&child_path	1
 instance_array.rs	elaborate_instance_array	elaborate_instance	&child_path	1
 stmt_main.rs	lower_stmt_inner	with_scope	&seg	1
+frames_body.rs	lower_frame_body_inner_lower_frame_func_body	with_func_scope	name	1
+frames_body.rs	lower_frame_body_inner_lower_frame_task_body	with_func_scope	name	1
+frames_reserve.rs	reserve_frame_func	with_func_scope	name	1
+frames_reserve.rs	reserve_frame_task	with_func_scope	name	1
+lexscope/rtn.rs	with_func_scope	with_scope	&format!("$func${}", (*key))	1
 == HOUT
 # HOUT: where display / child-prefix text goes (LS1 part 4 ; DELTA9 J4 + DELTA10 L5) — by (file, fn, what,
 # arg, sink) with a count: every call of display_prefix / display_of / scope_chain_abs / frame_path /
@@ -1441,7 +1436,6 @@ lexscope/disp.rs	enter_frame_scope_root	SAVE:disp_root	.replace(root)	RET	1
 lexscope/disp.rs	enter_frame_scope_root	frame_path	name	LOCAL:fp#3	1
 lexscope/disp.rs	frame_path	display_of	self.lex.mark_text(Mark::Inst)	LOCAL:inst#2	1
 lexscope/disp.rs	frame_path	display_of	self.lex.scope_text(scope)	LOCAL:d#2	1
-lexscope/disp.rs	frame_path_of	frame_path	bare	RET	1
 lexscope/disp.rs	frame_path_of	frame_path	key	RET	1
 lexscope/disp.rs	net_name_table	display_of_key_text	fq	ASSIGN:*slot	1
 lexscope/disp.rs	scope_chain_abs	display_prefix	-	LOCAL:p#4	1
@@ -1474,6 +1468,8 @@ systask.rs	lower_systask	scope_out	self.lex.show_miss(&joined)	MAC:format>LOCAL:
 frames_classify.rs	resolve_frame_task_rejects	scope_out	lexscope::rtn_show(&name)	ARG:self.validate_frame_body	1
 frames_classify.rs	resolve_frame_task_rejects	scope_out	lexscope::rtn_show(&name)	ASSIGN:name	1
 frames_classify_write.rs	refuse_body_write_call	scope_out	lexscope::rtn_show(rtn_key)	ASSIGN:rtn_key	1
+frames_body.rs	lower_frame_body_inner_lower_frame_func_body	scope_out	lexscope::rtn_show(name)	ARG:self.validate_frame_body	1
+lexscope/disp.rs	frame_path_bare	frame_path	&super::rtn::rtn_key_unwalked(name)	RET	1
 == HOUT_COUNTS
 # SAVE 10 = the 9 saves + enter_frame_scope_root's own (its return, RET) until LS2-d ; from LS2-d SAVE 16 = the 9
 # call-site saves (now the Saved* entries) + the 7 inside lexscope (4 in mod.rs's entries, disp.rs's
@@ -1490,7 +1486,7 @@ frames_classify_write.rs	refuse_body_write_call	scope_out	lexscope::rtn_show(rtn
 # §5.2 Q-DECLKEY DK3-a (2026-11-26): scope_out 30 -> 34, + 4 fn-value (api.rs elaborate_located_params: net_name_table's Vec<Shown> ; cont_var.rs
 # cont_var_name, lvalue.rs check_lvalue_kind, netdecl.rs check_whole_net_multidriver: net_key_shown's Shown) ; display_of_key_text 1 stays (its row
 # re-homed net_util.rs -> lexscope/disp.rs with net_name_table)
-{"LIT": 7, "RESTORE": 9, "SAVE": 16, "child_prefix": 1, "ctx_here": 6, "cur_context": 1, "cur_shown": 3, "cur_shown_quoted_or": 1, "disp_chain_abs": 2, "disp_frame_path_of": 2, "disp_here": 2, "disp_inst_top": 1, "disp_inst_top_text": 1, "display_of": 6, "display_of_key_text": 1, "display_prefix": 3, "enter_frame_scope_root": 1, "frame_path": 3, "frame_path_of": 1, "plain": 1, "push_func.m_path": 3, "scope_chain_abs": 2, "scope_out": 37, "shown_from_spelling": 1, "stmt_loc_instance": 1}
+{"LIT": 7, "RESTORE": 9, "SAVE": 16, "child_prefix": 1, "ctx_here": 6, "cur_context": 1, "cur_shown": 3, "cur_shown_quoted_or": 1, "disp_chain_abs": 2, "disp_frame_path_of": 2, "disp_here": 2, "disp_inst_top": 1, "disp_inst_top_text": 1, "display_of": 6, "display_of_key_text": 1, "display_prefix": 3, "enter_frame_scope_root": 1, "frame_path": 3, "frame_path_of": 1, "plain": 1, "push_func.m_path": 3, "scope_chain_abs": 2, "scope_out": 38, "shown_from_spelling": 1, "stmt_loc_instance": 1}
 == HDBG
 # HDBG (§5.2 Q-LEXSCOPE LS2a ; DELTA9 N-8, DELTA10 N-g): lexscope's debug-only code. The identifier
 # `debug_assertions` occurs 0 times in lexscope's files (every file of the directory, any spelling: cfg,
@@ -1581,6 +1577,8 @@ iface_inst.rs	elaborate_iface_instances	names_with_pkg_var_aliases	LOCAL:shadow_
 instance.rs	elaborate_instance	names_with_pkg_var_aliases	LOCAL:shadow_names#4	2
 dynarr.rs	dyn_blocking_special	bare_name_of_net	LOCAL:tid#2	1
 pkg_body_scope.rs	with_rtn_default_scope	rtn_bare_name	ARG:self.push_rtn_pkg_scope	1
+frames_body.rs	note_subroutine_route	rtn_obs_name	OTHER:tuple	1
+frames_body.rs	seed_subroutine_routes	rtn_obs_name	OTHER:tuple	2
 == HBR_COUNTS
 # LS2-d: 68 -> 66, display_prefix's and cur_context's reads moved into lexscope/disp.rs (not a bridge read) ;
 # + LEAVE L4 display_of_key_text's one site (window w6 ; closed at §5.2 Q-DECLKEY DK3-a, not DK4: q5) ; L0 (scope_out) is HC's, not HBR's
@@ -1600,7 +1598,7 @@ pkg_body_scope.rs	with_rtn_default_scope	rtn_bare_name	ARG:self.push_rtn_pkg_sco
 # §5.2 Q-DECLKEY DK1-5b (2026-11-25): cur_prefix_text 3 -> 0 (L1 closed), key_text 6 -> 0 (L7 closed), + names_with_pkg_var_aliases 4 (L13)
 # §5.2 Q-DECLKEY DK3-a (2026-11-26): at_text 1 -> 0 (L9 closed), display_of_key_text 1 -> 0 (L4 closed), found_text 3 -> 2 (L11: ports.rs
 # bind_iface_port's read moved in as alias_iface_port), + bare_name_of_net 1 (L13: dynarr.rs dyn_blocking_special) — 13 -> 11
-{"bare_name_of_net": 1, "names_with_pkg_var_aliases": 4, "rtn_bare_name": 1}
+{"bare_name_of_net": 1, "names_with_pkg_var_aliases": 4, "rtn_bare_name": 1, "rtn_obs_name": 3}
 == HC_ARGS
 # HC ARGS (LS2a ; DELTA11 R4 N-8, DELTA12 S2 r4): keyed by SURF_ENTER's to-scope rows — the token text of
 # the argument at that parameter in every call of the entry, crate-wide (lexscope included), by (file, fn,
@@ -1624,10 +1622,6 @@ driver.rs	run	scope_swap_text	m.name.name.clone()	1
 edge_gate.rs	decide_late_edges	report_at	&prefix	1
 edge_gate.rs	verify_use_recs	report_at	&prefix	1
 frames_blocal.rs	reserve_frame_block_locals	with_scope	&seg	1
-frames_body.rs	lower_frame_body_inner_lower_frame_func_body	with_scope	&scope_seg	1
-frames_body.rs	lower_frame_body_inner_lower_frame_task_body	with_scope	&scope_seg	1
-frames_reserve.rs	reserve_frame_func	with_scope	&scope_seg	1
-frames_reserve.rs	reserve_frame_task	with_scope	&scope_seg	1
 frames_reserve.rs	with_rtn_decl_scope	scope_swap	&scope	1
 frames_static_init.rs	emit_frame_static_prologue	with_scope	&seg	2
 frames_static_init.rs	emit_frame_static_prologue	with_scope	seg	3
@@ -1697,8 +1691,9 @@ readmem_assoc.rs	check_readmem_assoc_waits	scope_repoint	&s.prefix	1
 stmt_main.rs	lower_stmt_inner	with_scope	&seg	1
 string_array_route.rs	route_fixed_string_array	push_block_local_init	None	1
 sva_check.rs	materialize_sva_checkers	scope_swap	&sva.scope	1
+lexscope/rtn.rs	with_func_scope	with_scope	&format!("$func${}", (*key))	1
 == HC_ARGS_COUNTS
-{"entry_under_cur": 1, "hier_resolve": 10, "key_under": 1, "mark_exchange": 2, "mark_put": 6, "mark_swap": 4, "push_block_local_init": 3, "put_at": 2, "report_at": 2, "scope_child": 4, "scope_is_pkg": 1, "scope_repoint": 4, "scope_shown": 1, "scope_swap": 16, "scope_swap_pkg": 2, "scope_swap_text": 5, "scope_text": 3, "scoped_key_at_or_above": 3, "take_at": 3, "walk_above_enum_label_type": 1, "walk_above_gen_loop_label": 1, "walk_above_gen_singleton_label": 1, "walk_from_net_or_refused_clk": 1, "walk_scopes_key_from": 1, "with_scope": 21}
+{"entry_under_cur": 1, "hier_resolve": 10, "key_under": 1, "mark_exchange": 2, "mark_put": 6, "mark_swap": 4, "push_block_local_init": 3, "put_at": 2, "report_at": 2, "scope_child": 4, "scope_is_pkg": 1, "scope_repoint": 4, "scope_shown": 1, "scope_swap": 16, "scope_swap_pkg": 2, "scope_swap_text": 5, "scope_text": 3, "scoped_key_at_or_above": 3, "take_at": 3, "walk_above_enum_label_type": 1, "walk_above_gen_loop_label": 1, "walk_above_gen_singleton_label": 1, "walk_from_net_or_refused_clk": 1, "walk_scopes_key_from": 1, "with_scope": 18}
 == HC_LOCAL
 # HC (LS2-d ; DELTA9 J1 (2), DELTA11 N-2 (a)): the LOCAL sinks of `scope_out` (summed over HOUT's
 # scope_out rows) are the five `context` locals ; `plain`, the exit's trait method, is called

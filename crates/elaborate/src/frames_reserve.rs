@@ -33,7 +33,7 @@ impl Elaborator<'_> {
         def: ir::FuncDef,
         meta: FuncMeta,
         m_path: Shown,
-        key: Option<String>,
+        key: Option<RtnKey>,
         decl: Option<ast::Span>,
     ) -> u32 {
         debug_assert_eq!(
@@ -687,7 +687,7 @@ impl Elaborator<'_> {
         }
     }
 
-    pub(crate) fn reserve_frame_func(&mut self, name: &str, func: &ast::FunctionDef) {
+    pub(crate) fn reserve_frame_func(&mut self, name: &RtnKey, func: &ast::FunctionDef) {
         let fid = self.funcs.len() as u32;
         let base_net = self.nets.len() as u32;
         let n_params = func.ports.len() as u32;
@@ -700,14 +700,14 @@ impl Elaborator<'_> {
         // `<inst>.<fname>` that `hier_resolve` reconstructs from the call's segments. A
         // non-callable function (output/inout/array/string formal or string return) gets
         // NO entry → a hier call to it stays loud at resolution (correct-or-loud).
-        if !name.contains("::")
+        if !lexscope::is_pkg_scoped(name)
             // §27.3: a GENERATE-scoped key (`g[0]$f`) is not a name `hier_resolve`
             // can ever reconstruct — it rebuilds `<inst>.<fname>` from the call's
             // own segments (`u`, `g`, `f`). Composing an entry from this key would
             // register `t.u.g[0].g[0]$f`, which nothing looks up, so a hierarchical
             // `u.g.f(x)` stays LOUD at resolution. Same rule as the non-callable
             // function below: no entry rather than a wrong one.
-            && !name.contains('$')
+            && !lexscope::is_gen_scoped(name)
             && !func.ret_string
             && func.ports.iter().all(|p| {
                 matches!(p.dir, ast::PortDir::Input)
@@ -718,7 +718,7 @@ impl Elaborator<'_> {
                     )
             })
         {
-            let key = self.lex.new_key(name);
+            let key = self.lex.new_key_of_rtn(name);
             self.hier_funcs.insert_new(key, fid);
         }
         // v7: per-formal `string` bitmask — a `string` formal lowers to a 1-bit
@@ -764,7 +764,7 @@ impl Elaborator<'_> {
             func.ret_type,
             ast::ParamType::Real | ast::ParamType::Realtime
         );
-        let scope_seg = format!("$func${name}");
+
         // The return var is named by the FUNCTION's own name, not the frame-table key
         // — the body assigns / reads it by that name (`f = E;` / `return f`). These are
         // equal for every module frame func (the table key IS the function name), so this
@@ -772,7 +772,7 @@ impl Elaborator<'_> {
         // is `pkg::name` (distinct scope, to avoid colliding with a same-named module
         // function) while the body still says `name` (round-7).
         let ret_name = func.name.name.clone();
-        let auto_override = self.with_scope(&scope_seg, |s| {
+        let auto_override = self.with_func_scope(name, |s| {
             // §4.5.589: armed through the block-locals; the repeat counters, case
             // temporaries and static guard below are vita's own slots, not its text.
             let armed = s.decl_enter(&hdr_win, true);
@@ -1019,7 +1019,7 @@ impl Elaborator<'_> {
             auto_override
         });
         let locals_len = self.nets.len() as u32 - base_net;
-        self.frame_idx.insert(name.to_string(), fid);
+        self.frame_idx.insert(name.clone(), fid);
         let fp = self.disp_frame_path_of(name, &func.name.name); // %m
         let pushed = self.push_func(
             ir::FuncDef {
@@ -1042,8 +1042,8 @@ impl Elaborator<'_> {
                 contains_shared_fork: false,
             },
             fp,
-            Some(name.to_string()), // R2 route census
-            Some(func.name.span),   // R2 ⓒ declaration site
+            Some(name.clone()),   // R2 route census
+            Some(func.name.span), // R2 ⓒ declaration site
         );
         debug_assert_eq!(pushed, fid, "FuncId reserved above is not the one minted");
     }
@@ -1058,7 +1058,7 @@ impl Elaborator<'_> {
     /// time and resolved under the same scope segment at lower time.
     pub(crate) fn with_rtn_decl_scope<R>(
         &mut self,
-        name: &str,
+        name: &RtnKey,
         f: impl FnOnce(&mut Self) -> R,
     ) -> R {
         let Some(scope) = self.rtn_decl_scope.get(name).cloned() else {
@@ -1100,7 +1100,7 @@ impl Elaborator<'_> {
     /// declared order) then body_decls under a `$func$<name>` scope; push a
     /// `FuncDef{is_task:true}` + `FuncMeta` (no return var) and the name→FuncId
     /// task divert.
-    pub(crate) fn reserve_frame_task(&mut self, name: &str, task: &ast::TaskDef) {
+    pub(crate) fn reserve_frame_task(&mut self, name: &RtnKey, task: &ast::TaskDef) {
         let fid = self.funcs.len() as u32;
         let base_net = self.nets.len() as u32;
         let n_params = task.ports.len() as u32;
@@ -1116,9 +1116,9 @@ impl Elaborator<'_> {
         // current instance path, so the key is the full `<inst>.<tname>` that `hier_resolve`
         // reconstructs from the enable's segments; `hier_task_port_dirs` records the
         // directions so the resolver can route each arg without the callee def in scope.
-        if !name.contains("::")
+        if !lexscope::is_pkg_scoped(name)
             // §27.3: see the function half — a generate-scoped key is not hier-callable.
-            && !name.contains('$')
+            && !lexscope::is_gen_scoped(name)
             && task.ports.iter().all(|p| {
                 // A SCALAR non-`string` formal of any direction is hier-callable (§4.5.201
                 // in/out/inout binds).
@@ -1139,7 +1139,7 @@ impl Elaborator<'_> {
                 scalar_ok || fixed_array_ok
             })
         {
-            let key = self.lex.new_key(name);
+            let key = self.lex.new_key_of_rtn(name);
             self.hier_tasks.insert_new(key, fid);
             self.hier_task_port_dirs
                 .insert(fid, task.ports.iter().map(|p| p.dir).collect());
@@ -1169,7 +1169,7 @@ impl Elaborator<'_> {
                 }
             }
         }
-        let scope_seg = format!("$func${name}");
+
         // §4.5.589: the formals' and locals' ranges are the task's own text (the
         // function twin above says why the window ends before the repeat counters).
         let hdr_win = self.decl_win(
@@ -1177,7 +1177,7 @@ impl Elaborator<'_> {
             &task.name.name,
             decl_scope::RtnKind::Task,
         );
-        let auto_override = self.with_scope(&scope_seg, |s| {
+        let auto_override = self.with_func_scope(name, |s| {
             let armed = s.decl_enter(&hdr_win, true);
             // [0..n_params): formals (input AND output, declared order).
             for p in &task.ports {
@@ -1323,7 +1323,7 @@ impl Elaborator<'_> {
             auto_override
         });
         let locals_len = self.nets.len() as u32 - base_net;
-        self.task_frame_idx.insert(name.to_string(), fid);
+        self.task_frame_idx.insert(name.clone(), fid);
         if task.is_void_fn {
             // ENG-2: a framed void function's body is walked like a function's (R2.1).
             self.rs.void_fids.insert(fid);
@@ -1350,8 +1350,8 @@ impl Elaborator<'_> {
                 contains_shared_fork: false,
             },
             fp,
-            Some(name.to_string()), // R2 route census
-            Some(task.name.span),   // R2 ⓒ declaration site
+            Some(name.clone()),   // R2 route census
+            Some(task.name.span), // R2 ⓒ declaration site
         );
         debug_assert_eq!(pushed, fid, "FuncId reserved above is not the one minted");
     }

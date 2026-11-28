@@ -3329,8 +3329,18 @@ const HD_MUT: &[&str] = &[
     "get_or_insert_with",
     "insert",
 ];
-/// HK: the scope-entry callees whose callers know the kind.
-const HK_CALLEES: &[&str] = &["with_scope", "elaborate_instance"];
+/// HK / HF_CALLS (§5.2 Q-RTNSCOPE RS-10, DELTA21F F2.2): the scope entries whose callers know the kind, each with the index of
+/// the argument that names the scope it enters — ONE list, read by `Pass2::called` (HK) and by `HfWalk` (HF_CALLS). A routine
+/// scope entry of lexscope/rtn.rs (`with_func_scope`, `with_itask_scope`) wraps `with_scope` and is listed as one.
+const HK_ENTRY_ARG: &[(&str, usize)] = &[
+    ("with_scope", 0),
+    ("elaborate_instance", 1),
+    ("with_func_scope", 0),
+];
+/// RS-10: the argument index of `name` when it is a scope entry of `list`.
+fn hk_entry_arg(list: &[(&str, usize)], name: &str) -> Option<usize> {
+    list.iter().find(|(n, _)| *n == name).map(|(_, i)| *i)
+}
 /// H5: a type ident that makes a field name-typed (census_fields.rs NAME_TYPES).
 const NAME_TYPES: &[&str] = &["String", "str", "Symbol", "Ident"];
 
@@ -3508,7 +3518,7 @@ impl Pass2<'_> {
     fn called(&mut self, name: &str) {
         if let Some(c) = self.cur() {
             c.calls.insert(name.to_string());
-            if HK_CALLEES.contains(&name) {
+            if hk_entry_arg(HK_ENTRY_ARG, name).is_some() {
                 c.entries.push(name.to_string());
             }
         }
@@ -4687,6 +4697,58 @@ fn hd_the_display_chain_accesses_are_pinned() {
 // HK the producers' scope kinds
 // =====================================================================================
 
+/// RS-10's fixture (DELTA21F F2.2): the scope entries of one block, read by `HfWalk` (name and argument) and by `Pass2::called`
+/// (name), both from HK_ENTRY_ARG: a routine scope entry named there is an entry of both readers, one not named there of neither.
+#[test]
+fn hk_entry_arg_fixture() {
+    let src = "impl E { fn fx(&mut self, s: &mut E) { self.with_func_scope(&k, |s| s.x()); s.with_itask_scope(&t, |s| ()); \
+               self.with_scope(&seg, |s| ()); } }";
+    let file: syn::File = syn::parse_str(src).expect("fixture parses");
+    let syn::Item::Impl(im) = &file.items[0] else {
+        panic!("fixture: an impl")
+    };
+    let syn::ImplItem::Fn(f) = &im.items[0] else {
+        panic!("fixture: a fn")
+    };
+    let mut w = HfWalk {
+        path: Vec::new(),
+        loops: Vec::new(),
+        closure: 0,
+        names: BTreeSet::new(),
+        block: Vec::new(),
+        evs: Vec::new(),
+        lexmod: false,
+    };
+    w.body_block(&f.block);
+    let hf: Vec<(String, String)> = w
+        .evs
+        .iter()
+        .filter_map(|a| match &a.ev {
+            HfEv::Entry { name, arg } => Some((name.clone(), arg.clone())),
+            _ => None,
+        })
+        .collect();
+    let mut recs = Vec::new();
+    Pass2 {
+        file: "fx.rs".to_string(),
+        stack: Vec::new(),
+        out: &mut recs,
+        write_nodes: BTreeSet::new(),
+    }
+    .visit_file(&file);
+    let hk: Vec<String> = recs.iter().flat_map(|r| r.entries.clone()).collect();
+    let want: &[(&str, &str)] = &[("with_func_scope", "&k"), ("with_scope", "&seg")];
+    let want_hf: Vec<(String, String)> = want
+        .iter()
+        .map(|(n, a)| (n.to_string(), a.to_string()))
+        .collect();
+    let want_hk: Vec<String> = want.iter().map(|(n, _)| n.to_string()).collect();
+    assert!(
+        hf == want_hf && hk == want_hk,
+        "HK_ENTRY_ARG FIXTURE  HfWalk {hf:?} · called {hk:?} — want {want_hf:?} from both readers, one list"
+    );
+}
+
 #[test]
 fn hk_the_scope_entry_kinds_are_pinned() {
     let c = run_census();
@@ -5174,11 +5236,7 @@ impl<'a> Visit<'a> for HfWalk<'a> {
                 ident: x.and_then(single_path),
             });
         }
-        let at = match meth.as_str() {
-            "with_scope" => Some(0),
-            "elaborate_instance" => Some(1),
-            _ => None,
-        };
+        let at = hk_entry_arg(HK_ENTRY_ARG, meth.as_str());
         if let Some(k) = at {
             let arg = m.args.iter().nth(k).map(tx).unwrap_or_else(|| "-".into());
             self.push(HfEv::Entry {
@@ -7285,11 +7343,27 @@ const HBR_END: &[(&str, &str, &str, &str, usize)] = &[
         "rtn_bare_name",
         1,
     ),
+    (
+        "L15",
+        "frames_body.rs",
+        "note_subroutine_route",
+        "rtn_obs_name",
+        1,
+    ),
+    (
+        "L15",
+        "frames_body.rs",
+        "seed_subroutine_routes",
+        "rtn_obs_name",
+        2,
+    ),
 ];
 
 /// The SURF_LEAVE ids the row ends with: L0 (the BOUNDARY) and L13 (permanent), L2 / L3 (R, RS1's).
+/// §5.2 Q-RTNSCOPE RS1: L2 / L3 closed at RS1 (RS-2) ; L14 (a name cut from a routine key) and L15 (a routine key's text
+/// inside an output name) entered, permanent (RS-3).
 /// Any other id (a new bridge, or L4 / L9 / L11 / L12 written back) fails `HBR END LEAVE ID`.
-const LEAVE_IDS_END: &[&str] = &["L0", "L13", "L14"];
+const LEAVE_IDS_END: &[&str] = &["L0", "L13", "L14", "L15"];
 
 /// `HBR == R + the permanent class` (HBR_END, LEAVE_IDS_END) against the computed reads (`rows`,
 /// keyed `file\tfn\tentry\tsink`) and SURF_LEAVE's rows ; each message names its row.
@@ -7372,7 +7446,7 @@ fn hbr_end_check(rows: &BTreeMap<String, usize>, leave: &[Vec<String>]) -> Vec<S
 /// current scope (names_with_pkg_var_aliases, bare_name_of_net). Every other id closes at a unit
 /// (checked only as not `permanent`) ; the check reads the id column alone (NP19-7, HBR's head).
 /// §5.2 Q-RTNSCOPE RS1 (RS-3): L14 and L15, the routine key's two permanent leave classes.
-const LEAVE_PERMANENT: &[&str] = &["L0", "L13", "L14"];
+const LEAVE_PERMANENT: &[&str] = &["L0", "L13", "L14", "L15"];
 
 #[test]
 fn hc_carry_the_carried_scope_sinks_are_pinned() {

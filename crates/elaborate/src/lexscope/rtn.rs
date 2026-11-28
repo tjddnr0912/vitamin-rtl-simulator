@@ -30,6 +30,11 @@ pub(crate) fn rtn_key_unwalked_owned(spelling: String) -> RtnKey {
     spelling
 }
 
+/// Compare: does key `k` spell `s` (text == text).
+pub(crate) fn rtn_spells(k: &RtnKey, s: &str) -> bool {
+    (*k) == s
+}
+
 /// Compare: is key `k`'s text one of the spellings in `set`.
 pub(crate) fn rtn_spelled_in(k: &RtnKey, set: &BTreeSet<String>) -> bool {
     set.contains(k)
@@ -60,11 +65,21 @@ pub(crate) fn is_pkg_scoped(k: &RtnKey) -> bool {
     (*k).contains("::")
 }
 
+/// Cut: is `k` a generate-scoped key (its text holds `$`).
+pub(crate) fn is_gen_scoped(k: &RtnKey) -> bool {
+    (*k).contains('$')
+}
+
 /// Cut: the bare declared name of a key — `rsplit("::")` then the tail after the last `$`, in today's order
 /// (pkg_body_scope.rs:257-258).
 pub(crate) fn rtn_bare_name(k: &RtnKey) -> &str {
     let bare = (*k).rsplit("::").next().unwrap_or(k);
     Elaborator::rtn_key_bare(bare)
+}
+
+/// D7: the OBS name of a routine (the key's bytes).
+pub(crate) fn rtn_obs_name(k: &RtnKey) -> String {
+    (*k).clone()
 }
 
 /// D8: a routine key as message text.
@@ -120,5 +135,10 @@ impl Elaborator<'_> {
             Some(i) => &key[i + 1..],
             None => key,
         }
+    }
+
+    /// D1: run `f` inside the `$func${key}` scope segment of a frame body.
+    pub(crate) fn with_func_scope<R>(&mut self, key: &RtnKey, f: impl FnOnce(&mut Self) -> R) -> R {
+        self.with_scope(&format!("$func${}", (*key)), f)
     }
 }

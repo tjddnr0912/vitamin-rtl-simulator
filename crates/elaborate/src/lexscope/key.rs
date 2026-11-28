@@ -102,6 +102,11 @@ impl super::Scopes {
         }
     }
 
+    /// D12: the key routine `k`'s declared name is filed under in the current scope (`new_key` of the key's text).
+    pub(crate) fn new_key_of_rtn(&self, k: &super::RtnKey) -> NewKey {
+        self.new_key(k)
+    }
+
     /// The key a read of `local` in the current scope probes: `fq`'s text, typed (DK1-3).
     pub(crate) fn at_cur(&self, local: &str) -> AtKey {
         if self.cur_prefix.is_empty() {
