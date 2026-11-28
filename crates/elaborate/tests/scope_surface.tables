@@ -90,10 +90,11 @@ RtnSpelledMap	struct
 == SURF_KEY_DERIVES
 # KEY-DERIVE (§5.2 Q-RTNSCOPE RS1, R-M9): the comparison derives of RtnKey (lexscope/rtn.rs) ; ALLOWED_DERIVES is not widened
 type	derive
-== SURF_TWIN
-# TWIN-ALIAS (§5.2 Q-RTNSCOPE RS1, RS-5, R-M10 q25): pre-flip stages only ; deleted at the flip (a row with no alias is STALE)
-name
-RtnKey
+RtnKey	PartialEq
+RtnKey	Eq
+RtnKey	PartialOrd
+RtnKey	Ord
+RtnKey	Hash
 == SURF_TRAITS
 # the crate-visible traits allowed (plan10/g/surface.tsv: 1, the boundary trait)
 name
@@ -1179,7 +1180,7 @@ lexscope/disp.rs	Elaborator::display_of	ee9935d33e213aafafc0eb2c8bd582cc863776ce
 lexscope/disp.rs	Elaborator::display_of_key_text	433111e369e73d8544a55faa18429c94dff41a87877114f4f063d88ce93fb22c
 lexscope/disp.rs	Elaborator::display_prefix	b8f0d3020e9b4c149da08ca57d00c95e420da3a7c67288a88a649ee241eb1393
 lexscope/disp.rs	Elaborator::enter_frame_scope_root	0c3429c08abc678bd1233a3c442c45dad19994c59d1cfe484b012f126542eeac
-lexscope/disp.rs	Elaborator::frame_path	d4c4e12d0d0ea6e7784b177eb27a654c5dbf0f29b03fa68f0cb2a8feb7428e76
+lexscope/disp.rs	Elaborator::frame_path	4345f9753f7ba282d7f16af7bd7abd303cc3c9b38d0e89a933e2525907e134e8
 lexscope/disp.rs	Elaborator::frame_path_bare	9d1ea1c4c8e74ea6d9ecd50ed7191cd94f9a4d160abeab0c7bd8a94b927d6892
 lexscope/disp.rs	Elaborator::frame_path_of	ea1cdc1c66df8ab06e775635b0e63a59881c46daa18cf3d84df64c0808b797e8
 lexscope/disp.rs	Elaborator::net_key_shown	b5fe8fbec64632235a788753bc4c679494c357519378da17dab262acb548d91b
@@ -1193,7 +1194,7 @@ lexscope/elab.rs	Elaborator::cur_gen_rtn_key	145f90e1aed58635660a165acea00147262
 lexscope/elab.rs	Elaborator::decl_pos_key	3bc7904fe805e472cb04f21a6f926a345fc405663a001a94066c87d779d7b940
 lexscope/elab.rs	Elaborator::drain_scoped_presize	00f2579cfe53586a10ef357797c63a237275c3722bbb5388f11bc992f4e961d9
 lexscope/elab.rs	Elaborator::flush_block_local_inits	96c4c9ddde4eecdfa18217565a61f91ac3321e519e413d1c12eb404fd203d0d9
-lexscope/elab.rs	Elaborator::gen_rtn_key	a0eef9d5eb944c948259292ce3c21fdd2f66141aa4beb20424fee34d0bc95bae
+lexscope/elab.rs	Elaborator::gen_rtn_key	ff63c35e7c39a63f01e74c7213dd7ea4eeddfe536a49d66c29b1d6ab42a6177b
 lexscope/elab.rs	Elaborator::hoisted_at_decl_pos	3609b499727fab31ab4a854b753a66f75e09c515e24d98b8758a01fffc0ff41c
 lexscope/elab.rs	Elaborator::names_with_pkg_var_aliases	72655639690ecb6b8f8dc848e14a24b42ab08c0c92acae62f928137d54b13126
 lexscope/elab.rs	Elaborator::net_is_compiler_internal	04191785d6922cf895acb85590dc933d7cfece8e76e2b5c20be8cacea7e708dc
@@ -1244,7 +1245,7 @@ lexscope/key.rs	KeyedSet::same_key_count	f21aac80cba3ac553f01c37216b9254331b842c
 lexscope/key.rs	KeyedSet::snapshot	3f8e64137d3269228e5b56d876023223dd4e94ce60226d4e1fc378fe8d90c792
 lexscope/key.rs	Scopes::at_cur	3d582b863ab0e29f57edea8a089557b3963d49bec59c7917f377289a2af5c7bb
 lexscope/key.rs	Scopes::new_key	90dd5e8de6c4251f8a07e8fefea3668e34f8959476c5118c5d2ae75061e42bd3
-lexscope/key.rs	Scopes::new_key_of_rtn	95bc94ad5bf3f638f6d8de63d3bdba66b563f02b8e97ab44684173c1eef7f68e
+lexscope/key.rs	Scopes::new_key_of_rtn	b89572daa668d5cad66a59c20406c0b21a9911b4476b5376aafa208fb15bfe77
 lexscope/key.rs	Scopes::show_miss	b1f4dc8341919651502a4bffd2103726163292a19a886fb2f728b18b733a7ef8
 lexscope/key.rs	at_same	bf297f95d0e553dd42c2d1c834d4d2e7fc8619999b662301c6e6247a542b7787
 lexscope/key.rs	found_text	80304ba5cdaae492d0bc0ab625c80f4162571f6352864fbed7cc41853ad277ad
@@ -1281,7 +1282,7 @@ lexscope/mod.rs	Scopes::cur_under_func_or_itask	688147c846a9a4468052361ad951d6d5
 lexscope/mod.rs	Scopes::disp_chain_is_empty	926c0636bda1ac8c49609703bf4575fad5bd9be3412116f94fd61e30b9830c5b
 lexscope/mod.rs	Scopes::disp_chain_pop	2f2a3a4a41d7e784f1574a6e3368eb71d5f1389da219d82378c84d2d1f0331c7
 lexscope/mod.rs	Scopes::disp_chain_push	9b16853c803eb5b2a82859952c0e1494d2b615ef7bbc7455e4a90228e441fb03
-lexscope/mod.rs	Scopes::disp_chain_swap_rtn	faeb210f643f66339e1a4d2515bae89f5fb12170570fa9f247d66bdbeaead123
+lexscope/mod.rs	Scopes::disp_chain_swap_rtn	dbc2380103563377effe485cbc67627d6a23cdec1990acad73931dcd48ca6a57
 lexscope/mod.rs	Scopes::disp_chain_swap_single	af94a8766f78baf10a388a957d6984d2061dc03aa183254172ad1fa4565f526a
 lexscope/mod.rs	Scopes::disp_chain_take	b8763b1cee9a2a0acb553207d4afa6bc113891eef0eabc4d614aee0a044545ad
 lexscope/mod.rs	Scopes::disp_class_method_swap	c065010fe6fda6c9ae5fee081fb7d2835307a361581fb354623845f4418866aa
@@ -1327,24 +1328,24 @@ lexscope/mod.rs	wrap_root	53ad3e41ea3d62362b4139f5104eec8ff2fab5db8e7f830dfd7500
 lexscope/mod.rs	wrap_shown	540bc990dd416b3323a7b9a2a681705625eced002fe6975882e5e18ce51038a0
 lexscope/rtn.rs	Elaborator::resolve_rtn_key	c61617170f6d0a09d648e1a1012285a11be83eb20659f8b8f542313fc503e564
 lexscope/rtn.rs	Elaborator::rtn_key_bare	ca42730874f8632c228011bf156fedf3cd08b3b0ee0adebc84e22acba76f5fa9
-lexscope/rtn.rs	Elaborator::with_func_scope	741c6aebba81055527ff43f2eb8ccb3118f1e5209f3685a95f0df2dd663cfaee
-lexscope/rtn.rs	Elaborator::with_itask_scope	42860da20a9c7aaf440d7af75c0124e901fea3efa919dd5b787fbb97e8d172f4
+lexscope/rtn.rs	Elaborator::with_func_scope	87eb48fcd0409dc123154dfbf7ab1710578ce6c93e57fb13da37ba487e0b2232
+lexscope/rtn.rs	Elaborator::with_itask_scope	cc4b32f14203bf735ae76ef0cfcbf2e02bf06e1436de538d90b938231a56c90e
 lexscope/rtn.rs	RtnSpelledMap::get_unwalked	5ab15010bb4b793d204a7b1b28fca7e1d908f7b7755551ab8e0884bd5f03f620
 lexscope/rtn.rs	RtnSpelledMap::new	18d19eab915d0df15807d7b99b68bd228843566c33a03571996bdf612cc8863f
-lexscope/rtn.rs	RtnSpelledMap::put_key	1171d2fde8c398a434fefdde5df39ec147095fbac95901f29588d650a05cdd78
-lexscope/rtn.rs	is_gen_scoped	20460e07cfbe0b82c57a7a463ea8231b470cbda349f194130452542a07568260
-lexscope/rtn.rs	is_pkg_scoped	b0181cdbf3891805bc565edd45ac0bee98d0e782b5c6ac52bed9139f073f262d
-lexscope/rtn.rs	rtn_bare_name	13d826b2795998dda3bb46bca2d2c2afa584dd9388829a39ddff9bec9e9093f4
-lexscope/rtn.rs	rtn_key_bound	567b18dab9ec5e43c25e4ad23984f5fce8160d8844b6acfa40fe3748b012d07b
-lexscope/rtn.rs	rtn_key_scoped	5153b9ea5e1b48c289f40d3792870202705501dc710c63056abee98886ec9ecc
-lexscope/rtn.rs	rtn_key_unwalked	7e9598ad9aee8afc94ec3d17e03bb99f009da832e67795276f94dc29d5128a38
-lexscope/rtn.rs	rtn_key_unwalked_owned	a6105b32383e5e20e5406c0c9287982566716707e587936641395037ee13eff3
-lexscope/rtn.rs	rtn_obs_name	ff7c7ab53451c132cdf7068c2d861644339b9e7a5fa047d618601d66e98f33c0
-lexscope/rtn.rs	rtn_scoped_pkg	637a2bc89a4ad0ae24c2a1db4a2d9d0f6cbc915a2c3896c99c77971e6e85ea31
-lexscope/rtn.rs	rtn_show	a8864b2f4a09df6c7f9ee4c4df634b28bd47b95f0be9f05d6edd625aa2fed846
-lexscope/rtn.rs	rtn_spelled_in	e466de67d7d945a66f8564719e7cf9ad8e4078f643c6a94b5f912fdff017017a
-lexscope/rtn.rs	rtn_spells	dce7364cacca42cb8b3be264c8e5165c4f04d47f106053eecce0e46823e49485
-lexscope/rtn.rs	taskarg_net_name	53f3a3b563f61832e5fdaf00d9ed55730c5e392d8b0cdada98ae68e54959b23a
+lexscope/rtn.rs	RtnSpelledMap::put_key	88ea19c7a639db57c709d481d36da7190f9f9a6876487c92980f29e4cce4cc8f
+lexscope/rtn.rs	is_gen_scoped	f89118932c8514b8f2391267e0839994ec2b14e9b919a436908b691fb02b09b1
+lexscope/rtn.rs	is_pkg_scoped	752391990cd879121c66429029cc1fc990974a2af50a6eeab50dd946fa4454f8
+lexscope/rtn.rs	rtn_bare_name	86799d4f4c861aeb8d7eae672a70fe93107411fc5a08436896e4383634cf2fc1
+lexscope/rtn.rs	rtn_key_bound	0834473ec94ce35a1b14725abcc5fae17ee066ed97ce120919f9c84c98f1e7f8
+lexscope/rtn.rs	rtn_key_scoped	a14145872be37d03441345b665dd644b17d0ed9ae78a6cff39121517be69d736
+lexscope/rtn.rs	rtn_key_unwalked	facaf4abfefeca132e5f7411469b2807ed4e56b8d5c6f4806f9b50145f737d37
+lexscope/rtn.rs	rtn_key_unwalked_owned	37231bd4fac8663763d0e915900c318b8e7322d950003d9f9b3c7fc4511871bc
+lexscope/rtn.rs	rtn_obs_name	33e2e45ee509f05275503dffae440ba464c988a181448d3452794763813f6d4d
+lexscope/rtn.rs	rtn_scoped_pkg	879acb3890ef36b4a0d0888864235e6488da9ec0f261dae3af7799520ef33812
+lexscope/rtn.rs	rtn_show	e85d167542b75179da981df4fa3a7ae5e6b4e3084becf261e1a150c6813605df
+lexscope/rtn.rs	rtn_spelled_in	fed147628917f5ea998d1dcbc8819175f821e3ab3e6b9096d721dcecfaddefc3
+lexscope/rtn.rs	rtn_spells	1ca7d7690ce561e0be2408aeedebee6e92f8054864bf5894b962139e810d7271
+lexscope/rtn.rs	taskarg_net_name	00b667101ec16608582e5246364ade26b58d8ecb416e6b57b862aa313f78d796
 lexscope/tests.rs	fb_cur_is_inst_top_or_synth_below_truth_table	e58b73778279550c946409caf27937b7af95ef2fb1fa1e20079c194b2cd23307
 lexscope/tests.rs	fb_cur_shown_and_quoted_or	db87cbfc7b8a236be569f82de1df932c8e188f7d9a05ff444f7f7621b526961d
 lexscope/tests.rs	fb_disp_chain_take_push_pop_restore	2a42b6329bbc34ed7ed14b1c9ab551a7f1196790c190191a88f2c84ebd85ca5b
@@ -1699,9 +1700,6 @@ bool
 == FIX_KEY_DERIVES
 # the fixtures' KEY_DERIVES: none (NB14-NB16 add theirs by `@@ table:` hunks)
 type	derive
-== FIX_TWIN
-# TWIN-ALIAS (RS-5): the fixtures' TWIN rows: none (NB17 / NB19 add theirs by `@@ table:` hunks)
-name
 == FIX_EXPECT
 # BODY-ALL (LS1 part 5): a fixture that adds or edits a fn also fails `<fn> BODY BODY`.
 # LS1 part 7: ADDR / ADDR-FN / UNWIND rows name the fn holding the site (`-` outside a fn) and
@@ -2007,12 +2005,3 @@ NO35	Elaborator::outward	OUT:Elaborator::flush_slot	CLASS
 NB14	ShownCtx	ATTR	DERIVE
 NB15	Shown	ATTR	DERIVE
 NB16	Shown	ATTR	STALE
-NB17	nb17	BODY	BODY
-NB18	RtnKey	ALIAS	TEXT
-NB18	RtnKey	DEF	VOCAB-SHADOW
-NB18	nb17	BODY	BODY
-NB18	nb17	IN:k	ENTER
-NB18	nb17	RET	TEXT
-NB19	RtnKey	ALIAS	NUMBER
-NB19	RtnKey	DEF	VOCAB-SHADOW
-NB19	RtnKey	TWIN	STALE

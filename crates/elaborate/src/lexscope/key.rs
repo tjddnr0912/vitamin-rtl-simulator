@@ -104,7 +104,7 @@ impl super::Scopes {
 
     /// D12: the key routine `k`'s declared name is filed under in the current scope (`new_key` of the key's text).
     pub(crate) fn new_key_of_rtn(&self, k: &super::RtnKey) -> NewKey {
-        self.new_key(k)
+        self.new_key(&k.0)
     }
 
     /// The key a read of `local` in the current scope probes: `fq`'s text, typed (DK1-3).

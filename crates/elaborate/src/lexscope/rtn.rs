@@ -8,36 +8,37 @@ use super::{wrap_shown, Shown};
 use crate::Elaborator;
 
 /// A routine-table key. Ordered and hashed as its text ; the text is read or built only inside lexscope (the field).
-pub(crate) type RtnKey = String;
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct RtnKey(pub(super) String);
 
 /// b1: the key a module scope BINDS a bare name under (a declaration, an import, a modport / import probe).
 pub(crate) fn rtn_key_bound(name: &str) -> RtnKey {
-    name.to_string()
+    RtnKey(name.to_string())
 }
 
 /// b3: the key of `bare` declared in package `pkg` (`pkg::bare`).
 pub(crate) fn rtn_key_scoped(pkg: &str, bare: &str) -> RtnKey {
-    format!("{pkg}::{bare}")
+    RtnKey(format!("{pkg}::{bare}"))
 }
 
 /// b5: a call SPELLING taken as a module key WITHOUT the scope walk.
 pub(crate) fn rtn_key_unwalked(spelling: &str) -> RtnKey {
-    spelling.to_string()
+    RtnKey(spelling.to_string())
 }
 
 /// b5, owned: the spelling's String becomes the key (no copy).
 pub(crate) fn rtn_key_unwalked_owned(spelling: String) -> RtnKey {
-    spelling
+    RtnKey(spelling)
 }
 
 /// Compare: does key `k` spell `s` (text == text).
 pub(crate) fn rtn_spells(k: &RtnKey, s: &str) -> bool {
-    (*k) == s
+    k.0 == s
 }
 
 /// Compare: is key `k`'s text one of the spellings in `set`.
 pub(crate) fn rtn_spelled_in(k: &RtnKey, set: &BTreeSet<String>) -> bool {
-    set.contains(k)
+    set.contains(&k.0)
 }
 
 /// Values filed by routine key, read by a call SPELLING taken unwalked (b5's question, asked of a fn-local index).
@@ -51,7 +52,7 @@ impl<V> RtnSpelledMap<V> {
 
     /// `v` is filed under key `k`: the key's text copied once.
     pub(crate) fn put_key(&mut self, k: &RtnKey, v: V) {
-        self.0.insert(k.clone(), v);
+        self.0.insert(k.0.clone(), v);
     }
 
     /// b5 asked of the index: the value filed under the key `spelling` names, taken unwalked.
@@ -62,39 +63,39 @@ impl<V> RtnSpelledMap<V> {
 
 /// Cut: is `k` a package-scoped key (its text holds `::`).
 pub(crate) fn is_pkg_scoped(k: &RtnKey) -> bool {
-    (*k).contains("::")
+    k.0.contains("::")
 }
 
 /// Cut: is `k` a generate-scoped key (its text holds `$`).
 pub(crate) fn is_gen_scoped(k: &RtnKey) -> bool {
-    (*k).contains('$')
+    k.0.contains('$')
 }
 
 /// Cut: the package of a scoped key (`rtn_key_pkg`'s `split_once("::")`).
 pub(crate) fn rtn_scoped_pkg(k: &RtnKey) -> Option<&str> {
-    (*k).split_once("::").map(|(pkg, _)| pkg)
+    k.0.split_once("::").map(|(pkg, _)| pkg)
 }
 
 /// Cut: the bare declared name of a key — `rsplit("::")` then the tail after the last `$`, in today's order
 /// (pkg_body_scope.rs:257-258).
 pub(crate) fn rtn_bare_name(k: &RtnKey) -> &str {
-    let bare = (*k).rsplit("::").next().unwrap_or(k);
+    let bare = k.0.rsplit("::").next().unwrap_or(&k.0);
     Elaborator::rtn_key_bare(bare)
 }
 
 /// D4: the IR net name of a static task's argument local (`__taskarg_{key}_{port}_{local}`).
 pub(crate) fn taskarg_net_name(k: &RtnKey, port: &str, local: u32) -> String {
-    format!("__taskarg_{}_{}_{}", (*k), port, local)
+    format!("__taskarg_{}_{}_{}", k.0, port, local)
 }
 
 /// D7: the OBS name of a routine (the key's bytes).
 pub(crate) fn rtn_obs_name(k: &RtnKey) -> String {
-    (*k).clone()
+    k.0.clone()
 }
 
 /// D8: a routine key as message text.
 pub(crate) fn rtn_show(k: &RtnKey) -> Shown {
-    wrap_shown((*k).clone())
+    wrap_shown(k.0.clone())
 }
 
 impl Elaborator<'_> {
@@ -149,7 +150,7 @@ impl Elaborator<'_> {
 
     /// D1: run `f` inside the `$func${key}` scope segment of a frame body.
     pub(crate) fn with_func_scope<R>(&mut self, key: &RtnKey, f: impl FnOnce(&mut Self) -> R) -> R {
-        self.with_scope(&format!("$func${}", (*key)), f)
+        self.with_scope(&format!("$func${}", key.0), f)
     }
 
     /// D2: run `f` inside the `$itask${key}$L` scope segment of an inlined task body's locals.
@@ -158,6 +159,6 @@ impl Elaborator<'_> {
         key: &RtnKey,
         f: impl FnOnce(&mut Self) -> R,
     ) -> R {
-        self.with_scope(&format!("$itask${}$L", (*key)), f)
+        self.with_scope(&format!("$itask${}$L", key.0), f)
     }
 }

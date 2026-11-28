@@ -470,7 +470,7 @@ impl Scopes {
 
     /// D11: the display chain is saved and becomes the one label of routine key `k` (an inlined task body).
     pub(crate) fn disp_chain_swap_rtn(&mut self, k: &RtnKey) -> SavedChain {
-        self.disp_chain_swap_single(k)
+        self.disp_chain_swap_single(&k.0)
     }
 
     /// A user block label joins the display chain.
@@ -810,3 +810,6 @@ pub(crate) use rtn::{
     rtn_key_unwalked_owned, rtn_obs_name, rtn_scoped_pkg, rtn_show, rtn_spelled_in, rtn_spells,
     taskarg_net_name, RtnKey, RtnSpelledMap,
 };
+zn!(RtnKey: Copy, Default, core::fmt::Display, core::fmt::Debug, core::ops::Deref<Target = str>, core::borrow::Borrow<str>,
+    core::borrow::Borrow<String>, AsRef<str>, From<String>, Into<String>, PartialEq<str>, PartialEq<String>,
+    From<&'static str>, PartialEq<&'static str>, AsRef<String>, core::str::FromStr);

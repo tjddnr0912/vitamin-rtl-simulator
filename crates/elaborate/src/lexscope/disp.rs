@@ -149,7 +149,7 @@ impl Elaborator<'_> {
         // generate-if block already gets everywhere else.
         if let Some(scope) = self.rtn_decl_scope.get(name) {
             let d = self.display_of(self.lex.scope_text(scope));
-            let bare = Self::rtn_key_bare(name);
+            let bare = Self::rtn_key_bare(&name.0);
             return if d.is_empty() {
                 bare.to_string()
             } else {
@@ -158,9 +158,9 @@ impl Elaborator<'_> {
         }
         let inst = self.display_of(self.lex.mark_text(Mark::Inst));
         if inst.is_empty() {
-            (*name).to_string()
+            name.0.to_string()
         } else {
-            format!(".{inst}.{}", (*name))
+            format!(".{inst}.{}", name.0)
         }
     }
 

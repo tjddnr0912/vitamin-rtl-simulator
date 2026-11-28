@@ -752,8 +752,6 @@ struct Cfg {
     outcall_sinks: BTreeSet<String>,
     /// KEY-DERIVE (§5.2 Q-RTNSCOPE RS1, R-M9): type, derive — a derive off ALLOWED_DERIVES, admitted on that item only
     key_derives: Vec<Vec<String>>,
-    /// TWIN-ALIAS (§5.2 Q-RTNSCOPE RS1, RS-5): the vocabulary structs present as `type <name> = String` (pre-flip only)
-    twin: BTreeSet<String>,
 }
 
 fn rows_of(text: &str, cols: usize, what: &str) -> Vec<Vec<String>> {
@@ -828,7 +826,6 @@ fn cfg_with(prefix: &str, over: &BTreeMap<String, String>) -> Cfg {
         outcall_blind: rows_of(&get(&format!("{prefix}_OUTCALL_BLIND")), 2, "OUTCALL_BLIND"),
         outcall_sinks: one(&format!("{prefix}_OUTCALL_SINKS")),
         key_derives: rows_of(&get(&format!("{prefix}_KEY_DERIVES")), 2, "KEY_DERIVES"),
-        twin: one(&format!("{prefix}_TWIN")),
     }
 }
 
@@ -940,8 +937,6 @@ struct Defs {
     enums: BTreeMap<String, usize>,
     traits: BTreeSet<String>,
     aliases: BTreeMap<String, (Type, bool)>,
-    /// TWIN-ALIAS (RS-5): a SURF_TWIN name defined as `type <name> = String`, judged as the struct it will become
-    twins: BTreeSet<String>,
     free_fns: BTreeSet<String>,
     /// impl self type (last segment) -> its methods
     type_fns: BTreeMap<String, BTreeSet<String>>,
@@ -957,7 +952,7 @@ struct Defs {
 
 impl Defs {
     fn defined_type(&self, n: &str) -> bool {
-        self.structs.contains_key(n) || self.enums.contains_key(n) || self.twins.contains(n)
+        self.structs.contains_key(n) || self.enums.contains_key(n)
     }
 }
 
@@ -1243,10 +1238,6 @@ impl J<'_> {
                 return;
             }
             if last == "bool" {
-                return;
-            }
-            if self.defs.twins.contains(last) {
-                // TWIN-ALIAS (RS-5): the struct it will become, not its target
                 return;
             }
             if let Some((ty, has_gen)) = self.defs.aliases.get(last) {
@@ -4453,14 +4444,6 @@ fn pass1(eng: &mut Eng<'_>, ats: &[At<'_>]) {
                 eng.defs.traits.insert(t.ident.to_string());
             }
             Item::Type(t) => {
-                let n = t.ident.to_string();
-                if eng.cfg.twin.contains(&n)
-                    && eng.cfg.vocab.get(&n).is_some_and(|k| k == "struct")
-                    && t.generics.params.is_empty()
-                    && matches!(&*t.ty, Type::Path(p) if p.qself.is_none() && p.path.is_ident("String"))
-                {
-                    eng.defs.twins.insert(n);
-                }
                 eng.defs.aliases.insert(
                     t.ident.to_string(),
                     ((*t.ty).clone(), !t.generics.params.is_empty()),
@@ -4518,7 +4501,6 @@ fn pass2<'a>(eng: &mut Eng<'_>, at: &At<'a>, fn_index: &mut BTreeMap<String, FnI
         let kind = match at.item {
             Item::Struct(_) => Some("struct"),
             Item::Enum(_) => Some("enum"),
-            Item::Type(_) if eng.defs.twins.contains(&n) => Some("struct"),
             Item::Trait(_) | Item::Type(_) | Item::Union(_) => Some("other"),
             _ => None,
         };
@@ -4739,21 +4721,7 @@ fn pass2<'a>(eng: &mut Eng<'_>, at: &At<'a>, fn_index: &mut BTreeMap<String, FnI
         }
         Item::Type(t) => {
             eng.check_attrs(file, &name, &t.attrs);
-            if eng.defs.twins.contains(&name) {
-                // TWIN-ALIAS (RS-5): the struct's TYPE row (listed: PASS), no ALIAS position
-                if !at.in_body && vis_wider(&t.vis, at.depth) {
-                    eng.s.rows.push(Row {
-                        refs: "-".into(),
-                        file: file.into(),
-                        tier: "-".into(),
-                        kind: "TYPE".into(),
-                        item: name.clone(),
-                        pos: "-".into(),
-                        ty: "-".into(),
-                        verdict: "PASS".into(),
-                    });
-                }
-            } else if !at.in_body && vis_wider(&t.vis, at.depth) {
+            if !at.in_body && vis_wider(&t.vis, at.depth) {
                 let r = eng.out_reasons(None, &Gen::new(), None, &t.ty);
                 let k = eng.card_of(&t.ty);
                 eng.position(file, "-", "ALIAS", &name, "ALIAS", nt(&t.ty), r, k);
@@ -6547,19 +6515,6 @@ fn stale_checks(eng: &mut Eng<'_>) {
             );
         }
     }
-    // TWIN-ALIAS (RS-5): a row naming no `type <name> = String` of a listed struct
-    let tw = eng.cfg.twin.clone();
-    for n in &tw {
-        if !eng.defs.twins.contains(n) {
-            eng.fail(
-                "-",
-                n,
-                "TWIN",
-                "STALE",
-                "a TWIN row names no `type _ = String` alias of a listed struct",
-            );
-        }
-    }
     let leave = eng.cfg.leave.clone();
     for (i, l) in leave.iter().enumerate() {
         if !eng.leave_used.contains(&i) {
@@ -7047,7 +7002,7 @@ fn ht_surf_engine_on_fixtures() {
     // Q-DECLKEY DK1-6, DELTA18 G2.4 E4) + NO17-NO35 (DK1-6 round 2)
     for (pre, set, last) in [
         ("NS", &ns_failing, 32),
-        ("NB", &nb_failing, 19),
+        ("NB", &nb_failing, 16),
         ("NI", &ni_failing, 10),
         ("NA", &na_failing, 7),
         ("NU", &nu_failing, 1),

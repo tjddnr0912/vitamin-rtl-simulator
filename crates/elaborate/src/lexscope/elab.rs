@@ -67,7 +67,7 @@ impl Elaborator<'_> {
             return None;
         }
         key.push_str(bare);
-        Some(key)
+        Some(RtnKey(key))
     }
 
     /// Outward walk over the GENERATE scopes enclosing the current position,

@@ -904,35 +904,6 @@ fn reach() -> bool {
 # KEY-DERIVE: a row whose derive the item does not carry FAILS STALE
 @@ table:FIX_KEY_DERIVES
 + Shown	Ord
-== NB17
-# TWIN-ALIAS (§5.2 Q-RTNSCOPE RS1, RS-5): a listed struct present as `type RtnKey = String` with its TWIN row is the struct (no
-# ALIAS · TEXT, no VOCAB-SHADOW, its positions vocabulary positions) ; the fixture's new fn fails BODY only
-@@ table:FIX_TWIN
-+ RtnKey
-@@ lexscope/mod.rs
-- pub(crate) struct Shown(String);
-+ pub(crate) struct Shown(String);
-+ pub(crate) type RtnKey = String;
-+ pub(crate) fn nb17(k: &RtnKey) -> RtnKey {
-+     k.clone()
-+ }
-== NB18
-# TWIN-ALIAS: the same alias with no TWIN row is judged as written (ALIAS · TEXT, VOCAB-SHADOW, the fn's text positions)
-@@ lexscope/mod.rs
-- pub(crate) struct Shown(String);
-+ pub(crate) struct Shown(String);
-+ pub(crate) type RtnKey = String;
-+ pub(crate) fn nb17(k: &RtnKey) -> RtnKey {
-+     k.clone()
-+ }
-== NB19
-# TWIN-ALIAS: a TWIN row naming no such alias FAILS STALE (the rule cannot outlive the flip) ; an alias of another target is no twin
-@@ table:FIX_TWIN
-+ RtnKey
-@@ lexscope/mod.rs
-- pub(crate) struct Shown(String);
-+ pub(crate) struct Shown(String);
-+ pub(crate) type RtnKey = u32;
 == NI1
 # INTERIOR, the occurring shape (edge_gate.rs:1598 `struct Collect(RefCell<Vec<String>>)`, :1609
 # `fn errors(sink: &Collect)`): renamed, the body moved, made a surface fn of the module

@@ -1178,8 +1178,9 @@ SelectScope	select_scope.rs	names	std::collections::BTreeSet<String>	BINDING	V	-
 SelectScope	select_scope.rs	vector_ports	std::collections::BTreeSet<String>	BINDING	V	-
 ConstFrame	bound/frame.rs	env	BTreeMap<String, i64>	BINDING	V	-
 ConstFrame	bound/frame.rs	envw	ConstWidths	BINDING	V	-
+RtnKey	lexscope/rtn.rs	0	String	NOT	I	KEY
 == H5_COUNTS
-fields 187 classes {"BINDING:R": 27, "BINDING:S": 5, "BINDING:T": 7, "BINDING:V": 65, "NOT:CHK": 2, "NOT:COPY": 7, "NOT:CTX": 11, "NOT:D": 33, "NOT:DEF": 5, "NOT:G": 3, "NOT:I": 11, "NOT:INPUT": 9, "NOT:X": 2} stores {"-": 127, "DISPLAY": 4, "KEY": 3, "KEYED-JUDGE5": 4, "KEYED-OTHER": 4, "KEYED-PLAN26": 26, "KEYED-W9": 2, "ROUTINE": 13, "SCOPE": 4}
+fields 188 classes {"BINDING:R": 27, "BINDING:S": 5, "BINDING:T": 7, "BINDING:V": 65, "NOT:CHK": 2, "NOT:COPY": 7, "NOT:CTX": 11, "NOT:D": 33, "NOT:DEF": 5, "NOT:G": 3, "NOT:I": 12, "NOT:INPUT": 9, "NOT:X": 2} stores {"-": 127, "DISPLAY": 4, "KEY": 4, "KEYED-JUDGE5": 4, "KEYED-OTHER": 4, "KEYED-PLAN26": 26, "KEYED-W9": 2, "ROUTINE": 13, "SCOPE": 4}
 == HD
 # HD: the display-chain fields' accesses (DELTA6 F1) — every `.block_scope` / `.block_scope_root` /
 # `.cur_class_method` by (file, fn, field, access) with a count ; write = the place of `=` / `op=` / `&mut` or
@@ -1335,9 +1336,9 @@ frames_body.rs	lower_frame_body_inner_lower_frame_func_body	with_func_scope	name
 frames_body.rs	lower_frame_body_inner_lower_frame_task_body	with_func_scope	name	1
 frames_reserve.rs	reserve_frame_func	with_func_scope	name	1
 frames_reserve.rs	reserve_frame_task	with_func_scope	name	1
-lexscope/rtn.rs	with_func_scope	with_scope	&format!("$func${}", (*key))	1
 inline_task.rs	inline_static_task	with_itask_scope	&tname	1
-lexscope/rtn.rs	with_itask_scope	with_scope	&format!("$itask${}$L", (*key))	1
+lexscope/rtn.rs	with_func_scope	with_scope	&format!("$func${}", key.0)	1
+lexscope/rtn.rs	with_itask_scope	with_scope	&format!("$itask${}$L", key.0)	1
 == HOUT
 # HOUT: where display / child-prefix text goes (LS1 part 4 ; DELTA9 J4 + DELTA10 L5) — by (file, fn, what,
 # arg, sink) with a count: every call of display_prefix / display_of / scope_chain_abs / frame_path /
@@ -1475,8 +1476,8 @@ inline_task.rs	inline_static_task	scope_out	lexscope::rtn_show(&tname)	ARG:self.
 inline_task.rs	inline_static_task	scope_out	lexscope::rtn_show(&tname)	ASSIGN:tname	7
 inline_task.rs	inline_task	scope_out	lexscope::rtn_show(&tname)	ARG:self.resolve_named_args	1
 inline_task.rs	inline_task	scope_out	lexscope::rtn_show(&tname)	ASSIGN:tname	2
-lexscope/mod.rs	disp_chain_swap_rtn	SAVE:disp_chain	.disp_chain_swap_single(k)	RET	1
 lib.rs	shown	scope_out	lexscope::rtn_show(k)	RET	1
+lexscope/mod.rs	disp_chain_swap_rtn	SAVE:disp_chain	.disp_chain_swap_single(&k.0)	RET	1
 == HOUT_COUNTS
 # SAVE 10 = the 9 saves + enter_frame_scope_root's own (its return, RET) until LS2-d ; from LS2-d SAVE 16 = the 9
 # call-site saves (now the Saved* entries) + the 7 inside lexscope (4 in mod.rs's entries, disp.rs's
@@ -1699,8 +1700,8 @@ readmem_assoc.rs	check_readmem_assoc_waits	scope_repoint	&s.prefix	1
 stmt_main.rs	lower_stmt_inner	with_scope	&seg	1
 string_array_route.rs	route_fixed_string_array	push_block_local_init	None	1
 sva_check.rs	materialize_sva_checkers	scope_swap	&sva.scope	1
-lexscope/rtn.rs	with_func_scope	with_scope	&format!("$func${}", (*key))	1
-lexscope/rtn.rs	with_itask_scope	with_scope	&format!("$itask${}$L", (*key))	1
+lexscope/rtn.rs	with_func_scope	with_scope	&format!("$func${}", key.0)	1
+lexscope/rtn.rs	with_itask_scope	with_scope	&format!("$itask${}$L", key.0)	1
 == HC_ARGS_COUNTS
 {"entry_under_cur": 1, "hier_resolve": 10, "key_under": 1, "mark_exchange": 2, "mark_put": 6, "mark_swap": 4, "push_block_local_init": 3, "put_at": 2, "report_at": 2, "scope_child": 4, "scope_is_pkg": 1, "scope_repoint": 4, "scope_shown": 1, "scope_swap": 16, "scope_swap_pkg": 2, "scope_swap_text": 5, "scope_text": 3, "scoped_key_at_or_above": 3, "take_at": 3, "walk_above_enum_label_type": 1, "walk_above_gen_loop_label": 1, "walk_above_gen_singleton_label": 1, "walk_from_net_or_refused_clk": 1, "walk_scopes_key_from": 1, "with_scope": 18}
 == HC_LOCAL
@@ -2102,5 +2103,6 @@ lexscope/mod.rs	zn:ScopeWitness	Clone,Copy,PartialEq,PartialOrd,core::hash::Hash
 lexscope/mod.rs	zn:Scopes	Clone,Copy,PartialEq,PartialOrd,core::hash::Hash,core::fmt::Debug,Default
 lexscope/mod.rs	zn:Shown	PartialEq,Eq,PartialOrd,Ord,core::hash::Hash,core::fmt::Display,Copy,AsRef<str>,core::borrow::Borrow<str>,core::ops::Deref<Target=str>,Into<String>
 lexscope/mod.rs	zn:ShownCtx	PartialEq,Eq,PartialOrd,Ord,core::hash::Hash,core::fmt::Display,Copy,Default,IntoIterator
+lexscope/mod.rs	zn:RtnKey	Copy,Default,core::fmt::Display,core::fmt::Debug,core::ops::Deref<Target=str>,core::borrow::Borrow<str>,core::borrow::Borrow<String>,AsRef<str>,From<String>,Into<String>,PartialEq<str>,PartialEq<String>,From<&'staticstr>,PartialEq<&'staticstr>,AsRef<String>,core::str::FromStr
 == HKT_COUNTS
-types=5 impls=1 zn=16
+types=5 impls=1 zn=17
