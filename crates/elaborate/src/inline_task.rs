@@ -316,7 +316,7 @@ impl Elaborator<'_> {
             self.emit_frame_task_call(b, fid, &task, args);
             return;
         }
-        if self.inline_stack.iter().any(|n| n == &tname) {
+        if self.inline_stack.iter().any(|n| n.matches_key(&tname)) {
             // A recursive task not framed (build_task_frame_set missed the cycle):
             // the inline guard still catches it loud rather than looping forever.
             self.error(
@@ -764,7 +764,7 @@ impl Elaborator<'_> {
             &mut Vec::new(),
             &mut tlocals,
         );
-        self.inline_stack.push(tname.clone());
+        self.inline_stack.push(InlineEntry::Key(tname.clone()));
         // Gap B: body-local enum labels → constants under the CALLER prefix, bounded
         // to this inlining. The `$itask$<name>$L` locals scope (when present) is
         // transparent in `walk_scopes_key`, so a label at `caller.LABEL` is still

@@ -284,6 +284,50 @@ pub(crate) type DefparamOverride = (
 /// The range record and its rules live in `hdl_ast::range_rules` (ER §5.1).
 pub(crate) use hdl_ast::range_rules::{DeclRange, RangeFacts, RangeUnfolded};
 
+/// §5.2 Q-RTNSCOPE (B3, C-7 T1): one `inline_stack` entry — the routine's spelling or its key, in push order.
+pub(crate) enum InlineEntry {
+    Text(String),
+    Key(RtnKey),
+}
+
+impl InlineEntry {
+    pub(crate) fn matches_spelling(&self, s: &str) -> bool {
+        match self {
+            InlineEntry::Text(t) => t == s,
+            InlineEntry::Key(k) => lexscope::rtn_spells(k, s),
+        }
+    }
+
+    pub(crate) fn matches_key(&self, k: &RtnKey) -> bool {
+        match self {
+            InlineEntry::Text(t) => lexscope::rtn_spells(k, t),
+            InlineEntry::Key(a) => a == k,
+        }
+    }
+
+    pub(crate) fn shown(&self) -> String {
+        match self {
+            InlineEntry::Text(t) => t.clone(),
+            InlineEntry::Key(k) => scope_out(lexscope::rtn_show(k)),
+        }
+    }
+}
+
+/// §5.2 Q-RTNSCOPE (B3, C-7 T5): one `disable_stack` label — a named block's label or a frame task's key, in push order.
+pub(crate) enum DisableLabel {
+    Text(String),
+    Key(RtnKey),
+}
+
+impl DisableLabel {
+    pub(crate) fn matches_spelling(&self, s: &str) -> bool {
+        match self {
+            DisableLabel::Text(t) => t == s,
+            DisableLabel::Key(k) => lexscope::rtn_spells(k, s),
+        }
+    }
+}
+
 struct Elaborator<'s> {
     sink: &'s dyn LogSink,
     /// §4.5.249: resolves an AST byte span back to `file:line:col` for diagnostics.
@@ -1625,7 +1669,7 @@ struct Elaborator<'s> {
     // name found here when we try to inline it = direct or mutual recursion =
     // E-ELAB-UNSUPPORTED (SD2: recursive ⇒ frame-call, deferred). Mirrors
     // `inst_stack`.
-    inline_stack: Vec<String>,
+    inline_stack: Vec<InlineEntry>,
 
     // ── fork/join concurrency state (engine-facing side channel, NOT in SimIr) ──
     // `fork_modes` maps (cur_proc, join_bb) → JoinMode for every fork lowered; it
@@ -1646,7 +1690,7 @@ struct Elaborator<'s> {
     // untouched). `disable_fork_floor` is the stack depth at the current
     // fork-child boundary: a child may only disable blocks INSIDE its own body —
     // a Goto across the fork boundary would bypass the join barrier.
-    disable_stack: Vec<(String, BlockId)>,
+    disable_stack: Vec<(DisableLabel, BlockId)>,
     disable_fork_floor: usize,
 
     // ── timescale state (engine-facing side channel, NOT in SimIr) ──

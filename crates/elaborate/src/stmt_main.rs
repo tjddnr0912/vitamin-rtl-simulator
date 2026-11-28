@@ -650,7 +650,8 @@ impl Elaborator<'_> {
                         .any(|st| stmt_disables_label(st, &lab.name))
                         .then(|| {
                             let exit = b.new_block();
-                            self.disable_stack.push((lab.name.clone(), exit));
+                            self.disable_stack
+                                .push((DisableLabel::Text(lab.name.clone()), exit));
                             exit
                         })
                 });
@@ -983,7 +984,7 @@ impl Elaborator<'_> {
                     self.disable_stack[self.disable_fork_floor..]
                         .iter()
                         .rev()
-                        .find(|(n, _)| n == &target.segments[0].name)
+                        .find(|(n, _)| n.matches_spelling(&target.segments[0].name))
                         .map(|(_, exit)| *exit)
                 } else {
                     None

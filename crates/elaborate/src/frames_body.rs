@@ -892,7 +892,8 @@ impl Elaborator<'_> {
             // Returns — the single-frame unwind. `disable_fork_floor` is already 0 at
             // step 6.5 (no fork/process context), so the name is visible to the lookup.
             let exit = b.new_block();
-            s.disable_stack.push((name.to_string(), exit));
+            s.disable_stack
+                .push((DisableLabel::Key(name.clone()), exit));
             s.lower_parsed(b, body);
             b.goto(exit);
             b.start_block(exit);

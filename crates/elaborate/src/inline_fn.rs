@@ -415,12 +415,16 @@ impl Elaborator<'_> {
         pkg: Option<String>,
     ) -> u32 {
         let fname = func.name.name.clone();
-        if self.inline_stack.iter().any(|n| n == &fname) {
+        if self.inline_stack.iter().any(|n| n.matches_spelling(&fname)) {
             self.error(
                 MsgCode::ElabUnsupported,
                 &format!(
                     "recursive function `{fname}` (frame-call deferred; cycle: {} -> {fname})",
-                    self.inline_stack.join(" -> ")
+                    self.inline_stack
+                        .iter()
+                        .map(InlineEntry::shown)
+                        .collect::<Vec<_>>()
+                        .join(" -> ")
                 ),
             );
             return self.placeholder_expr();
@@ -505,7 +509,7 @@ impl Elaborator<'_> {
         let n_dyn = dyn_binds.len();
         let dyn_nets: Vec<u32> = dyn_binds.iter().map(|&(_, n)| n).collect();
         self.dyn_subst.extend(dyn_binds);
-        self.inline_stack.push(fname);
+        self.inline_stack.push(InlineEntry::Text(fname));
         let in_pkg = pkg.is_some();
         if let Some(p) = pkg {
             let declared = pkg_body_scope::rtn_declared_names(

@@ -1100,8 +1100,6 @@ Elaborator	lib.rs	param_type_guessed	Bound<KeyedSet>	BINDING	V	KEYED-PLAN26
 Elaborator	lib.rs	out_subst	Vec<(String, u32)>	BINDING	V	-
 Elaborator	lib.rs	dyn_subst	Vec<(String, u32)>	BINDING	V	-
 Elaborator	lib.rs	formal_str	Vec<(String, bool)>	BINDING	V	-
-Elaborator	lib.rs	inline_stack	Vec<String>	NOT	G	ROUTINE
-Elaborator	lib.rs	disable_stack	Vec<(String, BlockId)>	BINDING	S	-
 Elaborator	lib.rs	mod_unit_exp	std::collections::BTreeMap<String, i8>	NOT	DEF	-
 Elaborator	lib.rs	mod_prec_exp	std::collections::BTreeMap<String, i8>	NOT	DEF	-
 Elaborator	lib.rs	root_override	Option<Vec<String>>	NOT	X	-
@@ -1181,7 +1179,7 @@ SelectScope	select_scope.rs	vector_ports	std::collections::BTreeSet<String>	BIND
 ConstFrame	bound/frame.rs	env	BTreeMap<String, i64>	BINDING	V	-
 ConstFrame	bound/frame.rs	envw	ConstWidths	BINDING	V	-
 == H5_COUNTS
-fields 189 classes {"BINDING:R": 27, "BINDING:S": 6, "BINDING:T": 7, "BINDING:V": 65, "NOT:CHK": 2, "NOT:COPY": 7, "NOT:CTX": 11, "NOT:D": 33, "NOT:DEF": 5, "NOT:G": 4, "NOT:I": 11, "NOT:INPUT": 9, "NOT:X": 2} stores {"-": 128, "DISPLAY": 4, "KEY": 3, "KEYED-JUDGE5": 4, "KEYED-OTHER": 4, "KEYED-PLAN26": 26, "KEYED-W9": 2, "ROUTINE": 14, "SCOPE": 4}
+fields 187 classes {"BINDING:R": 27, "BINDING:S": 5, "BINDING:T": 7, "BINDING:V": 65, "NOT:CHK": 2, "NOT:COPY": 7, "NOT:CTX": 11, "NOT:D": 33, "NOT:DEF": 5, "NOT:G": 3, "NOT:I": 11, "NOT:INPUT": 9, "NOT:X": 2} stores {"-": 127, "DISPLAY": 4, "KEY": 3, "KEYED-JUDGE5": 4, "KEYED-OTHER": 4, "KEYED-PLAN26": 26, "KEYED-W9": 2, "ROUTINE": 13, "SCOPE": 4}
 == HD
 # HD: the display-chain fields' accesses (DELTA6 F1) — every `.block_scope` / `.block_scope_root` /
 # `.cur_class_method` by (file, fn, field, access) with a count ; write = the place of `=` / `op=` / `&mut` or
@@ -1478,6 +1476,7 @@ inline_task.rs	inline_static_task	scope_out	lexscope::rtn_show(&tname)	ASSIGN:tn
 inline_task.rs	inline_task	scope_out	lexscope::rtn_show(&tname)	ARG:self.resolve_named_args	1
 inline_task.rs	inline_task	scope_out	lexscope::rtn_show(&tname)	ASSIGN:tname	2
 lexscope/mod.rs	disp_chain_swap_rtn	SAVE:disp_chain	.disp_chain_swap_single(k)	RET	1
+lib.rs	shown	scope_out	lexscope::rtn_show(k)	RET	1
 == HOUT_COUNTS
 # SAVE 10 = the 9 saves + enter_frame_scope_root's own (its return, RET) until LS2-d ; from LS2-d SAVE 16 = the 9
 # call-site saves (now the Saved* entries) + the 7 inside lexscope (4 in mod.rs's entries, disp.rs's
@@ -1494,7 +1493,7 @@ lexscope/mod.rs	disp_chain_swap_rtn	SAVE:disp_chain	.disp_chain_swap_single(k)	R
 # §5.2 Q-DECLKEY DK3-a (2026-11-26): scope_out 30 -> 34, + 4 fn-value (api.rs elaborate_located_params: net_name_table's Vec<Shown> ; cont_var.rs
 # cont_var_name, lvalue.rs check_lvalue_kind, netdecl.rs check_whole_net_multidriver: net_key_shown's Shown) ; display_of_key_text 1 stays (its row
 # re-homed net_util.rs -> lexscope/disp.rs with net_name_table)
-{"LIT": 7, "RESTORE": 9, "SAVE": 17, "child_prefix": 1, "ctx_here": 6, "cur_context": 1, "cur_shown": 3, "cur_shown_quoted_or": 1, "disp_chain_abs": 2, "disp_frame_path_of": 2, "disp_here": 2, "disp_inst_top": 1, "disp_inst_top_text": 1, "display_of": 6, "display_of_key_text": 1, "display_prefix": 3, "enter_frame_scope_root": 1, "frame_path": 3, "frame_path_of": 1, "plain": 1, "push_func.m_path": 3, "scope_chain_abs": 2, "scope_out": 50, "shown_from_spelling": 1, "stmt_loc_instance": 1}
+{"LIT": 7, "RESTORE": 9, "SAVE": 17, "child_prefix": 1, "ctx_here": 6, "cur_context": 1, "cur_shown": 3, "cur_shown_quoted_or": 1, "disp_chain_abs": 2, "disp_frame_path_of": 2, "disp_here": 2, "disp_inst_top": 1, "disp_inst_top_text": 1, "display_of": 6, "display_of_key_text": 1, "display_prefix": 3, "enter_frame_scope_root": 1, "frame_path": 3, "frame_path_of": 1, "plain": 1, "push_func.m_path": 3, "scope_chain_abs": 2, "scope_out": 51, "shown_from_spelling": 1, "stmt_loc_instance": 1}
 == HDBG
 # HDBG (§5.2 Q-LEXSCOPE LS2a ; DELTA9 N-8, DELTA10 N-g): lexscope's debug-only code. The identifier
 # `debug_assertions` occurs 0 times in lexscope's files (every file of the directory, any spelling: cfg,
