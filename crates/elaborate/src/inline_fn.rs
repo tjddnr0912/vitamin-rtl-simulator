@@ -316,7 +316,7 @@ impl Elaborator<'_> {
         let fname = self.resolve_rtn_key(&bare);
 
         // Clone the def out of the table so we can mutate `self` while lowering.
-        let func = match self.func_table.get(fname.as_str()) {
+        let func = match self.func_table.get(&fname) {
             Some(f) => f.clone(),
             None => {
                 self.error(
@@ -353,14 +353,15 @@ impl Elaborator<'_> {
         // `build_frame_set` forces every string-returning function into the frame set, so
         // `frame_idx` is populated below. A missing `fid` (defensive) stays loud.
         if func.ret_string {
-            if let Some(&fid) = self.frame_idx.get(fname.as_str()) {
+            if let Some(&fid) = self.frame_idx.get(&fname) {
                 return self.emit_frame_call(fid, &func, args);
             }
             self.error(
                 MsgCode::ElabUnsupported,
                 &format!(
                     "function `{fname}`: a `string` return type is not yet supported \
-                     (return the text via a `string` output/ref formal instead)"
+                     (return the text via a `string` output/ref formal instead)",
+                    fname = scope_out(lexscope::rtn_show(&fname))
                 ),
             );
             return self.placeholder_expr();
@@ -369,7 +370,7 @@ impl Elaborator<'_> {
         // cycle) is LOWERED to the func arena (reserved in step 6.5), not inlined.
         // Emit an `Expr::Call` to its FuncId — the args are lowered in the CALLER
         // scope (they read caller nets / outer subst, never the callee formals).
-        if let Some(&fid) = self.frame_idx.get(fname.as_str()) {
+        if let Some(&fid) = self.frame_idx.get(&fname) {
             return self.emit_frame_call(fid, &func, args);
         }
         // A non-framed recursive function reaching here means the recursion cycle
@@ -392,7 +393,7 @@ impl Elaborator<'_> {
         // declaration site — the same span the seed resolves.
         let decl = self.decl_loc(func.name.span);
         self.note_subroutine_route(&fname, false, false, decl);
-        let pk = self.rtn_key_pkg(fname.as_str());
+        let pk = self.rtn_key_pkg(&fname);
         self.inline_resolved_func_in_pkg(&func, args, pk)
     }
 
@@ -671,7 +672,7 @@ impl Elaborator<'_> {
         // (`build_frame_set`) and reserves every one of them — callees and root —
         // before any body is lowered. That ordering is what makes a mutual recursion
         // among them resolve.
-        let key = format!("{pkg}::{name}");
+        let key = lexscope::rtn_key_scoped(pkg, name);
         let fid = match self.frame_idx.get(&key) {
             Some(&fid) => fid,
             None => self.frame_scoped_pkg_routines(pkg, &key, &func),

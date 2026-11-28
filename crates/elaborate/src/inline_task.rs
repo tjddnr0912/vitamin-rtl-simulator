@@ -218,7 +218,7 @@ impl Elaborator<'_> {
         // a package task calling a same-package task reported "undeclared task", and
         // with a module-local task of the same name it called THAT one silently.
         let tname = self.resolve_rtn_key(&bare);
-        let task = match self.task_table.get(tname.as_str()) {
+        let task = match self.task_table.get(&tname) {
             Some(t) => t.clone(),
             None => {
                 self.error(
@@ -237,7 +237,8 @@ impl Elaborator<'_> {
             .iter()
             .any(|a| matches!(a.kind, ast::ExprKind::NamedArg { .. }))
         {
-            match self.resolve_named_args(&tname, &task.ports, args) {
+            match self.resolve_named_args(&scope_out(lexscope::rtn_show(&tname)), &task.ports, args)
+            {
                 Some(v) => {
                     reordered_args = v;
                     &reordered_args
@@ -267,7 +268,7 @@ impl Elaborator<'_> {
         // silently truncating the packed actual into a scalar local. Every OTHER
         // unpacked formal (an OUTPUT/INOUT array — pass-by-reference — or a fixed
         // array the classifier rejects) stays loud (correct-or-loud).
-        let is_framed = self.task_frame_idx.contains_key(tname.as_str());
+        let is_framed = self.task_frame_idx.contains_key(&tname);
         if task.ports.iter().any(|p| {
             // A scalar/vector formal, or a supported `input` DYNAMIC-array formal
             // (aliased/snapshotted on either path), is fine.
@@ -295,14 +296,15 @@ impl Elaborator<'_> {
                 &format!(
                     "task `{tname}` has an unpacked-array formal — unsupported (an \
                      OUTPUT/INOUT array formal is pass-by-reference; pass a packed \
-                     vector, or use an `input` array formal / a function)"
+                     vector, or use an `input` array formal / a function)",
+                    tname = scope_out(lexscope::rtn_show(&tname))
                 ),
             );
             return;
         }
         // B2 frame-call: a recursive/automatic task is LOWERED to the func arena
         // (reserved in step 6.5) — emit a Terminator::Call + register the binding.
-        if let Some(&fid) = self.task_frame_idx.get(tname.as_str()) {
+        if let Some(&fid) = self.task_frame_idx.get(&tname) {
             // V2A-frame (§4.5.173): an input dyn-array formal is now reserved as a
             // per-activation `DynArray` heap slot (`reserve_frame_task`) and DEEP-COPIED
             // from the caller at frame entry (`emit_frame_task_call` → engine snapshot).
@@ -319,7 +321,10 @@ impl Elaborator<'_> {
             // the inline guard still catches it loud rather than looping forever.
             self.error(
                 MsgCode::ElabUnsupported,
-                &format!("recursive task `{tname}` (frame-call deferred)"),
+                &format!(
+                    "recursive task `{tname}` (frame-call deferred)",
+                    tname = scope_out(lexscope::rtn_show(&tname))
+                ),
             );
             return;
         }
@@ -336,7 +341,7 @@ impl Elaborator<'_> {
         &mut self,
         b: &mut ProcessBuilder,
         task: ast::TaskDef,
-        tname: String,
+        tname: RtnKey,
         args: &[ast::Expr],
     ) {
         // R2 intermediate: the frame branch above recorded itself inside
@@ -379,7 +384,9 @@ impl Elaborator<'_> {
         // `t_out(a[3:0])` and `t_out(w)` with `logic [31:0] w` are not, and the old
         // gate refused all three with the same sentence. See the three narrowed
         // rejections in the Output|Inout arm below for each surviving reason.
-        let Some(eff_args) = self.fill_default_args(tname.as_str(), &task.ports, args) else {
+        let Some(eff_args) =
+            self.fill_default_args(&scope_out(lexscope::rtn_show(&tname)), &task.ports, args)
+        else {
             return;
         };
 
@@ -429,7 +436,7 @@ impl Elaborator<'_> {
                     );
                     self.decl_exit(armed);
                     let local = self.nets.len() as u32;
-                    let lname = format!("__taskarg_{}_{}_{}", tname, p.name.name, local);
+                    let lname = lexscope::taskarg_net_name(&tname, &p.name.name, local);
                     self.add_net(
                         &lname,
                         ir::NetVar {
@@ -497,7 +504,8 @@ impl Elaborator<'_> {
                                 &format!(
                                     "task `{tname}`: dynamic-array formal `{}` needs a bare \
                                      matching dynamic-array actual",
-                                    p.name.name
+                                    p.name.name,
+                                    tname = scope_out(lexscope::rtn_show(&tname))
                                 ),
                             ),
                         }
@@ -512,10 +520,13 @@ impl Elaborator<'_> {
                     let fw = self.nets.get(local as usize).map(|n| n.width).unwrap_or(32);
                     // caller-scope read (pre-bind); a package routine's DEFAULT actual
                     // resolves in the package (§13.5.4, `with_default_arg_scope`).
-                    let actual_eid =
-                        self.with_default_arg_scope(&tname, decl_scope::RtnKind::Task, p, a, |s| {
-                            s.lower_ctx_or_plain(a, fw)
-                        });
+                    let actual_eid = self.with_default_arg_scope_keyed(
+                        &tname,
+                        decl_scope::RtnKind::Task,
+                        p,
+                        a,
+                        |s| s.lower_ctx_or_plain(a, fw),
+                    );
                     let cin = self.push_stmt(ir::Stmt::BlockingAssign {
                         lhs: whole_net_lvalue(local),
                         rhs: actual_eid,
@@ -568,7 +579,8 @@ impl Elaborator<'_> {
                                          disagree about what such a copy-out should write",
                                         tf_dir_word(p),
                                         p.name.name,
-                                        path.segments[0].name
+                                        path.segments[0].name,
+                                        tname = scope_out(lexscope::rtn_show(&tname))
                                     ),
                                 );
                                 // Bind the formal anyway so the body's own reads/writes
@@ -598,7 +610,8 @@ impl Elaborator<'_> {
                                 self.error(
                                     MsgCode::ElabUnsupported,
                                     &format!(
-                                        "task `{tname}` output/inout arg must be a simple net (v1)"
+                                        "task `{tname}` output/inout arg must be a simple net (v1)",
+                                        tname = scope_out(lexscope::rtn_show(&tname))
                                     ),
                                 );
                                 self.out_subst.push((p.name.name.clone(), local));
@@ -654,7 +667,8 @@ impl Elaborator<'_> {
                                         } else {
                                             "only a bare `string` variable can receive the \
                                              whole handle a `string` formal copies out"
-                                        }
+                                        },
+                                        tname = scope_out(lexscope::rtn_show(&tname))
                                     ),
                                 );
                                 self.out_subst.push((p.name.name.clone(), local));
@@ -670,7 +684,7 @@ impl Elaborator<'_> {
                                 self.error(
                                     MsgCode::ElabUnsupported,
                                     &format!(
-                                        "task `{tname}` output/inout arg cannot be a select of an automatic (frame-local) variable"
+                                        "task `{tname}` output/inout arg cannot be a select of an automatic (frame-local) variable", tname = scope_out(lexscope::rtn_show(&tname))
                                     ),
                                 );
                                 continue;
@@ -679,7 +693,7 @@ impl Elaborator<'_> {
                                 self.error(
                                     MsgCode::ElabUnsupported,
                                     &format!(
-                                        "task `{tname}` output/inout arg must be a simple net or select (v1)"
+                                        "task `{tname}` output/inout arg must be a simple net or select (v1)", tname = scope_out(lexscope::rtn_show(&tname))
                                     ),
                                 );
                                 continue;
@@ -702,7 +716,7 @@ impl Elaborator<'_> {
                             self.error(
                                 MsgCode::ElabUnsupported,
                                 &format!(
-                                    "task `{tname}` output/inout arg must be a simple net or select (v1)"
+                                    "task `{tname}` output/inout arg must be a simple net or select (v1)", tname = scope_out(lexscope::rtn_show(&tname))
                                 ),
                             );
                             // R6: bind the formal so the body's own mentions of it do not
@@ -758,7 +772,7 @@ impl Elaborator<'_> {
         let (saved_labels, saved_meta) = self.push_body_enum_labels(&task.body_enums, &task.body);
         // §4.5.426: `%m` inside a task body is `module.task` (IEEE §21.2.1), not the
         // caller's block chain — the inlined body lowers under `[task]`.
-        let saved_scope = self.lex.disp_chain_swap_single(&tname);
+        let saved_scope = self.lex.disp_chain_swap_rtn(&tname);
         // §4.5.435: rooted at the DECLARING instance, not the caller's generate scope.
         let saved_root = self.disp_root_swap_decl_inst();
         // A package task's body resolves in its own package (`pkg_body_scope.rs`) —
@@ -788,8 +802,7 @@ impl Elaborator<'_> {
             if tlocals.is_empty() {
                 s.inline_task_body(b, &task.body);
             } else {
-                let scope = format!("$itask${tname}$L");
-                s.with_scope(&scope, |s| {
+                s.with_itask_scope(&tname, |s| {
                     let view = crate::block_local::RoutineView {
                         name: &task.name.name,
                         body: &task.body,

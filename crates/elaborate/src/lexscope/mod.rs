@@ -468,6 +468,11 @@ impl Scopes {
         ))
     }
 
+    /// D11: the display chain is saved and becomes the one label of routine key `k` (an inlined task body).
+    pub(crate) fn disp_chain_swap_rtn(&mut self, k: &RtnKey) -> SavedChain {
+        self.disp_chain_swap_single(k)
+    }
+
     /// A user block label joins the display chain.
     pub(crate) fn disp_chain_push(&mut self, label: String) {
         self.disp_chain.push(label);
@@ -802,6 +807,6 @@ impl<T> ScopeKeyed<Vec<T>> {
 mod rtn;
 pub(crate) use rtn::{
     is_gen_scoped, is_pkg_scoped, rtn_bare_name, rtn_key_bound, rtn_key_scoped, rtn_key_unwalked,
-    rtn_key_unwalked_owned, rtn_obs_name, rtn_show, rtn_spelled_in, rtn_spells, RtnKey,
-    RtnSpelledMap,
+    rtn_key_unwalked_owned, rtn_obs_name, rtn_scoped_pkg, rtn_show, rtn_spelled_in, rtn_spells,
+    taskarg_net_name, RtnKey, RtnSpelledMap,
 };

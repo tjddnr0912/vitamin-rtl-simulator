@@ -70,11 +70,21 @@ pub(crate) fn is_gen_scoped(k: &RtnKey) -> bool {
     (*k).contains('$')
 }
 
+/// Cut: the package of a scoped key (`rtn_key_pkg`'s `split_once("::")`).
+pub(crate) fn rtn_scoped_pkg(k: &RtnKey) -> Option<&str> {
+    (*k).split_once("::").map(|(pkg, _)| pkg)
+}
+
 /// Cut: the bare declared name of a key — `rsplit("::")` then the tail after the last `$`, in today's order
 /// (pkg_body_scope.rs:257-258).
 pub(crate) fn rtn_bare_name(k: &RtnKey) -> &str {
     let bare = (*k).rsplit("::").next().unwrap_or(k);
     Elaborator::rtn_key_bare(bare)
+}
+
+/// D4: the IR net name of a static task's argument local (`__taskarg_{key}_{port}_{local}`).
+pub(crate) fn taskarg_net_name(k: &RtnKey, port: &str, local: u32) -> String {
+    format!("__taskarg_{}_{}_{}", (*k), port, local)
 }
 
 /// D7: the OBS name of a routine (the key's bytes).
@@ -140,5 +150,14 @@ impl Elaborator<'_> {
     /// D1: run `f` inside the `$func${key}` scope segment of a frame body.
     pub(crate) fn with_func_scope<R>(&mut self, key: &RtnKey, f: impl FnOnce(&mut Self) -> R) -> R {
         self.with_scope(&format!("$func${}", (*key)), f)
+    }
+
+    /// D2: run `f` inside the `$itask${key}$L` scope segment of an inlined task body's locals.
+    pub(crate) fn with_itask_scope<R>(
+        &mut self,
+        key: &RtnKey,
+        f: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        self.with_scope(&format!("$itask${}$L", (*key)), f)
     }
 }

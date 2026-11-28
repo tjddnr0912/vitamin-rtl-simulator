@@ -1798,9 +1798,9 @@ impl Elaborator<'_> {
     /// The package a routine KEY belongs to: `pkg::name` carries it in the key, an
     /// explicitly imported bare name carries it in `rtn_pkg`, everything else is a
     /// plain module routine.
-    pub(crate) fn rtn_key_pkg(&self, key: &str) -> Option<String> {
-        match key.split_once("::") {
-            Some((pkg, _)) => Some(pkg.to_string()),
+    pub(crate) fn rtn_key_pkg(&self, key: &RtnKey) -> Option<String> {
+        match lexscope::rtn_scoped_pkg(key) {
+            Some(pkg) => Some(pkg.to_string()),
             None => self.rtn_pkg.get(key).cloned(),
         }
     }

@@ -3336,6 +3336,7 @@ const HK_ENTRY_ARG: &[(&str, usize)] = &[
     ("with_scope", 0),
     ("elaborate_instance", 1),
     ("with_func_scope", 0),
+    ("with_itask_scope", 0),
 ];
 /// RS-10: the argument index of `name` when it is a scope entry of `list`.
 fn hk_entry_arg(list: &[(&str, usize)], name: &str) -> Option<usize> {
@@ -4737,7 +4738,11 @@ fn hk_entry_arg_fixture() {
     }
     .visit_file(&file);
     let hk: Vec<String> = recs.iter().flat_map(|r| r.entries.clone()).collect();
-    let want: &[(&str, &str)] = &[("with_func_scope", "&k"), ("with_scope", "&seg")];
+    let want: &[(&str, &str)] = &[
+        ("with_func_scope", "&k"),
+        ("with_itask_scope", "&t"),
+        ("with_scope", "&seg"),
+    ];
     let want_hf: Vec<(String, String)> = want
         .iter()
         .map(|(n, a)| (n.to_string(), a.to_string()))
@@ -6366,6 +6371,8 @@ const HOUT_CALLEES: &[&str] = &[
 const HOUT_SAVE_ENTRIES: &[(&str, &str)] = &[
     ("disp_chain_take", "disp_chain"),
     ("disp_chain_swap_single", "disp_chain"),
+    // §5.2 Q-RTNSCOPE RS-11 (DELTA21F F2.2): the routine key's save entry of disp_chain
+    ("disp_chain_swap_rtn", "disp_chain"),
     ("disp_root_swap_empty", "disp_root"),
     ("disp_enter_frame_root", "disp_root"),
     ("disp_root_swap_decl_inst", "disp_root"),
@@ -7336,6 +7343,7 @@ const HBR_END: &[(&str, &str, &str, &str, usize)] = &[
         1,
     ),
     // §5.2 Q-RTNSCOPE RS1 (RS-3): the reads of L14 / L15, the routine key's two permanent leave classes
+    ("L14", "package.rs", "rtn_key_pkg", "rtn_scoped_pkg", 1),
     (
         "L14",
         "pkg_body_scope.rs",
@@ -7356,6 +7364,13 @@ const HBR_END: &[(&str, &str, &str, &str, usize)] = &[
         "seed_subroutine_routes",
         "rtn_obs_name",
         2,
+    ),
+    (
+        "L15",
+        "inline_task.rs",
+        "inline_static_task",
+        "taskarg_net_name",
+        1,
     ),
 ];
 
