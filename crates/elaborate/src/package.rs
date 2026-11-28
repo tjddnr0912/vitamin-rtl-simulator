@@ -2011,21 +2011,22 @@ impl Elaborator<'_> {
                         continue; // explicit import wins
                     }
                     // a LOCAL definition (present, not from a wildcard import) wins.
-                    if self.func_table.contains_key(&n) && !wc_rtn.contains_key(&n) {
+                    let k = lexscope::rtn_key_bound(&n);
+                    if self.func_table.contains_key(&k) && !wc_rtn.contains_key(&n) {
                         continue;
                     }
                     match wc_rtn.get(&n).map(String::as_str) {
                         Some("") => {
-                            self.func_table.remove(&n); // already ambiguous: stay unbound
+                            self.func_table.remove(&k); // already ambiguous: stay unbound
                         }
                         Some(prev) if prev != pkg => {
-                            self.func_table.remove(&n); // two wildcard imports ⇒ ambiguous
+                            self.func_table.remove(&k); // two wildcard imports ⇒ ambiguous
                             wc_rtn.insert(n, String::new());
                         }
                         Some(_) => {} // same package, idempotent
                         None => {
-                            self.func_table.insert(n.clone(), f);
-                            self.rtn_pkg.insert(n.clone(), pkg.clone());
+                            self.func_table.insert(k.clone(), f);
+                            self.rtn_pkg.insert(k.clone(), pkg.clone());
                             // ★ The wildcard arm needs the SCOPED injection too. It
                             // looked like it did not — a wildcard puts every sibling in
                             // under its bare name — but a module-local routine of the
@@ -2042,21 +2043,22 @@ impl Elaborator<'_> {
                     if explicit_rtn.contains(&n) {
                         continue;
                     }
-                    if self.task_table.contains_key(&n) && !wc_rtn.contains_key(&n) {
+                    let k = lexscope::rtn_key_bound(&n);
+                    if self.task_table.contains_key(&k) && !wc_rtn.contains_key(&n) {
                         continue;
                     }
                     match wc_rtn.get(&n).map(String::as_str) {
                         Some("") => {
-                            self.task_table.remove(&n);
+                            self.task_table.remove(&k);
                         }
                         Some(prev) if prev != pkg => {
-                            self.task_table.remove(&n);
+                            self.task_table.remove(&k);
                             wc_rtn.insert(n, String::new());
                         }
                         Some(_) => {}
                         None => {
-                            self.task_table.insert(n.clone(), t);
-                            self.rtn_pkg.insert(n.clone(), pkg.clone());
+                            self.task_table.insert(k.clone(), t);
+                            self.rtn_pkg.insert(k.clone(), pkg.clone());
                             wildcard_roots.push(n.clone());
                             wc_rtn.insert(n, pkg.clone());
                         }
