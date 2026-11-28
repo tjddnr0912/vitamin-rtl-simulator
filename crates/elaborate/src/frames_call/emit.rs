@@ -18,10 +18,10 @@ impl Elaborator<'_> {
         let fname = &func.name.name;
         // The table key (`pk::name` for a scoped call) is what names the callee's
         // package for a DEFAULT actual (§13.5.4); the bare name is not in `rtn_pkg`.
-        let rtn_key: String = self
+        let rtn_key: RtnKey = self
             .frame_key_of(fid)
-            .map(str::to_string)
-            .unwrap_or_else(|| fname.to_string());
+            .cloned()
+            .unwrap_or_else(|| lexscope::rtn_key_unwalked(fname));
         if func
             .ports
             .iter()
@@ -206,9 +206,10 @@ impl Elaborator<'_> {
             );
             self.decl_exit(armed);
             // A package routine's DEFAULT actual resolves in the package (§13.5.4).
-            let eid = self.with_default_arg_scope(&rtn_key, decl_scope::RtnKind::Func, p, a, |s| {
-                s.lower_ctx_or_plain(a, w)
-            });
+            let eid =
+                self.with_default_arg_scope_keyed(&rtn_key, decl_scope::RtnKind::Func, p, a, |s| {
+                    s.lower_ctx_or_plain(a, w)
+                });
             // §13.5.3: the call is an ASSIGNMENT to the formal, so a REAL actual
             // bound to an INTEGRAL formal rounds and narrows to the formal's
             // width. This value goes straight into the frame slot, so without it
@@ -265,10 +266,11 @@ impl Elaborator<'_> {
             return false;
         }
         let fname = &name.segments[0].name;
-        let Some(&fid) = self.frame_idx.get(fname.as_str()) else {
+        let k = lexscope::rtn_key_unwalked(fname);
+        let Some(&fid) = self.frame_idx.get(&k) else {
             return false;
         };
-        let Some(func) = self.func_table.get(fname.as_str()).cloned() else {
+        let Some(func) = self.func_table.get(&k).cloned() else {
             return false;
         };
         if !func.ports.iter().any(|p| self.is_input_dyn_array_formal(p)) {

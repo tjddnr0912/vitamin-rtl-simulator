@@ -7277,11 +7277,19 @@ const HBR_END: &[(&str, &str, &str, &str, usize)] = &[
         "bare_name_of_net",
         1,
     ),
+    // §5.2 Q-RTNSCOPE RS1 (RS-3): the reads of L14 / L15, the routine key's two permanent leave classes
+    (
+        "L14",
+        "pkg_body_scope.rs",
+        "with_rtn_default_scope",
+        "rtn_bare_name",
+        1,
+    ),
 ];
 
 /// The SURF_LEAVE ids the row ends with: L0 (the BOUNDARY) and L13 (permanent), L2 / L3 (R, RS1's).
 /// Any other id (a new bridge, or L4 / L9 / L11 / L12 written back) fails `HBR END LEAVE ID`.
-const LEAVE_IDS_END: &[&str] = &["L0", "L13"];
+const LEAVE_IDS_END: &[&str] = &["L0", "L13", "L14"];
 
 /// `HBR == R + the permanent class` (HBR_END, LEAVE_IDS_END) against the computed reads (`rows`,
 /// keyed `file\tfn\tentry\tsink`) and SURF_LEAVE's rows ; each message names its row.
@@ -7363,7 +7371,8 @@ fn hbr_end_check(rows: &BTreeMap<String, usize>, leave: &[Vec<String>]) -> Vec<S
 /// L0 the BOUNDARY (`scope_out` / `Outgoing::plain`) and L13 the bare declared names of the
 /// current scope (names_with_pkg_var_aliases, bare_name_of_net). Every other id closes at a unit
 /// (checked only as not `permanent`) ; the check reads the id column alone (NP19-7, HBR's head).
-const LEAVE_PERMANENT: &[&str] = &["L0", "L13"];
+/// §5.2 Q-RTNSCOPE RS1 (RS-3): L14 and L15, the routine key's two permanent leave classes.
+const LEAVE_PERMANENT: &[&str] = &["L0", "L13", "L14"];
 
 #[test]
 fn hc_carry_the_carried_scope_sinks_are_pinned() {

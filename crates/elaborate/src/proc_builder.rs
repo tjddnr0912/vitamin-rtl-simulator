@@ -158,17 +158,12 @@ pub(crate) fn stmt_disables_name(s: &ast::Stmt, name: &str) -> bool {
 /// (`start == target` ⇒ "is `start` recursive?", direct OR mutual)? Iterative
 /// DFS from `start`'s callees.
 pub(crate) fn reaches(
-    start: &str,
-    target: &str,
-    edges: &BTreeMap<String, std::collections::BTreeSet<String>>,
+    start: &RtnKey,
+    target: &RtnKey,
+    edges: &BTreeMap<RtnKey, std::collections::BTreeSet<RtnKey>>,
 ) -> bool {
-    let mut stack: Vec<&str> = edges
-        .get(start)
-        .into_iter()
-        .flatten()
-        .map(|s| s.as_str())
-        .collect();
-    let mut seen: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
+    let mut stack: Vec<&RtnKey> = edges.get(start).into_iter().flatten().collect();
+    let mut seen: std::collections::BTreeSet<&RtnKey> = std::collections::BTreeSet::new();
     while let Some(n) = stack.pop() {
         if n == target {
             return true;
@@ -177,7 +172,7 @@ pub(crate) fn reaches(
             continue;
         }
         if let Some(cs) = edges.get(n) {
-            stack.extend(cs.iter().map(|s| s.as_str()));
+            stack.extend(cs.iter());
         }
     }
     false

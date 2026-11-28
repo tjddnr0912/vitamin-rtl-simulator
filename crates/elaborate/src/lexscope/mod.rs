@@ -800,4 +800,7 @@ impl<T> ScopeKeyed<Vec<T>> {
 }
 
 mod rtn;
-pub(crate) use rtn::{is_pkg_scoped, rtn_key_bound, rtn_key_scoped, RtnKey, RtnSpelledMap};
+pub(crate) use rtn::{
+    is_pkg_scoped, rtn_bare_name, rtn_key_bound, rtn_key_scoped, rtn_key_unwalked,
+    rtn_key_unwalked_owned, rtn_show, rtn_spelled_in, RtnKey, RtnSpelledMap,
+};

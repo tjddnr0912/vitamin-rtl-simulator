@@ -597,7 +597,8 @@ impl Elaborator<'_> {
                         &format!(
                             "frame task `{name}` body uses {why}. Supported here: `$display`, \
                              a nonblocking assign to a MODULE net, `@`/`#`/`wait` on a module \
-                             net, and nested task calls"
+                             net, and nested task calls",
+                            name = scope_out(lexscope::rtn_show(&name))
                         ),
                     );
                 }
@@ -614,7 +615,14 @@ impl Elaborator<'_> {
                 // suspendable set has no out-of-frame write by construction — such a
                 // write is one of `stmt_signal`'s own signals — so this argument can
                 // only ever be a no-op here, and passing `false` keeps it that way.
-                self.validate_frame_body(&name, entry_bb, base_net, locals_len, true, false);
+                self.validate_frame_body(
+                    &scope_out(lexscope::rtn_show(&name)),
+                    entry_bb,
+                    base_net,
+                    locals_len,
+                    true,
+                    false,
+                );
             }
         }
     }
@@ -917,12 +925,16 @@ impl Elaborator<'_> {
     /// B2: THIS module's recursive TASKS (self or mutual). A non-recursive task
     /// (even automatic) is still handled by the byte-identical `inline_task` path;
     /// only recursion needs a frame.
-    pub(crate) fn build_task_frame_set(&self) -> std::collections::BTreeSet<String> {
-        let mut edges: BTreeMap<String, std::collections::BTreeSet<String>> = BTreeMap::new();
+    pub(crate) fn build_task_frame_set(&self) -> std::collections::BTreeSet<RtnKey> {
+        let mut edges: BTreeMap<RtnKey, std::collections::BTreeSet<RtnKey>> = BTreeMap::new();
         for (name, t) in &self.task_table {
             let mut callees = std::collections::BTreeSet::new();
             collect_callee_task(t, &mut callees);
-            callees.retain(|c| self.task_table.contains_key(c));
+            let callees = callees
+                .into_iter()
+                .map(lexscope::rtn_key_unwalked_owned)
+                .filter(|k| self.task_table.contains_key(k))
+                .collect();
             edges.insert(name.clone(), callees);
         }
         let mut set = std::collections::BTreeSet::new();
@@ -949,7 +961,7 @@ impl Elaborator<'_> {
             // on the frame path (correct-or-loud).
             if t.automatic
                 || reaches(name, name, &edges)
-                || self.hier_called_task_names.contains(name)
+                || lexscope::rtn_spelled_in(name, &self.hier_called_task_names)
                 || t.ports
                     .iter()
                     .any(|p| self.is_output_or_inout_dyn_array_formal(p))
@@ -967,8 +979,8 @@ impl Elaborator<'_> {
     /// function, plus every function on a recursion cycle (direct or mutual). A
     /// missed call edge is loud-safe (the function stays inline → `inline_stack`
     /// rejects), but the walk covers the common AST shapes.
-    pub(crate) fn build_frame_set(&self) -> std::collections::BTreeSet<String> {
-        let mut set: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    pub(crate) fn build_frame_set(&self) -> std::collections::BTreeSet<RtnKey> {
+        let mut set: std::collections::BTreeSet<RtnKey> = std::collections::BTreeSet::new();
         // Callee return widths (a call operand's self-width) for the ㊁ context-width
         // detection — built once so `f = g(x) + 1` sees `g(x)`'s width, not `None`.
         let mut func_widths = lexscope::RtnSpelledMap::new();
@@ -1045,11 +1057,15 @@ impl Elaborator<'_> {
             }
         }
         // call-graph edges restricted to known function names.
-        let mut edges: BTreeMap<String, std::collections::BTreeSet<String>> = BTreeMap::new();
+        let mut edges: BTreeMap<RtnKey, std::collections::BTreeSet<RtnKey>> = BTreeMap::new();
         for (name, f) in &self.func_table {
             let mut callees = std::collections::BTreeSet::new();
             collect_callee_func(f, &mut callees);
-            callees.retain(|c| self.func_table.contains_key(c));
+            let callees = callees
+                .into_iter()
+                .map(lexscope::rtn_key_unwalked_owned)
+                .filter(|k| self.func_table.contains_key(k))
+                .collect();
             edges.insert(name.clone(), callees);
         }
         // f needs a frame iff f can reach f (direct or mutual recursion).

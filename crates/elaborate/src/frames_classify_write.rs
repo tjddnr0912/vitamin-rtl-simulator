@@ -190,14 +190,15 @@ impl Elaborator<'_> {
     /// otherwise. It is the one position this function can IDENTIFY rather than list, so
     /// when it names a package the message leads with that case and quotes the user's own
     /// package, never a stand-in `pkg`.
-    pub(crate) fn refuse_body_write_call(&mut self, fname: &str, rtn_key: &str) -> u32 {
-        let (scoped, also_scoped) = if rtn_key.contains("::") {
+    pub(crate) fn refuse_body_write_call(&mut self, fname: &str, rtn_key: &RtnKey) -> u32 {
+        let (scoped, also_scoped) = if lexscope::is_pkg_scoped(rtn_key) {
             (
                 format!(
                     "This call is package-SCOPED (`{rtn_key}(...)`), and a scoped call \
                      builds its frame at the call site, after the statement that would have \
                      carried the write: `import {rtn_key};` and call `{fname}` by its bare \
-                     name, which does perform it. "
+                     name, which does perform it. ",
+                    rtn_key = scope_out(lexscope::rtn_show(rtn_key))
                 ),
                 "",
             )

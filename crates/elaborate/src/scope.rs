@@ -49,16 +49,6 @@ impl Elaborator<'_> {
         }
     }
 
-    /// The bare routine name inside a table key: the tail after the last `$`.
-    /// Byte-identical to the input for a module key (no `$`), so callers that hold
-    /// either kind can use it unconditionally.
-    pub(crate) fn rtn_key_bare(key: &str) -> &str {
-        match key.rfind('$') {
-            Some(i) => &key[i + 1..],
-            None => key,
-        }
-    }
-
     /// True if `e` is a self-contained, scope-INDEPENDENT constant expression:
     /// literals, package-scoped constants, and compound expressions built only from
     /// those (plus system-function calls whose args are all scope-safe).

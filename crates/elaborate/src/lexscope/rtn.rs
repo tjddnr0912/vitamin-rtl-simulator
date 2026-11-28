@@ -2,6 +2,9 @@
 //! routine tables, and its named entries — births (b1 b3 b5), compares, cuts and leaves (DELTA20B K2.6 as DELTA21B M3 R0-2 /
 //! DELTA21C C1a I-2 restate it) — with the two fns moved in whole (I-3: `resolve_rtn_key` with its ruled body, `rtn_key_bare`).
 
+use std::collections::BTreeSet;
+
+use super::{wrap_shown, Shown};
 use crate::Elaborator;
 
 /// A routine-table key. Ordered and hashed as its text ; the text is read or built only inside lexscope (the field).
@@ -15,6 +18,21 @@ pub(crate) fn rtn_key_bound(name: &str) -> RtnKey {
 /// b3: the key of `bare` declared in package `pkg` (`pkg::bare`).
 pub(crate) fn rtn_key_scoped(pkg: &str, bare: &str) -> RtnKey {
     format!("{pkg}::{bare}")
+}
+
+/// b5: a call SPELLING taken as a module key WITHOUT the scope walk.
+pub(crate) fn rtn_key_unwalked(spelling: &str) -> RtnKey {
+    spelling.to_string()
+}
+
+/// b5, owned: the spelling's String becomes the key (no copy).
+pub(crate) fn rtn_key_unwalked_owned(spelling: String) -> RtnKey {
+    spelling
+}
+
+/// Compare: is key `k`'s text one of the spellings in `set`.
+pub(crate) fn rtn_spelled_in(k: &RtnKey, set: &BTreeSet<String>) -> bool {
+    set.contains(k)
 }
 
 /// Values filed by routine key, read by a call SPELLING taken unwalked (b5's question, asked of a fn-local index).
@@ -40,6 +58,18 @@ impl<V> RtnSpelledMap<V> {
 /// Cut: is `k` a package-scoped key (its text holds `::`).
 pub(crate) fn is_pkg_scoped(k: &RtnKey) -> bool {
     (*k).contains("::")
+}
+
+/// Cut: the bare declared name of a key — `rsplit("::")` then the tail after the last `$`, in today's order
+/// (pkg_body_scope.rs:257-258).
+pub(crate) fn rtn_bare_name(k: &RtnKey) -> &str {
+    let bare = (*k).rsplit("::").next().unwrap_or(k);
+    Elaborator::rtn_key_bare(bare)
+}
+
+/// D8: a routine key as message text.
+pub(crate) fn rtn_show(k: &RtnKey) -> Shown {
+    wrap_shown((*k).clone())
 }
 
 impl Elaborator<'_> {
@@ -80,5 +110,15 @@ impl Elaborator<'_> {
             }
         }
         rtn_key_bound(bare)
+    }
+
+    /// The bare routine name inside a table key: the tail after the last `$`.
+    /// Byte-identical to the input for a module key (no `$`), so callers that hold
+    /// either kind can use it unconditionally.
+    pub(super) fn rtn_key_bare(key: &str) -> &str {
+        match key.rfind('$') {
+            Some(i) => &key[i + 1..],
+            None => key,
+        }
     }
 }

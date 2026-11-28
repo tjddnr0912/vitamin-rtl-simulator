@@ -407,14 +407,11 @@ expr_size_hier_exact.rs	env_exact	1	bound
 expr_size_hier_exact.rs	hier_leaf_width_exact	1	exact
 frames_body.rs	lower_frame_body_inner_lower_frame_func_body	UNTYPED	declared=rtn_declared_names
 frames_body.rs	lower_frame_body_inner_lower_frame_task_body	UNTYPED	declared=rtn_declared_names
-frames_body.rs	lower_frame_funcs	UNTYPED	frame_set=build_frame_set,task_set=build_task_frame_set
 frames_body.rs	seed_subroutine_routes	2	fnames,tnames
 frames_call/emit.rs	emit_frame_task_call	1	out_array_unpacks
 frames_classify.rs	body_duplicates_a_non_repeatable_local	1	pending
 frames_classify.rs	body_reads_only_locals	1	locals
 frames_classify.rs	body_selects_mdpacked_local	1	names
-frames_classify.rs	build_frame_set	2	set,edges
-frames_classify.rs	build_task_frame_set	1	edges
 frames_classify_write.rs	ast_func_body_writes_outside	UNTYPED	own=rtn_declared_names
 frames_static_init.rs	block_wrap_prefix	1	segs
 frames_static_init.rs	emit_frame_static_prologue	1	cands
@@ -470,16 +467,13 @@ package.rs	task_self_contained_impl	2	names,read_names
 param_dup.rs	check_duplicate_param_decls_in	2	first,reports
 param_dup.rs	check_duplicate_param_decls_in	UNTYPED	stems=carrier_stems
 params.rs	resolve_param_overrides	1	dim_arity_reported
-pkg_body_scope.rs	imported_routine_bodies	1	keys
 pkg_body_scope.rs	rtn_declared_names	1	names
-pkg_scoped_frames.rs	frame_scoped_pkg_routines	UNTYPED	frame_set=build_frame_set
 pkg_scoped_frames.rs	scoped_reachable_callees	2	want,seen
 ports.rs	bind_iface_port	1	mp_dirs
 ports.rs	elaborate_virtual_iface	1	bound
 ports.rs	elaborate_virtual_iface	UNTYPED	members=iface_member_names
 ports.rs	wire_ports	1	wildcard_conns
 ports.rs	wire_ports	UNTYPED	ports=port_list_dirs
-proc_builder.rs	reaches	2	stack,seen
 stmt_main.rs	lower_stmt_inner	UNTYPED	map=sva_formal_map
 sva_check.rs	synth_local_var_assert	2	captures,data_chain
 sva_clocking.rs	synth_crossclock	1	handoffs
@@ -520,7 +514,7 @@ block_local_class.rs	compute_timed_blocks	let	path
 block_local_class.rs	compute_timed_blocks	field:Acc	sharers
 block_local_class.rs	compute_timed_blocks	field:Acc	scoped
 == H7_COUNTS
-lets 152 fns 86 untyped 29 readers 26
+lets 146 fns 82 untyped 27 readers 26
 == HM
 # HM: the mints of scope-qualified text, by (file, fn, mint kind, name) with a count — g3 mints.tsv's rule
 # (census_g3.rs + link.py): `call` a call of a mint fn (MINT_CALLS), `fmt` / `fmt-tempname` a `format!` /
@@ -829,9 +823,9 @@ lexscope/hier.rs	is_hier_scope	symbols	range_text	1	TEXT-SCAN-ANSWERS	w9:DK3-b
 lexscope/hier.rs	is_hier_scope	wide_param_bits	range_text	1	TEXT-SCAN-ANSWERS	w9:DK3-b
 lexscope/mod.rs	keys_under_cur	keys	iter	1	HAND:TEXT-SCAN-ANSWERS	X19
 pkg_body_scope.rs	frame_key_of	frame_idx	iter	1	KEY-BLIND	Z2-values
-pkg_body_scope.rs	imported_routine_bodies	func_table	keys	1	TEXT-SCAN-ANSWERS	X14-RS1
+pkg_body_scope.rs	imported_routine_bodies	func_table	keys	1	TEXT-SCAN-ANSWERS	is_pkg_scoped
 pkg_body_scope.rs	imported_routine_bodies	rtn_pkg	keys	1	KEY-BLIND	Z2-values
-pkg_body_scope.rs	imported_routine_bodies	task_table	keys	1	TEXT-SCAN-ANSWERS	X14-RS1
+pkg_body_scope.rs	imported_routine_bodies	task_table	keys	1	TEXT-SCAN-ANSWERS	is_pkg_scoped
 == HS_COUNTS
 stores 81 scans 27 kinds {"KEY-BLIND": 13, "PRINT/DUMP": 2, "TEXT-SCAN-ANSWERS": 12}
 == HH
@@ -908,7 +902,6 @@ edge_gate.rs	source_name	strip_prefix	"__forvar_"	1	spelling	-
 elab_task.rs	try_elab_task	strip_prefix	<ELAB_TASK_PREFIX>	1	spelling	-
 events.rs	lower_delay	contains	'.'	1	spelling	-
 expr_main.rs	lower_expr_ungated	starts_with	"$__vita_stream_"	1	spelling	-
-frames_classify_write.rs	refuse_body_write_call	contains	"::"	1	key	RS1
 frames_reserve.rs	reserve_frame_func	contains	"::"	1	key	RS1
 frames_reserve.rs	reserve_frame_func	contains	'$'	1	key	RS1
 frames_reserve.rs	reserve_frame_task	contains	"::"	1	key	RS1
@@ -976,15 +969,14 @@ package.rs	rtn_key_pkg	split_once	"::"	1	key	RS1
 params.rs	resolve_param_overrides	split_once	"$d"	1	spelling	-
 params.rs	resolve_param_overrides	split_once	"$p"	1	spelling	-
 params.rs	resolve_param_overrides	strip_suffix	"$w"	1	spelling	-
-pkg_body_scope.rs	imported_routine_bodies	contains	"::"	1	key	RS1
-pkg_body_scope.rs	with_default_arg_scope	rsplit	"::"	1	key	RS1
 scope.rs	lookup_net_scoped	split	'.'	1	spelling	DK3
-scope.rs	rtn_key_bare	rfind	'$'	1	key	RS1
 stmt_main.rs	lower_stmt_inner	starts_with	"$f"	1	spelling	-
 stmt_main.rs	lower_stmt_inner	starts_with	'$'	2	spelling	-
 lexscope/rtn.rs	is_pkg_scoped	contains	"::"	1	key	-
+lexscope/rtn.rs	rtn_bare_name	rsplit	"::"	1	key	-
+lexscope/rtn.rs	rtn_key_bare	rfind	'$'	1	key	-
 == HSEG_COUNTS
-tests 97 tags {"display": 9, "key": 23, "scope": 37, "spelling": 28} units {"-": 30, "B3a": 2, "B3k": 33, "DK1": 4, "DK3": 10, "RS1": 9, "walk": 9}
+tests 95 tags {"display": 9, "key": 21, "scope": 37, "spelling": 28} units {"-": 32, "B3a": 2, "B3k": 33, "DK1": 4, "DK3": 10, "RS1": 5, "walk": 9}
 == H5
 # H5: the name-typed fields — census_fields.rs's rule: the structs reached from Elaborator and ConstFrame
 # through field types (aliases expanded), each field whose type names String / str / Symbol / Ident ; 215 =
@@ -1479,6 +1471,9 @@ stmt_flow.rs	push_stmt	disp_chain_abs	-	ARG:self.stmt_scopes.insert	1
 stmt_main.rs	lower_stmt_inner	ctx_here	-	FIELD:StarSite.ctx	1
 sva_clocking.rs	lower_clocking_blocks	scope_out	self.lex.show_miss(&src_name)	MAC:format>ARG:self.error	2
 systask.rs	lower_systask	scope_out	self.lex.show_miss(&joined)	MAC:format>LOCAL:enc#2	1
+frames_classify.rs	resolve_frame_task_rejects	scope_out	lexscope::rtn_show(&name)	ARG:self.validate_frame_body	1
+frames_classify.rs	resolve_frame_task_rejects	scope_out	lexscope::rtn_show(&name)	ASSIGN:name	1
+frames_classify_write.rs	refuse_body_write_call	scope_out	lexscope::rtn_show(rtn_key)	ASSIGN:rtn_key	1
 == HOUT_COUNTS
 # SAVE 10 = the 9 saves + enter_frame_scope_root's own (its return, RET) until LS2-d ; from LS2-d SAVE 16 = the 9
 # call-site saves (now the Saved* entries) + the 7 inside lexscope (4 in mod.rs's entries, disp.rs's
@@ -1495,7 +1490,7 @@ systask.rs	lower_systask	scope_out	self.lex.show_miss(&joined)	MAC:format>LOCAL:
 # §5.2 Q-DECLKEY DK3-a (2026-11-26): scope_out 30 -> 34, + 4 fn-value (api.rs elaborate_located_params: net_name_table's Vec<Shown> ; cont_var.rs
 # cont_var_name, lvalue.rs check_lvalue_kind, netdecl.rs check_whole_net_multidriver: net_key_shown's Shown) ; display_of_key_text 1 stays (its row
 # re-homed net_util.rs -> lexscope/disp.rs with net_name_table)
-{"LIT": 7, "RESTORE": 9, "SAVE": 16, "child_prefix": 1, "ctx_here": 6, "cur_context": 1, "cur_shown": 3, "cur_shown_quoted_or": 1, "disp_chain_abs": 2, "disp_frame_path_of": 2, "disp_here": 2, "disp_inst_top": 1, "disp_inst_top_text": 1, "display_of": 6, "display_of_key_text": 1, "display_prefix": 3, "enter_frame_scope_root": 1, "frame_path": 3, "frame_path_of": 1, "plain": 1, "push_func.m_path": 3, "scope_chain_abs": 2, "scope_out": 34, "shown_from_spelling": 1, "stmt_loc_instance": 1}
+{"LIT": 7, "RESTORE": 9, "SAVE": 16, "child_prefix": 1, "ctx_here": 6, "cur_context": 1, "cur_shown": 3, "cur_shown_quoted_or": 1, "disp_chain_abs": 2, "disp_frame_path_of": 2, "disp_here": 2, "disp_inst_top": 1, "disp_inst_top_text": 1, "display_of": 6, "display_of_key_text": 1, "display_prefix": 3, "enter_frame_scope_root": 1, "frame_path": 3, "frame_path_of": 1, "plain": 1, "push_func.m_path": 3, "scope_chain_abs": 2, "scope_out": 37, "shown_from_spelling": 1, "stmt_loc_instance": 1}
 == HDBG
 # HDBG (§5.2 Q-LEXSCOPE LS2a ; DELTA9 N-8, DELTA10 N-g): lexscope's debug-only code. The identifier
 # `debug_assertions` occurs 0 times in lexscope's files (every file of the directory, any spelling: cfg,
@@ -1585,6 +1580,7 @@ block_local_feed.rs	feed_scoped_block_locals	names_with_pkg_var_aliases	LOCAL:sh
 iface_inst.rs	elaborate_iface_instances	names_with_pkg_var_aliases	LOCAL:shadow_names#2	1
 instance.rs	elaborate_instance	names_with_pkg_var_aliases	LOCAL:shadow_names#4	2
 dynarr.rs	dyn_blocking_special	bare_name_of_net	LOCAL:tid#2	1
+pkg_body_scope.rs	with_rtn_default_scope	rtn_bare_name	ARG:self.push_rtn_pkg_scope	1
 == HBR_COUNTS
 # LS2-d: 68 -> 66, display_prefix's and cur_context's reads moved into lexscope/disp.rs (not a bridge read) ;
 # + LEAVE L4 display_of_key_text's one site (window w6 ; closed at §5.2 Q-DECLKEY DK3-a, not DK4: q5) ; L0 (scope_out) is HC's, not HBR's
@@ -1604,7 +1600,7 @@ dynarr.rs	dyn_blocking_special	bare_name_of_net	LOCAL:tid#2	1
 # §5.2 Q-DECLKEY DK1-5b (2026-11-25): cur_prefix_text 3 -> 0 (L1 closed), key_text 6 -> 0 (L7 closed), + names_with_pkg_var_aliases 4 (L13)
 # §5.2 Q-DECLKEY DK3-a (2026-11-26): at_text 1 -> 0 (L9 closed), display_of_key_text 1 -> 0 (L4 closed), found_text 3 -> 2 (L11: ports.rs
 # bind_iface_port's read moved in as alias_iface_port), + bare_name_of_net 1 (L13: dynarr.rs dyn_blocking_special) — 13 -> 11
-{"bare_name_of_net": 1, "names_with_pkg_var_aliases": 4}
+{"bare_name_of_net": 1, "names_with_pkg_var_aliases": 4, "rtn_bare_name": 1}
 == HC_ARGS
 # HC ARGS (LS2a ; DELTA11 R4 N-8, DELTA12 S2 r4): keyed by SURF_ENTER's to-scope rows — the token text of
 # the argument at that parameter in every call of the entry, crate-wide (lexscope included), by (file, fn,
@@ -1950,6 +1946,7 @@ readmem_assoc.rs	ReadmemAssocSite.prefix	FIELD	crate::ScopeRef	1
 sva_prop.rs	PendingSva.scope	FIELD	crate::ScopeRef	1
 iface_rtn_scope.rs	RoutineScope.rtn_decl_scope	FIELD	BTreeMap<RtnKey, ScopeRef>	1
 lib.rs	Elaborator.rtn_decl_scope	FIELD	BTreeMap<RtnKey, ScopeRef>	1
+lexscope/rtn.rs	rtn_show	RET	Shown	1
 == HKC
 # HKC (§5.2 Q-DECLKEY DK1-4b-1 (2026-11-24), DELTA16 R-H8 (d)): how many times each lexscope file names a key type's constructor (a call, a struct literal,
 # a pattern, a macro argument) — AtKey's field is `pub(super)` since DK1-4b-1 (the walk forms its candidates: walk.rs), so its

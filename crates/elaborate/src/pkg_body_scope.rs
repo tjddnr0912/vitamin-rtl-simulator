@@ -123,7 +123,7 @@ impl Elaborator<'_> {
     pub(crate) fn imported_routine_bodies(&self) -> Vec<ast::Stmt> {
         let mut extra: Vec<ast::Stmt> = Vec::new();
         let mut seen: BTreeSet<(u32, u32)> = BTreeSet::new();
-        let keys: Vec<String> = self
+        let keys: Vec<RtnKey> = self
             .rtn_pkg
             .keys()
             .cloned()
@@ -131,7 +131,7 @@ impl Elaborator<'_> {
                 self.func_table
                     .keys()
                     .chain(self.task_table.keys())
-                    .filter(|k| k.contains("::"))
+                    .filter(|k| lexscope::is_pkg_scoped(k))
                     .cloned(),
             )
             .collect();
@@ -247,15 +247,42 @@ impl Elaborator<'_> {
             .default
             .as_ref()
             .is_some_and(|d| d.span == a.span && (d.span.lo, d.span.hi) != (0, 0));
-        let pkg = if is_default {
-            self.rtn_key_pkg(rtn_name)
+        if is_default {
+            let k = lexscope::rtn_key_unwalked(rtn_name);
+            self.with_rtn_default_scope(&k, kind, f)
         } else {
-            None
-        };
-        match pkg {
+            f(self)
+        }
+    }
+
+    pub(crate) fn with_default_arg_scope_keyed<T>(
+        &mut self,
+        rtn_key: &RtnKey,
+        kind: decl_scope::RtnKind,
+        p: &ast::TfPort,
+        a: &ast::Expr,
+        f: impl FnOnce(&mut Self) -> T,
+    ) -> T {
+        let is_default = p
+            .default
+            .as_ref()
+            .is_some_and(|d| d.span == a.span && (d.span.lo, d.span.hi) != (0, 0));
+        if is_default {
+            self.with_rtn_default_scope(rtn_key, kind, f)
+        } else {
+            f(self)
+        }
+    }
+
+    fn with_rtn_default_scope<T>(
+        &mut self,
+        key: &RtnKey,
+        kind: decl_scope::RtnKind,
+        f: impl FnOnce(&mut Self) -> T,
+    ) -> T {
+        match self.rtn_key_pkg(key) {
             Some(pkg) => {
-                let bare = rtn_name.rsplit("::").next().unwrap_or(rtn_name);
-                self.push_rtn_pkg_scope(pkg, Self::rtn_key_bare(bare), kind, BTreeSet::new());
+                self.push_rtn_pkg_scope(pkg, lexscope::rtn_bare_name(key), kind, BTreeSet::new());
                 let out = f(self);
                 self.pop_rtn_pkg_scope();
                 out
@@ -267,11 +294,11 @@ impl Elaborator<'_> {
     /// The `frame_idx` KEY of frame function `fid` — `pk::name` for a scoped call, the
     /// bare name otherwise — so a call site that only holds the FuncId can ask
     /// `rtn_key_pkg` the same question the body lowering asks.
-    pub(crate) fn frame_key_of(&self, fid: u32) -> Option<&str> {
+    pub(crate) fn frame_key_of(&self, fid: u32) -> Option<&RtnKey> {
         self.frame_idx
             .iter()
             .find(|(_, &v)| v == fid)
-            .map(|(k, _)| k.as_str())
+            .map(|(k, _)| k)
     }
 
     /// The names a package's routine bodies may read and write without leaving the
