@@ -472,9 +472,8 @@ param_dup.rs	check_duplicate_param_decls_in	UNTYPED	stems=carrier_stems
 params.rs	resolve_param_overrides	1	dim_arity_reported
 pkg_body_scope.rs	imported_routine_bodies	1	keys
 pkg_body_scope.rs	rtn_declared_names	1	names
-pkg_scoped_frames.rs	frame_scoped_pkg_routines	2	late,cands
-pkg_scoped_frames.rs	frame_scoped_pkg_routines	UNTYPED	frame_set=build_frame_set,reachable=scoped_reachable_callees
-pkg_scoped_frames.rs	scoped_reachable_callees	3	want,seen,keys
+pkg_scoped_frames.rs	frame_scoped_pkg_routines	UNTYPED	frame_set=build_frame_set
+pkg_scoped_frames.rs	scoped_reachable_callees	2	want,seen
 ports.rs	bind_iface_port	1	mp_dirs
 ports.rs	elaborate_virtual_iface	1	bound
 ports.rs	elaborate_virtual_iface	UNTYPED	members=iface_member_names
@@ -521,7 +520,7 @@ block_local_class.rs	compute_timed_blocks	let	path
 block_local_class.rs	compute_timed_blocks	field:Acc	sharers
 block_local_class.rs	compute_timed_blocks	field:Acc	scoped
 == H7_COUNTS
-lets 155 fns 87 untyped 29 readers 26
+lets 152 fns 86 untyped 29 readers 26
 == HM
 # HM: the mints of scope-qualified text, by (file, fn, mint kind, name) with a count — g3 mints.tsv's rule
 # (census_g3.rs + link.py): `call` a call of a mint fn (MINT_CALLS), `fmt` / `fmt-tempname` a `format!` /

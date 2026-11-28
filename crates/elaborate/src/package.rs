@@ -2093,9 +2093,10 @@ impl Elaborator<'_> {
                 // `import pk::X` of a CONSTANT is `apply_import_consts`'s collision to
                 // report, not this one's.
                 let n = &sym.name;
+                let k = lexscope::rtn_key_bound(n);
                 if (funcs.contains_key(n) || tasks.contains_key(n))
-                    && (self.func_table.contains_key(n) || self.task_table.contains_key(n))
-                    && !self.rtn_pkg.contains_key(n)
+                    && (self.func_table.contains_key(&k) || self.task_table.contains_key(&k))
+                    && !self.rtn_pkg.contains_key(&k)
                 {
                     // Round-3 R2-1 (`is_cu`) and differential R2-2 (the duplicate):
                     // the local declaration wins in every branch below, so the insert
@@ -2119,7 +2120,7 @@ impl Elaborator<'_> {
                     //   imported TASK onto a declared FUNCTION (s30, where the package
                     //   has no function of the name at all).
                     let const_lane_reported =
-                        funcs.contains_key(n) && self.func_table.contains_key(n);
+                        funcs.contains_key(n) && self.func_table.contains_key(&k);
                     if !is_cu && !const_lane_reported {
                         self.error(
                             MsgCode::ElabUnsupported,
@@ -2134,12 +2135,12 @@ impl Elaborator<'_> {
                 // explicit import always wins (override + protect from wildcards).
                 explicit_rtn.insert(sym.name.clone());
                 if let Some(f) = funcs.get(&sym.name) {
-                    self.func_table.insert(sym.name.clone(), f.clone());
-                    self.rtn_pkg.insert(sym.name.clone(), pkg.clone());
+                    self.func_table.insert(k.clone(), f.clone());
+                    self.rtn_pkg.insert(k.clone(), pkg.clone());
                 }
                 if let Some(t) = tasks.get(&sym.name) {
-                    self.task_table.insert(sym.name.clone(), t.clone());
-                    self.rtn_pkg.insert(sym.name.clone(), pkg.clone());
+                    self.task_table.insert(k.clone(), t.clone());
+                    self.rtn_pkg.insert(k.clone(), pkg.clone());
                 }
                 // ★ A routine's body resolves in ITS OWN declaring scope (IEEE 1800
                 // §26.3: an import controls what the IMPORTING scope may name, not how

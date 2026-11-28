@@ -59,7 +59,7 @@ impl Elaborator<'_> {
     pub(crate) fn frame_scoped_pkg_routines(
         &mut self,
         pkg: &str,
-        key: &str,
+        key: &RtnKey,
         func: &ast::FunctionDef,
     ) -> u32 {
         // The ROOT under its own scoped key first. `inject_pkg_callees` walks OUTWARD
@@ -70,7 +70,7 @@ impl Elaborator<'_> {
         // oracles print 10). `or_insert` because a sibling scoped call may already have
         // injected it, and the injected definition is the same one.
         self.func_table
-            .entry(key.to_string())
+            .entry(key.clone())
             .or_insert_with(|| func.clone());
         // The SAME predicate step 6.5 uses, run now that the callees are in the table.
         // A callee it does not qualify (a static, straight-line, non-2-state-return
@@ -99,18 +99,14 @@ impl Elaborator<'_> {
         // prints `V=21 W=22` on a pre-slice build and on both oracles — and framing its
         // callees changes how its own body is lowered around it.
         let root_excluded = self.frame_widening_excluded(func);
-        let late: Vec<(String, ast::FunctionDef)> = if root_excluded {
+        let late: Vec<(RtnKey, ast::FunctionDef)> = if root_excluded {
             Vec::new()
         } else {
-            let cands: Vec<(String, ast::FunctionDef)> = frame_set
+            let cands: Vec<(RtnKey, ast::FunctionDef)> = frame_set
                 .iter()
-                .filter(|n| reachable.contains(n.as_str()))
-                .filter(|n| !self.frame_idx.contains_key(n.as_str()))
-                .filter_map(|n| {
-                    self.func_table
-                        .get(n.as_str())
-                        .map(|f| (n.clone(), f.clone()))
-                })
+                .filter(|n| reachable.contains(*n))
+                .filter(|n| !self.frame_idx.contains_key(*n))
+                .filter_map(|n| self.func_table.get(n).map(|f| (n.clone(), f.clone())))
                 .collect();
             cands
                 .into_iter()
@@ -137,13 +133,13 @@ impl Elaborator<'_> {
         // oracles). Without it the subset sentence fires instead and lists
         // `cnt = cnt + 1;` among the forms it calls supported.
         if self.func_body_writes_outside_name(func) {
-            self.body_write_func_names.insert(key.to_string());
+            self.body_write_func_names.insert(key.clone());
         }
         self.reserve_frame_func(key, func);
         // LOWER each callee body — every `frame_idx` above is reserved, so a call
         // between two of them, or back to the root, resolves to a FuncId.
         for (n, f) in &late {
-            let fid = self.frame_idx[n.as_str()];
+            let fid = self.frame_idx[n];
             self.lower_frame_func_body(n, f, fid);
         }
         // R22 §3.1 (function half), mirrored for the LATE callees only: a framed
@@ -156,7 +152,7 @@ impl Elaborator<'_> {
         // `func_body_needs_stmt_executor`, not on the suspendable set — the two differ
         // and over-marking is not free for anything that changes a call's SHAPE.
         for (n, _) in &late {
-            let Some(&fid) = self.frame_idx.get(n.as_str()) else {
+            let Some(&fid) = self.frame_idx.get(n) else {
                 continue;
             };
             if !self.funcs[fid as usize].is_task
@@ -188,20 +184,20 @@ impl Elaborator<'_> {
     fn scoped_reachable_callees(
         &self,
         pkg: &str,
-        key: &str,
+        key: &RtnKey,
         func: &ast::FunctionDef,
-    ) -> std::collections::BTreeSet<String> {
+    ) -> std::collections::BTreeSet<RtnKey> {
         let mut want: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
         collect_callee_func(func, &mut want);
         let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
-        let mut keys: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        let mut keys: std::collections::BTreeSet<RtnKey> = std::collections::BTreeSet::new();
         while let Some(n) = want.iter().next().cloned() {
             want.remove(&n);
             if !seen.insert(n.clone()) {
                 continue;
             }
-            let k = format!("{pkg}::{n}");
-            if k == key {
+            let k = lexscope::rtn_key_scoped(pkg, &n);
+            if &k == key {
                 continue; // the root frames itself, and its callees are already walked
             }
             if let Some(f) = self.func_table.get(&k) {
